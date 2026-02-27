@@ -1,0 +1,44 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Alice Admin",
+      "email": "alice@example.com",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "name": "Bob Engineer",
+      "email": "bob@example.com",
+      "role": "user"
+    }
+  ],
+  "stores": [
+    {
+      "id": 1,
+      "name": "Main Warehouse",
+      "location": "Head Office"
+    }
+  ],
+  "assets": [
+    {
+      "id": 1,
+      "name": "Dell Laptop",
+      "type": "Laptop",
+      "serial": "DL-1001",
+      "status": "available",
+      "store_id": 1,
+      "notes": "15-inch"
+    },
+    {
+      "id": 2,
+      "name": "Logitech Mouse",
+      "type": "Peripheral",
+      "serial": "LM-200",
+      "status": "available",
+      "store_id": 1,
+      "notes": "Wireless"
+    }
+  ],
+  "allocations": []
+}

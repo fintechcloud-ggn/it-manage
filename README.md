@@ -1,3 +1,27 @@
+# IT Asset Management (itmanage)
+
+Quick local development:
+
+1. Start backend
+
+```bash
+cd "itmanage/server"
+npm install
+node index.js
+```
+
+2. Start frontend (from repo root)
+
+```bash
+cd itmanage
+npm install
+npm start
+```
+
+Notes:
+- The backend uses a simple JSON store at `server/data.json` (lowdb).
+- For authentication the frontend sends the selected user id in `x-user-id` header.
+- Next steps: add production DB, authentication, and more UI pages.
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
