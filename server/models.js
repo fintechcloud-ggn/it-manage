@@ -13,9 +13,10 @@ function nextId(collection) {
 
 function seedSample() {
   if (db.get('users').size().value() === 0) {
-    const p = bcrypt.hashSync('password', 8);
-    db.get('users').push({ id: nextId('users'), name: 'Alice Admin', email: 'alice@example.com', role: 'admin', password: p }).write();
-    db.get('users').push({ id: nextId('users'), name: 'Bob Engineer', email: 'bob@example.com', role: 'user', password: p }).write();
+    const adminPassword = bcrypt.hashSync('admin', 8);
+    const userPassword = bcrypt.hashSync('password', 8);
+    db.get('users').push({ id: nextId('users'), name: 'Admin', email: 'admin', role: 'admin', password: adminPassword }).write();
+    db.get('users').push({ id: nextId('users'), name: 'Bob Engineer', email: 'bob@example.com', role: 'user', password: userPassword }).write();
   }
 
   if (db.get('stores').size().value() === 0) {

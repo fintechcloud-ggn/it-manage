@@ -4,8 +4,9 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "npm --prefix .. run start",
+    "dev": "nodemon index.js",
+    "start:api": "node index.js"
   },
   "dependencies": {
     "lowdb": "^1.0.0",

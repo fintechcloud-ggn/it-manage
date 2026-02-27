@@ -21,7 +21,6 @@ function nextId() {
   return Math.max(...items.map(i => i.id || 0)) + 1;
 }
 
-router.post('/', (req, res) => {
 router.post('/', requireRole('admin'), (req, res) => {
   const { name, type, serial, store_id, notes } = req.body;
   try {
@@ -34,7 +33,6 @@ router.post('/', requireRole('admin'), (req, res) => {
   }
 });
 
-router.put('/:id', (req, res) => {
 router.put('/:id', requireRole('admin'), (req, res) => {
   const id = Number(req.params.id);
   const { name, type, serial, status, store_id, notes } = req.body;
@@ -46,7 +44,6 @@ router.put('/:id', requireRole('admin'), (req, res) => {
   }
 });
 
-router.delete('/:id', (req, res) => {
 router.delete('/:id', requireRole('admin'), (req, res) => {
   const id = Number(req.params.id);
   // admin only

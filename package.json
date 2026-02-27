@@ -13,7 +13,9 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "node scripts/start-both.js",
+    "start:frontend": "HOST=localhost PORT=3000 react-scripts start",
+    "start:backend": "npm --prefix server run start:api",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

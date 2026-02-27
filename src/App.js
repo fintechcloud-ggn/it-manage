@@ -1,7 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
-const API = process.env.REACT_APP_API || '';
+const API = process.env.REACT_APP_API || 'http://localhost:4000';
+
+const BRANCHES = [
+  { id: 1, name: 'New York HQ', region: 'North East', entity: 'FinCore Holdings' },
+  { id: 2, name: 'San Francisco', region: 'West', entity: 'FinCore Holdings' },
+  { id: 3, name: 'Chicago', region: 'Midwest', entity: 'FinCore Holdings' },
+  { id: 4, name: 'Austin', region: 'South', entity: 'FinCore Lending' },
+  { id: 5, name: 'Miami', region: 'South East', entity: 'FinCore Payments' },
+  { id: 6, name: 'Seattle', region: 'West', entity: 'FinCore Holdings' },
+  { id: 7, name: 'Boston', region: 'North East', entity: 'FinCore Risk' },
+  { id: 8, name: 'Denver', region: 'Mountain', entity: 'FinCore Lending' },
+  { id: 9, name: 'Atlanta', region: 'South East', entity: 'FinCore Payments' },
+  { id: 10, name: 'Los Angeles', region: 'West', entity: 'FinCore Holdings' },
+  { id: 11, name: 'Dallas', region: 'South', entity: 'FinCore Lending' },
+  { id: 12, name: 'Phoenix', region: 'South West', entity: 'FinCore Payments' },
+  { id: 13, name: 'Philadelphia', region: 'North East', entity: 'FinCore Risk' },
+  { id: 14, name: 'Nashville', region: 'South', entity: 'FinCore Lending' },
+  { id: 15, name: 'Portland', region: 'West', entity: 'FinCore Risk' }
+];
+
+const ENTITIES = [
+  { id: 'fincore-holdings', name: 'FinCore Holdings', focus: 'Core infrastructure & governance' },
+  { id: 'fincore-lending', name: 'FinCore Lending', focus: 'Loan origination platforms' },
+  { id: 'fincore-payments', name: 'FinCore Payments', focus: 'Cards, settlements and wallets' },
+  { id: 'fincore-risk', name: 'FinCore Risk', focus: 'Risk analytics and compliance tooling' }
+];
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
@@ -9,216 +34,317 @@ function App() {
   const [assets, setAssets] = useState([]);
   const [users, setUsers] = useState([]);
   const [allocations, setAllocations] = useState([]);
-  const [page, setPage] = useState('home');
+  const [page, setPage] = useState('overview');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const carouselImages = [
-    'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1400&q=60',
-    'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=60',
-    'https://images.unsplash.com/photo-1545235617-9465f9f5b4e6?auto=format&fit=crop&w=1400&q=60'
-  ];
-  const [carouselIndex, setCarouselIndex] = useState(0);
 
-    useEffect(() => {
-      if (token) {
-        fetchAssets();
-        fetchUsers();
-        fetchAllocations();
-      }
-      // carousel rotation when not logged in
-      if (!user) {
-        const t = setInterval(() => setCarouselIndex(i => (i + 1) % carouselImages.length), 4000);
-        return () => clearInterval(t);
-      }
-    }, [token]);
+  useEffect(() => {
+    if (!token) return;
+    fetchAssets();
+    fetchUsers();
+    fetchAllocations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
-    function authHeaders() {
-      return token ? { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-    }
+  function authHeaders() {
+    return token
+      ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+      : { 'Content-Type': 'application/json' };
+  }
 
-    function fetchAssets() {
-      fetch(API + '/api/assets').then(r => r.json()).then(setAssets);
-    }
+  function fetchAssets() {
+    fetch(`${API}/api/assets`).then((r) => r.json()).then(setAssets);
+  }
 
-    function fetchUsers() {
-      fetch(API + '/api/users').then(r => r.json()).then(setUsers);
-    }
+  function fetchUsers() {
+    fetch(`${API}/api/users`).then((r) => r.json()).then(setUsers);
+  }
 
-    function fetchAllocations() {
-      fetch(API + '/api/allocations', { headers: authHeaders() }).then(r => r.json()).then(setAllocations);
-    }
+  function fetchAllocations() {
+    fetch(`${API}/api/allocations`, { headers: authHeaders() }).then((r) => r.json()).then(setAllocations);
+  }
 
-    async function login(e) {
-      e.preventDefault();
-      setLoading(true);
-      const email = e.target.email.value;
-      const password = e.target.password.value;
-      try {
-        const res = await fetch(API + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
-        const body = await res.json();
-        if (!res.ok) {
-          setMessage(body.error || 'Login failed');
-          setLoading(false);
-          return;
-        }
-        setToken(body.token);
-        setUser(body.user);
-        localStorage.setItem('token', body.token);
-        localStorage.setItem('user', JSON.stringify(body.user));
-        setMessage('Logged in');
-      } catch (err) {
-        setMessage('Network error');
-      } finally {
+  async function login(e) {
+    e.preventDefault();
+    setLoading(true);
+    const email = e.target.email.value;
+    const password = e.target.password.value;
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setMessage(body.error || 'Login failed');
         setLoading(false);
+        return;
       }
+      setToken(body.token);
+      setUser(body.user);
+      localStorage.setItem('token', body.token);
+      localStorage.setItem('user', JSON.stringify(body.user));
+      setMessage('Logged in');
+    } catch (err) {
+      setMessage('Network error');
+    } finally {
+      setLoading(false);
     }
+  }
 
-    async function allocate(e) {
-      e.preventDefault();
-      const asset_id = Number(e.target.asset.value);
-      const user_id = Number(e.target.user.value);
-      const res = await fetch(API + '/api/allocations', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ asset_id, user_id }) });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) setMessage(body.error || 'Allocation failed'); else setMessage('Allocated');
-      fetchAssets();
-      fetchAllocations();
-    }
+  async function allocate(e) {
+    e.preventDefault();
+    const asset_id = Number(e.target.asset.value);
+    const user_id = Number(e.target.user.value);
+    const res = await fetch(`${API}/api/allocations`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ asset_id, user_id })
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Asset allocated' : body.error || 'Allocation failed');
+    fetchAssets();
+    fetchAllocations();
+  }
 
-    async function createStore(e) {
-      e.preventDefault();
-      const name = e.target.name.value; const location = e.target.location.value;
-      const res = await fetch(API + '/api/stores', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name, location }) });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) setMessage(body.error || 'Create store failed'); else setMessage('Store created');
-      fetchAssets();
-    }
+  async function createStore(e) {
+    e.preventDefault();
+    const name = e.target.name.value;
+    const location = e.target.location.value;
+    const res = await fetch(`${API}/api/stores`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ name, location })
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Branch store created' : body.error || 'Create store failed');
+  }
 
-    function logout() {
-      setToken(''); setUser(null); localStorage.removeItem('token'); localStorage.removeItem('user'); setMessage('Logged out');
-    }
+  function logout() {
+    setToken('');
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setMessage('Logged out');
+  }
 
-    if (!user) {
+  const stats = useMemo(() => {
+    const totalAssets = assets.length;
+    const allocatedAssets = assets.filter((a) => a.status === 'allocated').length;
+    const availableAssets = assets.filter((a) => a.status === 'available').length;
+    const activeAllocations = allocations.filter((a) => !a.returned_at).length;
+    const utilization = totalAssets ? Math.round((allocatedAssets / totalAssets) * 100) : 0;
+    return { totalAssets, allocatedAssets, availableAssets, activeAllocations, utilization };
+  }, [assets, allocations]);
+
+  const branchMetrics = useMemo(() => {
+    const mapped = BRANCHES.map((branch) => {
+      const branchAssets = assets.filter((a) => {
+        if (a.store_id) return Number(a.store_id) === branch.id;
+        return ((Number(a.id) || 0) % BRANCHES.length) + 1 === branch.id;
+      });
+      const allocated = branchAssets.filter((a) => a.status === 'allocated').length;
+      const total = branchAssets.length;
+      return {
+        ...branch,
+        total,
+        allocated,
+        available: Math.max(total - allocated, 0),
+        utilization: total ? Math.round((allocated / total) * 100) : 0
+      };
+    });
+    return mapped;
+  }, [assets]);
+
+  const entityMetrics = useMemo(() => {
+    return ENTITIES.map((entity) => {
+      const branches = branchMetrics.filter((b) => b.entity === entity.name);
+      const total = branches.reduce((sum, b) => sum + b.total, 0);
+      const allocated = branches.reduce((sum, b) => sum + b.allocated, 0);
+      return {
+        ...entity,
+        branches: branches.length,
+        assets: total,
+        utilization: total ? Math.round((allocated / total) * 100) : 0
+      };
+    });
+  }, [branchMetrics]);
+
+  if (!user) {
     return (
-      <div className="App">
-        <div className="App-header login-mode">
-          <div className="login-container">
-            <div className="login-card card">
-              <div className="card-inner">
-                <div className="login-left">
-                  <img src={carouselImages[carouselIndex]} alt="carousel" />
-                  <div className="carousel-caption">
-                    <h3>Company IT Assets</h3>
-                    <p>Track devices, allocate to users, and manage stores efficiently.</p>
-                  </div>
-                </div>
-                <div className="login-right">
-                  <div className="login-card-inner">
-                    <h2>Welcome back</h2>
-                    <p className="small">Sign in to access the asset dashboard</p>
-                    <form onSubmit={login} className="form-modern" autoComplete="on">
-                      <div className="form-row">
-                        <div className="form-field">
-                          <input id="email" name="email" type="email" placeholder=" " defaultValue="alice@example.com" required />
-                          <label htmlFor="email">Email</label>
-                          <svg className="form-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 8.5L12 13l9-4.5" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </div>
-                      </div>
+      <div className="app-shell login-shell">
+        <div className="login-panel">
+          <div className="login-content">
+            <p className="eyebrow">IT Asset Management</p>
+            <h1>Fintech Operations Control Center</h1>
+            <p className="muted">Unified visibility across 15 branches and multiple fintech entities.</p>
+            <form onSubmit={login} className="login-form" autoComplete="on">
+              <label htmlFor="email">Username</label>
+              <input id="email" name="email" type="text" defaultValue="admin" required />
+              <label htmlFor="password">Password</label>
+              <input id="password" name="password" type="password" defaultValue="admin" required />
+              <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
+            </form>
+            <p className="helper">Default: admin / admin</p>
+            <p className="status">{message}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-                      <div className="form-row">
-                        <div className="form-field">
-                          <input id="password" name="password" type="password" placeholder=" " defaultValue="password" required />
-                          <label htmlFor="password">Password</label>
-                          <svg className="form-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="11" width="18" height="10" rx="2" stroke="#6b7280" strokeWidth="1.5"/><path d="M7 11V8a5 5 0 0110 0v3" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </div>
-                      </div>
+  return (
+    <div className="app-shell">
+      <aside className="side-nav">
+        <div>
+          <p className="eyebrow">Fintech IT</p>
+          <h2>Asset Command</h2>
+          <p className="muted">{user.name} ({user.role})</p>
+        </div>
+        <nav>
+          <button className={page === 'overview' ? 'active' : ''} onClick={() => setPage('overview')}>Overview</button>
+          <button className={page === 'operations' ? 'active' : ''} onClick={() => setPage('operations')}>Operations</button>
+          <button className={page === 'branches' ? 'active' : ''} onClick={() => setPage('branches')}>Branches (15)</button>
+          <button className={page === 'entities' ? 'active' : ''} onClick={() => setPage('entities')}>Entities</button>
+          {user.role === 'admin' && <button className={page === 'users' ? 'active' : ''} onClick={() => setPage('users')}>Users</button>}
+        </nav>
+        <button className="logout-btn" onClick={logout}>Logout</button>
+      </aside>
 
-                      <div className="form-row flex-between">
-                        <label className="remember"><input type="checkbox" name="remember" defaultChecked /> Remember me</label>
-                        <a className="forgot" href="#">Forgot?</a>
-                      </div>
+      <main className="dashboard">
+        <header className="top-row">
+          <div>
+            <h1>IT Asset Dashboard</h1>
+            <p className="muted">Fintech infrastructure monitoring across branches and sub-entities</p>
+          </div>
+          <div className="badge">{BRANCHES.length} Branches | {ENTITIES.length} Entities</div>
+        </header>
 
-                      <div className="form-row">
-                        <button type="submit" className="btn-primary" disabled={loading}>
-                          {loading ? (
-                            <span className="btn-spinner" aria-hidden="true"></span>
-                          ) : (
-                            <svg style={{verticalAlign:'middle',marginRight:8}} width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 11v2" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="11" width="18" height="10" rx="2" stroke="#fff" strokeWidth="1.5"/><path d="M7 11V8a5 5 0 0110 0v3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          )}
-                          <span style={{verticalAlign:'middle'}}>{loading ? 'Signing in...' : 'Sign in'}</span>
-                        </button>
-                      </div>
-                    </form>
-                    <p className="small">Use seeded accounts: alice@example.com / password</p>
-                    <p>{message}</p>
-                  </div>
+        {page === 'overview' && (
+          <>
+            <section className="kpi-grid">
+              <article className="kpi-card"><p>Total Assets</p><h3>{stats.totalAssets}</h3></article>
+              <article className="kpi-card"><p>Allocated</p><h3>{stats.allocatedAssets}</h3></article>
+              <article className="kpi-card"><p>Available</p><h3>{stats.availableAssets}</h3></article>
+              <article className="kpi-card"><p>Utilization</p><h3>{stats.utilization}%</h3></article>
+            </section>
+
+            <section className="panel two-col">
+              <div>
+                <h3>Branch Utilization Snapshot</h3>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr><th>Branch</th><th>Region</th><th>Entity</th><th>Utilization</th></tr>
+                    </thead>
+                    <tbody>
+                      {branchMetrics.slice(0, 8).map((b) => (
+                        <tr key={b.id}>
+                          <td>{b.name}</td>
+                          <td>{b.region}</td>
+                          <td>{b.entity}</td>
+                          <td>{b.utilization}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
+
+              <div>
+                <h3>Entity Portfolio</h3>
+                <div className="entity-list">
+                  {entityMetrics.map((e) => (
+                    <div key={e.id} className="entity-card">
+                      <h4>{e.name}</h4>
+                      <p>{e.focus}</p>
+                      <small>{e.branches} branches | {e.assets} assets | {e.utilization}% utilization</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+
+        {page === 'operations' && (
+          <section className="panel two-col">
+            <div>
+              <h3>Allocate Asset</h3>
+              <form onSubmit={allocate} className="stack-form">
+                <select name="asset" required>
+                  {assets.filter((a) => a.status === 'available').map((a) => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.serial})</option>
+                  ))}
+                </select>
+                <select name="user" required>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                  ))}
+                </select>
+                <button type="submit">Allocate</button>
+              </form>
+
+              <h3 className="space-top">Create Store</h3>
+              <form onSubmit={createStore} className="stack-form">
+                <input name="name" placeholder="Store name" required />
+                <input name="location" placeholder="Location" required />
+                <button type="submit">Create</button>
+              </form>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-    return (
-    <div className="App">
-      <div className="App-header">
-          <div className="sidebar">
-            <h2>Dashboard</h2>
-            <div className="small">Signed in as {user.name} ({user.role})</div>
-            <button onClick={() => setPage('home')}>Overview</button>
-            <button onClick={() => setPage('allocate')}>Allocate</button>
-            <button onClick={() => setPage('history')}>Allocations</button>
-            <button onClick={() => setPage('stores')}>Stores</button>
-            {user.role === 'admin' && <button onClick={() => setPage('users')}>Users</button>}
-            <div style={{marginTop:12}}><button onClick={logout}>Logout</button></div>
-          </div>
+            <div>
+              <h3>Recent Allocations</h3>
+              <ul className="list">
+                {allocations.slice(0, 10).map((a) => (
+                  <li key={a.id}>Asset {a.asset_id} -> User {a.user_id} ({a.returned_at ? 'Returned' : 'Active'})</li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
 
-          <div className="main">
-            {page === 'home' && (
-              <div className="card">
-                <h3>Overview</h3>
-                <p className="small">Assets: {assets.length} — Allocations: {allocations.length}</p>
-                <ul className="list">{assets.map(a => <li key={a.id}>{a.name} — {a.type} — {a.status}</li>)}</ul>
-              </div>
-            )}
+        {page === 'branches' && (
+          <section className="panel branch-grid">
+            {branchMetrics.map((b) => (
+              <article key={b.id} className="branch-card">
+                <h4>{b.name}</h4>
+                <p>{b.region} | {b.entity}</p>
+                <small>{b.total} assets | {b.allocated} allocated | {b.available} available</small>
+                <div className="progress"><span style={{ width: `${b.utilization}%` }} /></div>
+              </article>
+            ))}
+          </section>
+        )}
 
-            {page === 'allocate' && (
-              <div className="card">
-                <h3>Allocate Asset</h3>
-                <form onSubmit={allocate}>
-                  <div><select name="asset">{assets.filter(a => a.status === 'available').map(a => <option key={a.id} value={a.id}>{a.name} ({a.serial})</option>)}</select></div>
-                  <div><select name="user">{users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}</select></div>
-                  <div style={{marginTop:8}}><button>Allocate</button></div>
-                </form>
-              </div>
-            )}
+        {page === 'entities' && (
+          <section className="panel entity-grid">
+            {entityMetrics.map((e) => (
+              <article key={e.id} className="entity-card">
+                <h4>{e.name}</h4>
+                <p>{e.focus}</p>
+                <small>Branches: {e.branches}</small>
+                <small>Assets: {e.assets}</small>
+                <small>Utilization: {e.utilization}%</small>
+              </article>
+            ))}
+          </section>
+        )}
 
-            {page === 'history' && (
-              <div className="card">
-                <h3>Allocations</h3>
-                <ul className="list">{allocations.map(a => <li key={a.id}>Asset {a.asset_id} → User {a.user_id} at {a.allocated_at} {a.returned_at ? `(returned ${a.returned_at})` : ''}</li>)}</ul>
-              </div>
-            )}
+        {page === 'users' && user.role === 'admin' && (
+          <section className="panel">
+            <h3>Users</h3>
+            <ul className="list">
+              {users.map((u) => <li key={u.id}>{u.name} - {u.email} - {u.role}</li>)}
+            </ul>
+          </section>
+        )}
 
-            {page === 'stores' && (
-              <div className="card">
-                <h3>Stores</h3>
-                <form onSubmit={createStore}><div><input name="name" placeholder="name"/></div><div><input name="location" placeholder="location"/></div><div style={{marginTop:8}}><button>Create store</button></div></form>
-                <p className="small">(List of stores will appear here)</p>
-              </div>
-            )}
+        {message && <div className="message-bar">{message}</div>}
+      </main>
+    </div>
+  );
+}
 
-            {page === 'users' && user.role === 'admin' && (
-              <div className="card">
-                <h3>Users</h3>
-                <ul className="list">{users.map(u => <li key={u.id}>{u.name} — {u.email} — {u.role}</li>)}</ul>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  export default App;
+export default App;
