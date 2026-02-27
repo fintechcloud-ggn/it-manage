@@ -3,46 +3,25 @@ import './App.css';
 
 const API = process.env.REACT_APP_API || 'http://localhost:4000';
 
-const BRANCHES = [
-  { id: 1, name: 'New York HQ', region: 'North East', entity: 'FinCore Holdings' },
-  { id: 2, name: 'San Francisco', region: 'West', entity: 'FinCore Holdings' },
-  { id: 3, name: 'Chicago', region: 'Midwest', entity: 'FinCore Holdings' },
-  { id: 4, name: 'Austin', region: 'South', entity: 'FinCore Lending' },
-  { id: 5, name: 'Miami', region: 'South East', entity: 'FinCore Payments' },
-  { id: 6, name: 'Seattle', region: 'West', entity: 'FinCore Holdings' },
-  { id: 7, name: 'Boston', region: 'North East', entity: 'FinCore Risk' },
-  { id: 8, name: 'Denver', region: 'Mountain', entity: 'FinCore Lending' },
-  { id: 9, name: 'Atlanta', region: 'South East', entity: 'FinCore Payments' },
-  { id: 10, name: 'Los Angeles', region: 'West', entity: 'FinCore Holdings' },
-  { id: 11, name: 'Dallas', region: 'South', entity: 'FinCore Lending' },
-  { id: 12, name: 'Phoenix', region: 'South West', entity: 'FinCore Payments' },
-  { id: 13, name: 'Philadelphia', region: 'North East', entity: 'FinCore Risk' },
-  { id: 14, name: 'Nashville', region: 'South', entity: 'FinCore Lending' },
-  { id: 15, name: 'Portland', region: 'West', entity: 'FinCore Risk' }
-];
-
-const ENTITIES = [
-  { id: 'fincore-holdings', name: 'FinCore Holdings', focus: 'Core infrastructure & governance' },
-  { id: 'fincore-lending', name: 'FinCore Lending', focus: 'Loan origination platforms' },
-  { id: 'fincore-payments', name: 'FinCore Payments', focus: 'Cards, settlements and wallets' },
-  { id: 'fincore-risk', name: 'FinCore Risk', focus: 'Risk analytics and compliance tooling' }
-];
-
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
   const [assets, setAssets] = useState([]);
   const [users, setUsers] = useState([]);
   const [allocations, setAllocations] = useState([]);
-  const [page, setPage] = useState('overview');
+  const [brands, setBrands] = useState([]);
+  const [selectedBrandId, setSelectedBrandId] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [section, setSection] = useState('overview');
 
   useEffect(() => {
     if (!token) return;
     fetchAssets();
     fetchUsers();
     fetchAllocations();
+    fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -62,6 +41,10 @@ function App() {
 
   function fetchAllocations() {
     fetch(`${API}/api/allocations`, { headers: authHeaders() }).then((r) => r.json()).then(setAllocations);
+  }
+
+  function fetchBrands() {
+    fetch(`${API}/api/brands`, { headers: authHeaders() }).then((r) => r.json()).then(setBrands);
   }
 
   async function login(e) {
@@ -85,12 +68,20 @@ function App() {
       setUser(body.user);
       localStorage.setItem('token', body.token);
       localStorage.setItem('user', JSON.stringify(body.user));
-      setMessage('Logged in');
+      setMessage('');
     } catch (err) {
-      setMessage('Network error');
+      setMessage('Network error while signing in');
     } finally {
       setLoading(false);
     }
+  }
+
+  function logout() {
+    setToken('');
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setMessage('Logged out');
   }
 
   async function allocate(e) {
@@ -103,246 +94,405 @@ function App() {
       body: JSON.stringify({ asset_id, user_id })
     });
     const body = await res.json().catch(() => ({}));
-    setMessage(res.ok ? 'Asset allocated' : body.error || 'Allocation failed');
-    fetchAssets();
-    fetchAllocations();
+    setMessage(res.ok ? 'Asset assigned successfully' : body.error || 'Allocation failed');
+    if (res.ok) {
+      fetchAssets();
+      fetchAllocations();
+      e.target.reset();
+    }
   }
 
-  async function createStore(e) {
-    e.preventDefault();
-    const name = e.target.name.value;
-    const location = e.target.location.value;
-    const res = await fetch(`${API}/api/stores`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ name, location })
+  async function returnAsset(allocationId) {
+    const res = await fetch(`${API}/api/allocations/${allocationId}/return`, {
+      method: 'PUT',
+      headers: authHeaders()
     });
     const body = await res.json().catch(() => ({}));
-    setMessage(res.ok ? 'Branch store created' : body.error || 'Create store failed');
+    setMessage(res.ok ? 'Asset returned successfully' : body.error || 'Return failed');
+    if (res.ok) {
+      fetchAssets();
+      fetchAllocations();
+    }
   }
 
-  function logout() {
-    setToken('');
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setMessage('Logged out');
+  async function createAsset(e) {
+    e.preventDefault();
+    const name = e.target.name.value;
+    const type = e.target.type.value;
+    const serial = e.target.serial.value;
+    const notes = e.target.notes.value;
+    const brand_id = e.target.brand_id.value ? Number(e.target.brand_id.value) : null;
+    const model_id = e.target.model_id.value ? Number(e.target.model_id.value) : null;
+    const res = await fetch(`${API}/api/assets`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ name, type, serial, notes, brand_id, model_id })
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Asset created' : body.error || 'Create asset failed');
+    if (res.ok) {
+      fetchAssets();
+      e.target.reset();
+      setSelectedBrandId('');
+    }
   }
+
+  const activeAllocations = useMemo(() => allocations.filter((a) => !a.returned_at), [allocations]);
 
   const stats = useMemo(() => {
-    const totalAssets = assets.length;
-    const allocatedAssets = assets.filter((a) => a.status === 'allocated').length;
-    const availableAssets = assets.filter((a) => a.status === 'available').length;
-    const activeAllocations = allocations.filter((a) => !a.returned_at).length;
-    const utilization = totalAssets ? Math.round((allocatedAssets / totalAssets) * 100) : 0;
-    return { totalAssets, allocatedAssets, availableAssets, activeAllocations, utilization };
-  }, [assets, allocations]);
+    const total = assets.length;
+    const available = assets.filter((a) => a.status === 'available').length;
+    const allocated = assets.filter((a) => a.status === 'allocated').length;
+    const utilization = total ? Math.round((allocated / total) * 100) : 0;
+    return { total, available, allocated, active: activeAllocations.length, utilization };
+  }, [assets, activeAllocations]);
 
-  const branchMetrics = useMemo(() => {
-    const mapped = BRANCHES.map((branch) => {
-      const branchAssets = assets.filter((a) => {
-        if (a.store_id) return Number(a.store_id) === branch.id;
-        return ((Number(a.id) || 0) % BRANCHES.length) + 1 === branch.id;
-      });
-      const allocated = branchAssets.filter((a) => a.status === 'allocated').length;
-      const total = branchAssets.length;
-      return {
-        ...branch,
-        total,
-        allocated,
-        available: Math.max(total - allocated, 0),
-        utilization: total ? Math.round((allocated / total) * 100) : 0
-      };
-    });
-    return mapped;
+  const userById = useMemo(() => Object.fromEntries(users.map((u) => [u.id, u])), [users]);
+  const assetById = useMemo(() => Object.fromEntries(assets.map((a) => [a.id, a])), [assets]);
+
+  const assetTypes = useMemo(() => {
+    const groups = assets.reduce((acc, item) => {
+      const key = item.type || 'Unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(groups).sort((a, b) => b[1] - a[1]);
   }, [assets]);
 
-  const entityMetrics = useMemo(() => {
-    return ENTITIES.map((entity) => {
-      const branches = branchMetrics.filter((b) => b.entity === entity.name);
-      const total = branches.reduce((sum, b) => sum + b.total, 0);
-      const allocated = branches.reduce((sum, b) => sum + b.allocated, 0);
-      return {
-        ...entity,
-        branches: branches.length,
-        assets: total,
-        utilization: total ? Math.round((allocated / total) * 100) : 0
-      };
+  const teamLoad = useMemo(() => {
+    return users
+      .map((u) => {
+        const assigned = activeAllocations.filter((a) => a.user_id === u.id).length;
+        return { ...u, assigned };
+      })
+      .sort((a, b) => b.assigned - a.assigned);
+  }, [users, activeAllocations]);
+
+  const recentActivity = useMemo(() => {
+    return [...allocations]
+      .sort((a, b) => new Date(b.allocated_at || 0) - new Date(a.allocated_at || 0))
+      .slice(0, 8);
+  }, [allocations]);
+
+  const topAssetType = assetTypes[0] || ['N/A', 0];
+  const busiestUser = teamLoad[0] || { name: 'N/A', assigned: 0 };
+  const availabilityRate = stats.total ? Math.round((stats.available / stats.total) * 100) : 0;
+  const topAssetTypes = assetTypes.slice(0, 5);
+  const maxTypeCount = topAssetTypes.length ? topAssetTypes[0][1] : 1;
+
+  const weeklyAssignments = useMemo(() => {
+    const days = [];
+    const counts = {};
+    for (let i = 6; i >= 0; i -= 1) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString(undefined, { weekday: 'short' });
+      days.push({ key, label });
+      counts[key] = 0;
+    }
+    allocations.forEach((a) => {
+      const key = new Date(a.allocated_at || '').toISOString().slice(0, 10);
+      if (counts[key] !== undefined) counts[key] += 1;
     });
-  }, [branchMetrics]);
+    return days.map((d) => ({ ...d, count: counts[d.key] || 0 }));
+  }, [allocations]);
+
+  const maxWeeklyCount = Math.max(...weeklyAssignments.map((d) => d.count), 1);
+  const selectedBrandModels = useMemo(() => {
+    const brand = brands.find((b) => b.id === Number(selectedBrandId));
+    return brand ? brand.models : [];
+  }, [brands, selectedBrandId]);
+
+  const navItems = [
+    { key: 'overview', label: 'Overview', icon: 'OV' },
+    { key: 'inventory', label: 'Inventory', icon: 'IN' },
+    { key: 'assignments', label: 'Assignments', icon: 'AS' },
+    { key: 'insights', label: 'Insights', icon: 'IS' },
+    { key: 'activity', label: 'Recent Activity', icon: 'RA' }
+  ];
 
   if (!user) {
     return (
-      <div className="app-shell login-shell">
-        <div className="login-panel">
-          <div className="login-content">
-            <p className="eyebrow">IT Asset Management</p>
-            <h1>Fintech Operations Control Center</h1>
-            <p className="muted">Unified visibility across 15 branches and multiple fintech entities.</p>
-            <form onSubmit={login} className="login-form" autoComplete="on">
-              <label htmlFor="email">Username</label>
-              <input id="email" name="email" type="text" defaultValue="admin" required />
-              <label htmlFor="password">Password</label>
-              <input id="password" name="password" type="password" defaultValue="admin" required />
-              <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
-            </form>
-            <p className="helper">Default: admin / admin</p>
-            <p className="status">{message}</p>
-          </div>
+      <div className="auth-screen">
+        <div className="auth-card">
+          <p className="label">IT Inventory Management</p>
+          <h1>Control your devices, assignments, and lifecycle from one dashboard.</h1>
+          <form onSubmit={login} className="form">
+            <label htmlFor="email">Username</label>
+            <input id="email" name="email" type="text" defaultValue="admin" required />
+            <label htmlFor="password">Password</label>
+            <input id="password" name="password" type="password" defaultValue="admin" required />
+            <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
+          </form>
+          <p className="hint">Default credentials: admin / admin</p>
+          <p className="msg">{message}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="app-shell">
-      <aside className="side-nav">
+    <div className="app-layout">
+      <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div>
-          <p className="eyebrow">Fintech IT</p>
-          <h2>Asset Command</h2>
-          <p className="muted">{user.name} ({user.role})</p>
+          <div className="sidebar-head">
+            <div className="sidebar-brand">
+              <p className="label">IT Inventory</p>
+              {!sidebarCollapsed && <h3>Dashboard</h3>}
+            </div>
+            <button
+              className="toggle-btn"
+              onClick={() => setSidebarCollapsed((v) => !v)}
+              title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? '>>' : '<<'}
+            </button>
+          </div>
+          {!sidebarCollapsed && (
+            <div className="sidebar-user">
+              <div className="avatar">{(user.name || 'U').slice(0, 1).toUpperCase()}</div>
+              <div>
+                <strong>{user.name}</strong>
+                <small>{user.role}</small>
+              </div>
+            </div>
+          )}
+          <nav className="sidebar-nav">
+            {navItems.map((item) => (
+              <button
+                key={item.key}
+                className={`nav-item ${section === item.key ? 'active' : ''}`}
+                onClick={() => setSection(item.key)}
+                title={sidebarCollapsed ? item.label : ''}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                {!sidebarCollapsed && <span className="nav-label">{item.label}</span>}
+              </button>
+            ))}
+          </nav>
         </div>
-        <nav>
-          <button className={page === 'overview' ? 'active' : ''} onClick={() => setPage('overview')}>Overview</button>
-          <button className={page === 'operations' ? 'active' : ''} onClick={() => setPage('operations')}>Operations</button>
-          <button className={page === 'branches' ? 'active' : ''} onClick={() => setPage('branches')}>Branches (15)</button>
-          <button className={page === 'entities' ? 'active' : ''} onClick={() => setPage('entities')}>Entities</button>
-          {user.role === 'admin' && <button className={page === 'users' ? 'active' : ''} onClick={() => setPage('users')}>Users</button>}
-        </nav>
-        <button className="logout-btn" onClick={logout}>Logout</button>
+        <button className="sidebar-logout" onClick={logout}>{sidebarCollapsed ? 'X' : 'Logout'}</button>
       </aside>
 
-      <main className="dashboard">
-        <header className="top-row">
-          <div>
-            <h1>IT Asset Dashboard</h1>
-            <p className="muted">Fintech infrastructure monitoring across branches and sub-entities</p>
-          </div>
-          <div className="badge">{BRANCHES.length} Branches | {ENTITIES.length} Entities</div>
-        </header>
-
-        {page === 'overview' && (
+      <div className="inventory-app">
+        {section === 'overview' && (
           <>
-            <section className="kpi-grid">
-              <article className="kpi-card"><p>Total Assets</p><h3>{stats.totalAssets}</h3></article>
-              <article className="kpi-card"><p>Allocated</p><h3>{stats.allocatedAssets}</h3></article>
-              <article className="kpi-card"><p>Available</p><h3>{stats.availableAssets}</h3></article>
-              <article className="kpi-card"><p>Utilization</p><h3>{stats.utilization}%</h3></article>
+            <section className="overview-hero">
+              <div>
+                <p className="label">Inventory Pulse</p>
+                <h3>Live health snapshot for IT inventory operations</h3>
+                <p className="hint">Track capacity, allocation pressure and workforce distribution in one view.</p>
+              </div>
+              <div className="hero-badges">
+                <span>Top Type: {topAssetType[0]} ({topAssetType[1]})</span>
+                <span>Busiest User: {busiestUser.name} ({busiestUser.assigned})</span>
+                <span>Availability: {availabilityRate}%</span>
+              </div>
             </section>
 
-            <section className="panel two-col">
-              <div>
-                <h3>Branch Utilization Snapshot</h3>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr><th>Branch</th><th>Region</th><th>Entity</th><th>Utilization</th></tr>
-                    </thead>
-                    <tbody>
-                      {branchMetrics.slice(0, 8).map((b) => (
-                        <tr key={b.id}>
-                          <td>{b.name}</td>
-                          <td>{b.region}</td>
-                          <td>{b.entity}</td>
-                          <td>{b.utilization}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            <section className="kpis kpis-overview">
+              <article><span>Total Assets</span><strong>{stats.total}</strong></article>
+              <article><span>Available</span><strong>{stats.available}</strong></article>
+              <article><span>Allocated</span><strong>{stats.allocated}</strong></article>
+              <article><span>Active Assignments</span><strong>{stats.active}</strong></article>
+              <article><span>Utilization</span><strong>{stats.utilization}%</strong></article>
+            </section>
 
-              <div>
-                <h3>Entity Portfolio</h3>
-                <div className="entity-list">
-                  {entityMetrics.map((e) => (
-                    <div key={e.id} className="entity-card">
-                      <h4>{e.name}</h4>
-                      <p>{e.focus}</p>
-                      <small>{e.branches} branches | {e.assets} assets | {e.utilization}% utilization</small>
+            <main className="grid overview-grid">
+              <section className="panel panel-capacity">
+                <div className="panel-head"><h3>Capacity Health</h3><span>Current split</span></div>
+                <div className="capacity-list">
+                  <div>
+                    <div className="capacity-row"><span>Available</span><strong>{stats.available}</strong></div>
+                    <div className="meter"><span style={{ width: `${availabilityRate}%` }} /></div>
+                  </div>
+                  <div>
+                    <div className="capacity-row"><span>Allocated</span><strong>{stats.allocated}</strong></div>
+                    <div className="meter"><span style={{ width: `${stats.utilization}%` }} /></div>
+                  </div>
+                  <div>
+                    <div className="capacity-row"><span>Active Assignments</span><strong>{stats.active}</strong></div>
+                    <div className="meter"><span style={{ width: `${Math.min(stats.active * 10, 100)}%` }} /></div>
+                  </div>
+                </div>
+              </section>
+              <section className="panel">
+                <div className="panel-head"><h3>Top Team Load</h3><span>Highest active assignments</span></div>
+                <ul className="list plain">
+                  {teamLoad.slice(0, 5).map((u) => (
+                    <li key={u.id}><span>{u.name}</span><strong>{u.assigned}</strong></li>
+                  ))}
+                </ul>
+              </section>
+              <section className="panel">
+                <div className="panel-head"><h3>Asset Categories</h3><span>Distribution</span></div>
+                <ul className="list plain">
+                  {assetTypes.map(([type, count]) => (
+                    <li key={type}><span>{type}</span><strong>{count}</strong></li>
+                  ))}
+                </ul>
+              </section>
+            </main>
+
+            <section className="grid overview-charts">
+              <section className="panel chart-panel">
+                <div className="panel-head"><h3>Asset Type Graph</h3><span>Top categories</span></div>
+                <div className="hbar-chart">
+                  {topAssetTypes.map(([type, count]) => (
+                    <div className="hbar-row" key={type}>
+                      <div className="hbar-meta">
+                        <span>{type}</span>
+                        <strong>{count}</strong>
+                      </div>
+                      <div className="hbar-track">
+                        <span style={{ width: `${Math.round((count / maxTypeCount) * 100)}%` }} />
+                      </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
+
+              <section className="panel chart-panel">
+                <div className="panel-head"><h3>7-Day Assignment Trend</h3><span>Daily volumes</span></div>
+                <div className="vbar-chart">
+                  {weeklyAssignments.map((d) => (
+                    <div className="vbar-col" key={d.key}>
+                      <strong>{d.count}</strong>
+                      <div className="vbar-track">
+                        <span style={{ height: `${Math.round((d.count / maxWeeklyCount) * 100)}%` }} />
+                      </div>
+                      <small>{d.label}</small>
+                    </div>
+                  ))}
+                </div>
+              </section>
             </section>
           </>
         )}
 
-        {page === 'operations' && (
-          <section className="panel two-col">
-            <div>
-              <h3>Allocate Asset</h3>
-              <form onSubmit={allocate} className="stack-form">
+        {section === 'inventory' && (
+          <section className="panel wide">
+            <div className="panel-head"><h3>Asset Inventory</h3><span>{assets.length} records</span></div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Serial</th><th>Status</th></tr></thead>
+                <tbody>
+                  {assets.map((a) => (
+                    <tr key={a.id}>
+                      <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.serial}</td>
+                      <td><span className={`status ${a.status}`}>{a.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {user.role === 'admin' && (
+              <div className="create-box">
+                <h4>Add New Asset</h4>
+                <form onSubmit={createAsset} className="form inline-form">
+                  <input name="name" placeholder="Asset name" required />
+                  <input name="type" placeholder="Type" required />
+                  <select name="brand_id" value={selectedBrandId} onChange={(e) => setSelectedBrandId(e.target.value)}>
+                    <option value="">Select brand</option>
+                    {brands.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                  <select name="model_id" disabled={!selectedBrandId}>
+                    <option value="">{selectedBrandId ? 'Select model' : 'Select brand first'}</option>
+                    {selectedBrandModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  <input name="serial" placeholder="Serial" required />
+                  <input name="notes" placeholder="Notes (optional)" />
+                  <button type="submit">Add Asset</button>
+                </form>
+              </div>
+            )}
+          </section>
+        )}
+
+        {section === 'assignments' && (
+          <section className="grid">
+            <section className="panel">
+              <div className="panel-head"><h3>Assign Asset</h3><span>Live operation</span></div>
+              <form onSubmit={allocate} className="form">
+                <label>Available Asset</label>
                 <select name="asset" required>
                   {assets.filter((a) => a.status === 'available').map((a) => (
                     <option key={a.id} value={a.id}>{a.name} ({a.serial})</option>
                   ))}
                 </select>
+                <label>User</label>
                 <select name="user" required>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                   ))}
                 </select>
-                <button type="submit">Allocate</button>
+                <button type="submit">Assign</button>
               </form>
-
-              <h3 className="space-top">Create Store</h3>
-              <form onSubmit={createStore} className="stack-form">
-                <input name="name" placeholder="Store name" required />
-                <input name="location" placeholder="Location" required />
-                <button type="submit">Create</button>
-              </form>
-            </div>
-
-            <div>
-              <h3>Recent Allocations</h3>
+            </section>
+            <section className="panel">
+              <h4>Active Assignments</h4>
               <ul className="list">
-                {allocations.slice(0, 10).map((a) => (
-                  <li key={a.id}>Asset {a.asset_id} -> User {a.user_id} ({a.returned_at ? 'Returned' : 'Active'})</li>
+                {activeAllocations.slice(0, 10).map((a) => (
+                  <li key={a.id}>
+                    <div>
+                      <strong>{assetById[a.asset_id]?.name || `Asset ${a.asset_id}`}</strong>
+                      <small>{userById[a.user_id]?.name || `User ${a.user_id}`}</small>
+                    </div>
+                    <button className="small" onClick={() => returnAsset(a.id)}>Return</button>
+                  </li>
                 ))}
               </ul>
-            </div>
+            </section>
           </section>
         )}
 
-        {page === 'branches' && (
-          <section className="panel branch-grid">
-            {branchMetrics.map((b) => (
-              <article key={b.id} className="branch-card">
-                <h4>{b.name}</h4>
-                <p>{b.region} | {b.entity}</p>
-                <small>{b.total} assets | {b.allocated} allocated | {b.available} available</small>
-                <div className="progress"><span style={{ width: `${b.utilization}%` }} /></div>
-              </article>
-            ))}
+        {section === 'insights' && (
+          <section className="grid">
+            <section className="panel">
+              <div className="panel-head"><h3>Asset Categories</h3><span>Distribution</span></div>
+              <ul className="list plain">
+                {assetTypes.map(([type, count]) => (
+                  <li key={type}><span>{type}</span><strong>{count}</strong></li>
+                ))}
+              </ul>
+            </section>
+            <section className="panel">
+              <div className="panel-head"><h3>Team Load</h3><span>Assignments per user</span></div>
+              <ul className="list plain">
+                {teamLoad.map((u) => (
+                  <li key={u.id}><span>{u.name}</span><strong>{u.assigned}</strong></li>
+                ))}
+              </ul>
+            </section>
           </section>
         )}
 
-        {page === 'entities' && (
-          <section className="panel entity-grid">
-            {entityMetrics.map((e) => (
-              <article key={e.id} className="entity-card">
-                <h4>{e.name}</h4>
-                <p>{e.focus}</p>
-                <small>Branches: {e.branches}</small>
-                <small>Assets: {e.assets}</small>
-                <small>Utilization: {e.utilization}%</small>
-              </article>
-            ))}
-          </section>
-        )}
-
-        {page === 'users' && user.role === 'admin' && (
-          <section className="panel">
-            <h3>Users</h3>
-            <ul className="list">
-              {users.map((u) => <li key={u.id}>{u.name} - {u.email} - {u.role}</li>)}
+        {section === 'activity' && (
+          <section className="panel wide">
+            <div className="panel-head"><h3>Recent Activity</h3><span>Last 8 assignment events</span></div>
+            <ul className="timeline">
+              {recentActivity.map((a) => (
+                <li key={a.id}>
+                  <div className="dot" />
+                  <div>
+                    <strong>{assetById[a.asset_id]?.name || `Asset ${a.asset_id}`} assigned to {userById[a.user_id]?.name || `User ${a.user_id}`}</strong>
+                    <small>{new Date(a.allocated_at).toLocaleString()} {a.returned_at ? '- Returned' : '- Active'}</small>
+                  </div>
+                </li>
+              ))}
             </ul>
           </section>
         )}
 
-        {message && <div className="message-bar">{message}</div>}
-      </main>
+        {message && <div className="toast">{message}</div>}
+      </div>
     </div>
   );
 }

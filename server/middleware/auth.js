@@ -1,19 +1,20 @@
 const jwt = require('jsonwebtoken');
-const db = require('../db');
+const { query } = require('../db');
 
 const SECRET = process.env.JWT_SECRET || 'change_this_secret';
 
-function attachUser(req, res, next) {
+async function attachUser(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) {
     req.user = null;
     return next();
   }
+
   const token = auth.slice(7);
   try {
     const payload = jwt.verify(token, SECRET);
-    const user = db.get('users').find({ id: payload.id }).value();
-    req.user = user || null;
+    const rows = await query('SELECT id, name, email, role FROM users WHERE id = ? LIMIT 1', [payload.id]);
+    req.user = rows[0] || null;
   } catch (err) {
     req.user = null;
   }

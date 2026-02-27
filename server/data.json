@@ -37,10 +37,19 @@
       "name": "Logitech Mouse",
       "type": "Peripheral",
       "serial": "LM-200",
-      "status": "available",
+      "status": "allocated",
       "store_id": 1,
       "notes": "Wireless"
     }
   ],
-  "allocations": []
+  "allocations": [
+    {
+      "id": 1,
+      "asset_id": 2,
+      "user_id": 2,
+      "allocated_at": "2026-02-27T10:43:49.914Z",
+      "returned_at": null,
+      "notes": null
+    }
+  ]
 }

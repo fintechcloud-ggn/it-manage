@@ -1,26 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const { query } = require('../db');
 const { requireRole } = require('../middleware/auth');
 
-router.get('/', (req, res) => {
-  const rows = db.get('stores').value();
-  res.json(rows);
+router.get('/', async (req, res) => {
+  try {
+    const rows = await query('SELECT id, name, location FROM stores ORDER BY id DESC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-function nextId() {
-  const items = db.get('stores').value();
-  if (!items || items.length === 0) return 1;
-  return Math.max(...items.map(i => i.id || 0)) + 1;
-}
-
-router.post('/', requireRole('admin'), (req, res) => {
-  const { name, location } = req.body;
+router.post('/', requireRole('admin'), async (req, res) => {
   try {
-    const id = nextId();
-    const store = { id, name, location };
-    db.get('stores').push(store).write();
-    res.status(201).json(store);
+    const { name, location } = req.body;
+    const result = await query('INSERT INTO stores (name, location) VALUES (?, ?)', [name, location || null]);
+    const created = await query('SELECT id, name, location FROM stores WHERE id = ? LIMIT 1', [result.insertId]);
+    res.status(201).json(created[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
