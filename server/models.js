@@ -1,6 +1,32 @@
 const bcrypt = require('bcryptjs');
 const { query } = require('./db');
 
+async function ensureColumn(table, column, definition) {
+  const rows = await query(
+    `SELECT 1
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [table, column],
+  );
+  if (rows.length === 0) {
+    await query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+async function ensureIndex(table, indexName, ddl) {
+  const rows = await query(
+    `SELECT 1
+     FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
+     LIMIT 1`,
+    [table, indexName],
+  );
+  if (rows.length === 0) {
+    await query(ddl);
+  }
+}
+
 async function init() {
   await query(`
     CREATE TABLE IF NOT EXISTS brands (
@@ -29,9 +55,25 @@ async function init() {
       email VARCHAR(160) NOT NULL UNIQUE,
       role VARCHAR(30) NOT NULL DEFAULT 'user',
       password VARCHAR(255) NOT NULL,
+      employee_code VARCHAR(40) NULL,
+      company VARCHAR(120) NULL,
+      department VARCHAR(120) NULL,
+      designation VARCHAR(120) NULL,
+      location VARCHAR(120) NULL,
+      employment_type VARCHAR(60) NULL,
+      employment_status VARCHAR(60) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB
   `);
+
+  await ensureColumn('users', 'employee_code', 'VARCHAR(40) NULL');
+  await ensureColumn('users', 'company', 'VARCHAR(120) NULL');
+  await ensureColumn('users', 'department', 'VARCHAR(120) NULL');
+  await ensureColumn('users', 'designation', 'VARCHAR(120) NULL');
+  await ensureColumn('users', 'location', 'VARCHAR(120) NULL');
+  await ensureColumn('users', 'employment_type', 'VARCHAR(60) NULL');
+  await ensureColumn('users', 'employment_status', 'VARCHAR(60) NULL');
+  await ensureIndex('users', 'idx_users_employee_code', 'CREATE UNIQUE INDEX idx_users_employee_code ON users(employee_code)');
 
   await query(`
     CREATE TABLE IF NOT EXISTS stores (
@@ -91,26 +133,254 @@ async function seedSample() {
     await query('INSERT INTO stores (name, location) VALUES (?, ?)', ['Main Warehouse', 'Head Office']);
   }
 
-  const brandSeed = {
-    Apple: ['MacBook Air M2', 'MacBook Air M3', 'MacBook Pro 14 M3', 'MacBook Pro 16 M3'],
-    Dell: ['Latitude 5440', 'Latitude 7440', 'XPS 13', 'Precision 3580'],
-    HP: ['EliteBook 840 G10', 'ProBook 440 G10', 'ZBook Firefly 14'],
-    Lenovo: ['ThinkPad T14 Gen 4', 'ThinkPad X1 Carbon Gen 11', 'ThinkPad E14 Gen 5'],
-    Acer: ['TravelMate P4', 'Swift Go 14'],
-    Asus: ['ExpertBook B9', 'Zenbook 14 OLED'],
+  const modelCatalog = {
+    Apple: [
+      { name: 'MacBook Air M2', category: 'Laptop' },
+      { name: 'MacBook Air M3', category: 'Laptop' },
+      { name: 'MacBook Pro 14 M3', category: 'Laptop' },
+      { name: 'MacBook Pro 16 M3', category: 'Laptop' },
+      { name: 'iPad Pro', category: 'Tablet' },
+      { name: 'iPhone', category: 'Mobile' },
+    ],
+    Dell: [
+      { name: 'Latitude 5440', category: 'Laptop' },
+      { name: 'Latitude 7440', category: 'Laptop' },
+      { name: 'XPS 13', category: 'Laptop' },
+      { name: 'Precision 3580', category: 'Desktop' },
+      { name: 'UltraSharp 27', category: 'Monitor' },
+    ],
+    HP: [
+      { name: 'EliteBook 840 G10', category: 'Laptop' },
+      { name: 'ProBook 440 G10', category: 'Laptop' },
+      { name: 'ZBook Firefly 14', category: 'Laptop' },
+      { name: 'LaserJet Pro', category: 'Printer' },
+      { name: 'ScanJet', category: 'Scanner' },
+    ],
+    Lenovo: [
+      { name: 'ThinkPad T14 Gen 4', category: 'Laptop' },
+      { name: 'ThinkPad X1 Carbon Gen 11', category: 'Laptop' },
+      { name: 'ThinkPad E14 Gen 5', category: 'Laptop' },
+      { name: 'ThinkCentre M90', category: 'Desktop' },
+    ],
+    Acer: [
+      { name: 'TravelMate P4', category: 'Laptop' },
+      { name: 'Swift Go 14', category: 'Laptop' },
+    ],
+    Asus: [
+      { name: 'ExpertBook B9', category: 'Laptop' },
+      { name: 'Zenbook 14 OLED', category: 'Laptop' },
+    ],
+    Samsung: [
+      { name: 'Galaxy S24', category: 'Mobile' },
+      { name: 'Galaxy S24 Ultra', category: 'Mobile' },
+      { name: 'Galaxy Z Fold5', category: 'Mobile' },
+      { name: 'Galaxy Tab S9', category: 'Tablet' },
+      { name: 'Smart Monitor M8', category: 'Monitor' },
+    ],
+    Google: [
+      { name: 'Pixel 8', category: 'Mobile' },
+      { name: 'Pixel 8 Pro', category: 'Mobile' },
+      { name: 'Pixel Tablet', category: 'Tablet' },
+    ],
+    OnePlus: [
+      { name: 'OnePlus 12', category: 'Mobile' },
+      { name: 'OnePlus Open', category: 'Mobile' },
+    ],
+    Xiaomi: [
+      { name: 'Xiaomi 14', category: 'Mobile' },
+      { name: 'Redmi Note 13', category: 'Mobile' },
+      { name: 'Pad 6', category: 'Tablet' },
+    ],
+    Oppo: [
+      { name: 'Find X7', category: 'Mobile' },
+      { name: 'Reno 11', category: 'Mobile' },
+    ],
+    Vivo: [
+      { name: 'V30', category: 'Mobile' },
+      { name: 'X100', category: 'Mobile' },
+    ],
+    iQOO: [
+      { name: 'iQOO 12', category: 'Mobile' },
+      { name: 'iQOO Neo 9', category: 'Mobile' },
+    ],
+    Motorola: [
+      { name: 'Moto Edge 50', category: 'Mobile' },
+      { name: 'Razr 50', category: 'Mobile' },
+    ],
+    Realme: [
+      { name: 'Realme GT 6', category: 'Mobile' },
+      { name: 'Realme 12 Pro', category: 'Mobile' },
+      { name: 'Narzo 70', category: 'Mobile' },
+    ],
+    POCO: [
+      { name: 'POCO X6 Pro', category: 'Mobile' },
+      { name: 'POCO M6 Pro', category: 'Mobile' },
+    ],
+    Redmi: [
+      { name: 'Redmi Note 13 Pro', category: 'Mobile' },
+      { name: 'Redmi 13C', category: 'Mobile' },
+    ],
+    Infinix: [
+      { name: 'Infinix Note 40', category: 'Mobile' },
+      { name: 'Infinix Zero 30', category: 'Mobile' },
+      { name: 'Infinix Smart 8', category: 'Mobile' },
+    ],
+    Tecno: [
+      { name: 'Tecno Camon 30', category: 'Mobile' },
+      { name: 'Tecno Spark 20', category: 'Mobile' },
+      { name: 'Tecno Pova 6', category: 'Mobile' },
+    ],
+    itel: [
+      { name: 'itel P55', category: 'Mobile' },
+      { name: 'itel A70', category: 'Mobile' },
+    ],
+    Lava: [
+      { name: 'Lava Agni 2', category: 'Mobile' },
+      { name: 'Lava Blaze 5G', category: 'Mobile' },
+      { name: 'Lava Yuva 3', category: 'Mobile' },
+    ],
+    Micromax: [
+      { name: 'Micromax IN Note', category: 'Mobile' },
+      { name: 'Micromax IN 2C', category: 'Mobile' },
+    ],
+    Karbonn: [
+      { name: 'Karbonn K9 Smart', category: 'Mobile' },
+    ],
+    Nokia: [
+      { name: 'Nokia G42', category: 'Mobile' },
+      { name: 'Nokia T21', category: 'Tablet' },
+    ],
+    Microsoft: [
+      { name: 'Surface Laptop 6', category: 'Laptop' },
+      { name: 'Surface Pro 10', category: 'Tablet' },
+    ],
+    LG: [
+      { name: 'UltraFine 27', category: 'Monitor' },
+      { name: 'UltraGear 32', category: 'Monitor' },
+    ],
+    BenQ: [
+      { name: 'PD2705U', category: 'Monitor' },
+      { name: 'EW3270U', category: 'Monitor' },
+    ],
+    Canon: [
+      { name: 'imageCLASS MF3010', category: 'Printer' },
+      { name: 'CanoScan LiDE 300', category: 'Scanner' },
+    ],
+    Epson: [
+      { name: 'EcoTank L3250', category: 'Printer' },
+      { name: 'WorkForce DS-530', category: 'Scanner' },
+    ],
+    Brother: [
+      { name: 'DCP-L2541DW', category: 'Printer' },
+      { name: 'ADS-2200', category: 'Scanner' },
+    ],
+    Xerox: [
+      { name: 'B225 MFP', category: 'Printer' },
+    ],
+    Cisco: [
+      { name: 'Catalyst 9200', category: 'Network' },
+      { name: 'Catalyst 9130', category: 'Network' },
+    ],
+    Ubiquiti: [
+      { name: 'UniFi U6 Pro', category: 'Network' },
+      { name: 'UniFi Switch 24', category: 'Network' },
+    ],
+    'TP-Link': [
+      { name: 'Archer AX55', category: 'Network' },
+      { name: 'TL-SG2428P', category: 'Network' },
+    ],
+    Netgear: [
+      { name: 'Nighthawk AX8', category: 'Network' },
+      { name: 'GS108', category: 'Network' },
+    ],
+    Juniper: [
+      { name: 'EX2300', category: 'Network' },
+      { name: 'SRX300', category: 'Network' },
+    ],
+    'D-Link': [
+      { name: 'DIR-X5460', category: 'Network' },
+      { name: 'DGS-1210', category: 'Network' },
+    ],
+    Airtel: [
+      { name: 'Airtel 4G SIM', category: 'Sim Card' },
+      { name: 'Airtel 5G SIM', category: 'Sim Card' },
+      { name: 'Airtel Corporate Postpaid', category: 'Sim Card' },
+    ],
+    Jio: [
+      { name: 'Jio 4G SIM', category: 'Sim Card' },
+      { name: 'Jio 5G SIM', category: 'Sim Card' },
+      { name: 'Jio Corporate Postpaid', category: 'Sim Card' },
+    ],
+    Vi: [
+      { name: 'Vi 4G SIM', category: 'Sim Card' },
+      { name: 'Vi 5G SIM', category: 'Sim Card' },
+      { name: 'Vi Corporate Postpaid', category: 'Sim Card' },
+    ],
+    BSNL: [
+      { name: 'BSNL 4G SIM', category: 'Sim Card' },
+      { name: 'BSNL Prepaid SIM', category: 'Sim Card' },
+      { name: 'BSNL Postpaid SIM', category: 'Sim Card' },
+    ],
+    Logitech: [
+      { name: 'MX Master 3S', category: 'Peripheral' },
+      { name: 'MX Keys', category: 'Peripheral' },
+      { name: 'Brio 4K', category: 'Peripheral' },
+      { name: 'Zone Vibe 100', category: 'Peripheral' },
+    ],
+    Razer: [
+      { name: 'DeathAdder V3', category: 'Peripheral' },
+      { name: 'BlackWidow V4', category: 'Peripheral' },
+      { name: 'Kiyo Pro', category: 'Peripheral' },
+    ],
+    Generic: [
+      { name: 'Business Laptop', category: 'Laptop' },
+      { name: 'Developer Laptop', category: 'Laptop' },
+      { name: 'Ultrabook', category: 'Laptop' },
+      { name: 'High config', category: 'Laptop' },
+      { name: 'Workstation', category: 'Desktop' },
+      { name: 'Office Desktop', category: 'Desktop' },
+      { name: '24-inch Monitor', category: 'Monitor' },
+      { name: '27-inch Monitor', category: 'Monitor' },
+      { name: '32-inch Monitor', category: 'Monitor' },
+      { name: '40-inch Monitor', category: 'Monitor' },
+      { name: '49-inch Monitor', category: 'Monitor' },
+      { name: '55-inch Monitor', category: 'Monitor' },
+      { name: '65-inch Monitor', category: 'Monitor' },
+      { name: 'Mouse', category: 'Peripheral' },
+      { name: 'Keyboard', category: 'Peripheral' },
+      { name: 'Headset', category: 'Peripheral' },
+      { name: 'Docking Station', category: 'Peripheral' },
+      { name: 'External hard drive', category: 'Peripheral' },
+      { name: 'USB drive', category: 'Peripheral' },
+      { name: 'Webcam', category: 'Peripheral' },
+      { name: 'Business Tablet', category: 'Tablet' },
+      { name: 'Corporate Mobile', category: 'Mobile' },
+      { name: 'Sim card', category: 'Mobile' },
+      { name: 'Router', category: 'Network' },
+      { name: 'Switch', category: 'Network' },
+      { name: 'Access Point', category: 'Network' },
+      { name: 'Airtel SIM', category: 'Sim Card' },
+      { name: 'Jio SIM', category: 'Sim Card' },
+      { name: 'Vi SIM', category: 'Sim Card' },
+      { name: 'BSNL SIM', category: 'Sim Card' },
+      { name: 'Printer', category: 'Printer' },
+      { name: 'Scanner', category: 'Scanner' },
+      { name: 'USB hub', category: 'Peripheral' },
+      { name: 'USB cable', category: 'Peripheral' },
+    ],
   };
 
-  for (const brandName of Object.keys(brandSeed)) {
+  for (const brandName of Object.keys(modelCatalog)) {
     await query('INSERT IGNORE INTO brands (name) VALUES (?)', [brandName]);
   }
 
   const brands = await query('SELECT id, name FROM brands');
   const brandIdByName = Object.fromEntries(brands.map((b) => [b.name, b.id]));
 
-  for (const [brandName, models] of Object.entries(brandSeed)) {
+  for (const [brandName, models] of Object.entries(modelCatalog)) {
     const brandId = brandIdByName[brandName];
-    for (const modelName of models) {
-      await query('INSERT IGNORE INTO asset_models (brand_id, name, category) VALUES (?, ?, ?)', [brandId, modelName, 'Laptop']);
+    for (const model of models) {
+      await query('INSERT IGNORE INTO asset_models (brand_id, name, category) VALUES (?, ?, ?)', [brandId, model.name, model.category || 'Laptop']);
     }
   }
 

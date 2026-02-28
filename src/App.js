@@ -2,6 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
 const API = process.env.REACT_APP_API || 'http://localhost:4000';
+const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
+const FALLBACK_NAMES_BY_TYPE = {
+  Laptop: ['Business Laptop', 'Developer Laptop', 'Ultrabook', 'High config'],
+  Desktop: ['Workstation', 'Office Desktop',],
+  Monitor: ['24-inch Monitor', '27-inch Monitor', '32-inch Monitor', '40-inch Monitor', '49-inch Monitor', '55-inch Monitor', '65-inch Monitor'],
+  Peripheral: ['Mouse', 'Keyboard', 'Headset', 'Docking Station', 'External hard drive', 'USB drive', 'Webcam', 'USB hub', 'USB cable'],
+  Tablet: ['Business Tablet', 'Tablet'],
+  Mobile: ['Corporate Mobile'],
+  Network: ['Router', 'Switch', 'Access Point'],
+  Printer: ['Laser Printer', 'Ink Tank Printer', 'Thermal Printer'],
+  Scanner: ['Document Scanner', 'Flatbed Scanner'],
+  'Sim Card': ['Airtel SIM', 'Jio SIM', 'Vi SIM', 'BSNL SIM']
+};
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
@@ -15,6 +28,17 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
+  const [inventoryQuery, setInventoryQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterBrand, setFilterBrand] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [assignmentUserFilter, setAssignmentUserFilter] = useState('all');
+  const [selectedAssetType, setSelectedAssetType] = useState('Laptop');
+  const [selectedAssetName, setSelectedAssetName] = useState('');
 
   useEffect(() => {
     if (!token) return;
@@ -32,19 +56,43 @@ function App() {
   }
 
   function fetchAssets() {
-    fetch(`${API}/api/assets`).then((r) => r.json()).then(setAssets);
+    fetch(`${API}/api/assets`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`assets_${r.status}`);
+        return r.json();
+      })
+      .then(setAssets)
+      .catch(() => setMessage('Unable to load assets. Ensure backend is running on port 4000.'));
   }
 
   function fetchUsers() {
-    fetch(`${API}/api/users`).then((r) => r.json()).then(setUsers);
+    fetch(`${API}/api/users`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`users_${r.status}`);
+        return r.json();
+      })
+      .then(setUsers)
+      .catch(() => setMessage('Unable to load users from server.'));
   }
 
   function fetchAllocations() {
-    fetch(`${API}/api/allocations`, { headers: authHeaders() }).then((r) => r.json()).then(setAllocations);
+    fetch(`${API}/api/allocations`, { headers: authHeaders() })
+      .then((r) => {
+        if (!r.ok) throw new Error(`allocations_${r.status}`);
+        return r.json();
+      })
+      .then(setAllocations)
+      .catch(() => setMessage('Unable to load allocations from server.'));
   }
 
   function fetchBrands() {
-    fetch(`${API}/api/brands`, { headers: authHeaders() }).then((r) => r.json()).then(setBrands);
+    fetch(`${API}/api/brands`, { headers: authHeaders() })
+      .then((r) => {
+        if (!r.ok) throw new Error(`brands_${r.status}`);
+        return r.json();
+      })
+      .then(setBrands)
+      .catch(() => setMessage('Unable to load brands/models from server.'));
   }
 
   async function login(e) {
@@ -88,10 +136,11 @@ function App() {
     e.preventDefault();
     const asset_id = Number(e.target.asset.value);
     const user_id = Number(e.target.user.value);
+    const notes = e.target.notes?.value || '';
     const res = await fetch(`${API}/api/allocations`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ asset_id, user_id })
+      body: JSON.stringify({ asset_id, user_id, notes })
     });
     const body = await res.json().catch(() => ({}));
     setMessage(res.ok ? 'Asset assigned successfully' : body.error || 'Allocation failed');
@@ -134,6 +183,8 @@ function App() {
       fetchAssets();
       e.target.reset();
       setSelectedBrandId('');
+      setSelectedAssetType('Laptop');
+      setSelectedAssetName('');
     }
   }
 
@@ -204,6 +255,104 @@ function App() {
     const brand = brands.find((b) => b.id === Number(selectedBrandId));
     return brand ? brand.models : [];
   }, [brands, selectedBrandId]);
+  const selectedBrandModelsByType = useMemo(() => {
+    return selectedBrandModels.filter(
+      (m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase(),
+    );
+  }, [selectedBrandModels, selectedAssetType]);
+  const brandsBySelectedType = useMemo(() => {
+    return brands.filter((b) =>
+      (b.models || []).some((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase()),
+    );
+  }, [brands, selectedAssetType]);
+  const assetNameOptions = useMemo(() => {
+    const modelNames = selectedBrandModelsByType.map((m) => m.name);
+    if (modelNames.length > 0) return modelNames;
+    return FALLBACK_NAMES_BY_TYPE[selectedAssetType] || ['Generic Asset'];
+  }, [selectedBrandModelsByType, selectedAssetType]);
+  useEffect(() => {
+    if (!selectedBrandId) return;
+    const existsForType = brandsBySelectedType.some((b) => String(b.id) === String(selectedBrandId));
+    if (!existsForType) {
+      setSelectedBrandId('');
+      setSelectedAssetName('');
+    }
+  }, [brandsBySelectedType, selectedBrandId]);
+  const availableAssets = useMemo(() => assets.filter((a) => a.status === 'available'), [assets]);
+  const employees = useMemo(() => {
+    const nonAdmins = users.filter((u) => u.role !== 'admin');
+    return nonAdmins.length ? nonAdmins : users;
+  }, [users]);
+  const assignedUsersCount = useMemo(
+    () => {
+      const employeeIds = new Set(employees.map((e) => e.id));
+      return new Set(activeAllocations.filter((a) => employeeIds.has(a.user_id)).map((a) => a.user_id)).size;
+    },
+    [activeAllocations, employees],
+  );
+  const assignmentRows = useMemo(() => {
+    return activeAllocations
+      .filter((a) => assignmentUserFilter === 'all' || String(a.user_id) === assignmentUserFilter)
+      .filter((a) => {
+        const q = assignmentSearch.trim().toLowerCase();
+        if (!q) return true;
+        const assetName = (assetById[a.asset_id]?.name || '').toLowerCase();
+        const userName = (userById[a.user_id]?.name || '').toLowerCase();
+        const serial = (assetById[a.asset_id]?.serial || '').toLowerCase();
+        return `${assetName} ${userName} ${serial}`.includes(q);
+      })
+      .sort((a, b) => new Date(b.allocated_at || 0) - new Date(a.allocated_at || 0));
+  }, [activeAllocations, assignmentUserFilter, assignmentSearch, assetById, userById]);
+  const employeeLoad = useMemo(() => {
+    return employees
+      .map((e) => ({
+        ...e,
+        assigned: activeAllocations.filter((a) => a.user_id === e.id).length,
+      }))
+      .sort((a, b) => b.assigned - a.assigned);
+  }, [employees, activeAllocations]);
+  const inventoryTypes = useMemo(() => {
+    return Array.from(new Set(assets.map((a) => a.type).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [assets]);
+  const inventoryBrands = useMemo(() => {
+    return Array.from(new Set(assets.map((a) => a.brand_name).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [assets]);
+  const filteredSortedAssets = useMemo(() => {
+    const q = inventoryQuery.trim().toLowerCase();
+    const filtered = assets.filter((a) => {
+      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.status || ''}`.toLowerCase().includes(q);
+      const matchStatus = filterStatus === 'all' || a.status === filterStatus;
+      const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
+      const matchType = filterType === 'all' || (a.type || '') === filterType;
+      return matchQuery && matchStatus && matchBrand && matchType;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      const left = (a[sortBy] || '').toString().toLowerCase();
+      const right = (b[sortBy] || '').toString().toLowerCase();
+      if (left < right) return sortDir === 'asc' ? -1 : 1;
+      if (left > right) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [assets, inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir]);
+  const pageSize = 12;
+  const totalPages = Math.max(1, Math.ceil(filteredSortedAssets.length / pageSize));
+  const paginatedAssets = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredSortedAssets.slice(start, start + pageSize);
+  }, [filteredSortedAssets, page]);
+  const inventoryStats = useMemo(() => {
+    const total = filteredSortedAssets.length;
+    const available = filteredSortedAssets.filter((a) => a.status === 'available').length;
+    const allocated = filteredSortedAssets.filter((a) => a.status === 'allocated').length;
+    const uniqueBrands = new Set(filteredSortedAssets.map((a) => a.brand_name).filter(Boolean)).size;
+    return { total, available, allocated, uniqueBrands };
+  }, [filteredSortedAssets]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir]);
 
   const navItems = [
     { key: 'overview', label: 'Overview', icon: 'OV' },
@@ -212,6 +361,15 @@ function App() {
     { key: 'insights', label: 'Insights', icon: 'IS' },
     { key: 'activity', label: 'Recent Activity', icon: 'RA' }
   ];
+
+  function resetInventoryFilters() {
+    setInventoryQuery('');
+    setFilterStatus('all');
+    setFilterBrand('all');
+    setFilterType('all');
+    setSortBy('name');
+    setSortDir('asc');
+  }
 
   if (!user) {
     return (
@@ -375,35 +533,153 @@ function App() {
 
         {section === 'inventory' && (
           <section className="panel wide">
-            <div className="panel-head"><h3>Asset Inventory</h3><span>{assets.length} records</span></div>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Serial</th><th>Status</th></tr></thead>
-                <tbody>
-                  {assets.map((a) => (
-                    <tr key={a.id}>
-                      <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.serial}</td>
-                      <td><span className={`status ${a.status}`}>{a.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="inventory-head">
+              <div>
+                <h3>Asset Inventory</h3>
+                <p className="hint">Structured registry for all devices across brand, model, and lifecycle state.</p>
+              </div>
+              <div className="inventory-head-actions">
+                <button type="button" className="outline" onClick={resetInventoryFilters}>Reset Filters</button>
+                <button
+                  type="button"
+                  className="outline"
+                  onClick={() => {
+                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Serial', 'Status'];
+                    const rows = filteredSortedAssets.map((a) => [
+                      a.name || '',
+                      a.type || '',
+                      a.brand_name || '',
+                      a.model_name || '',
+                      a.serial || '',
+                      a.status || ''
+                    ]);
+                    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', 'inventory_export.csv');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+
+            <div className="inventory-filter-grid">
+              <input
+                className="inventory-search"
+                placeholder="Search by asset, serial, brand, model, status..."
+                value={inventoryQuery}
+                onChange={(e) => setInventoryQuery(e.target.value)}
+              />
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                <option value="all">All Status</option>
+                <option value="available">Available</option>
+                <option value="allocated">Allocated</option>
+              </select>
+              <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
+                <option value="all">All Brands</option>
+                {inventoryBrands.map((b) => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+                <option value="all">All Types</option>
+                {inventoryTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="name">Sort by Name</option>
+                <option value="type">Sort by Type</option>
+                <option value="brand_name">Sort by Brand</option>
+                <option value="model_name">Sort by Model</option>
+                <option value="serial">Sort by Serial</option>
+                <option value="status">Sort by Status</option>
+              </select>
+              <select value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            </div>
+
+            <div className="inventory-mini-stats inventory-mini-stats-strong">
+              <article><span>Filtered Total</span><strong>{inventoryStats.total}</strong></article>
+              <article><span>Available</span><strong>{inventoryStats.available}</strong></article>
+              <article><span>Allocated</span><strong>{inventoryStats.allocated}</strong></article>
+              <article><span>Brands</span><strong>{inventoryStats.uniqueBrands}</strong></article>
+            </div>
+
+            <div className="inventory-table-shell">
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Serial</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {paginatedAssets.map((a) => (
+                      <tr key={a.id}>
+                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.serial}</td>
+                        <td><span className={`status ${a.status}`}>{a.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="inventory-pager">
+                <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+                <span>Page {page} of {totalPages} | Showing {paginatedAssets.length} items</span>
+                <button type="button" className="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+              </div>
             </div>
             {user.role === 'admin' && (
               <div className="create-box">
                 <h4>Add New Asset</h4>
                 <form onSubmit={createAsset} className="form inline-form">
-                  <input name="name" placeholder="Asset name" required />
-                  <input name="type" placeholder="Type" required />
-                  <select name="brand_id" value={selectedBrandId} onChange={(e) => setSelectedBrandId(e.target.value)}>
-                    <option value="">Select brand</option>
-                    {brands.map((b) => (
+                  <select
+                    name="type"
+                    value={selectedAssetType}
+                    onChange={(e) => {
+                      setSelectedAssetType(e.target.value);
+                      setSelectedBrandId('');
+                      setSelectedAssetName('');
+                    }}
+                    required
+                  >
+                    {TYPE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <select
+                    name="brand_id"
+                    value={selectedBrandId}
+                    onChange={(e) => {
+                      setSelectedBrandId(e.target.value);
+                      setSelectedAssetName('');
+                    }}
+                  >
+                    <option value="">{`Select ${selectedAssetType} brand`}</option>
+                    {brandsBySelectedType.map((b) => (
                       <option key={b.id} value={b.id}>{b.name}</option>
                     ))}
                   </select>
+                  <select
+                    name="name"
+                    value={selectedAssetName}
+                    onChange={(e) => setSelectedAssetName(e.target.value)}
+                    required
+                  >
+                    <option value="">Select asset name</option>
+                    {assetNameOptions.map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
                   <select name="model_id" disabled={!selectedBrandId}>
-                    <option value="">{selectedBrandId ? 'Select model' : 'Select brand first'}</option>
-                    {selectedBrandModels.map((m) => (
+                    <option value="">
+                      {selectedBrandId
+                        ? `Select ${selectedAssetType} model`
+                        : 'Select brand first'}
+                    </option>
+                    {selectedBrandModelsByType.map((m) => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
@@ -417,40 +693,79 @@ function App() {
         )}
 
         {section === 'assignments' && (
-          <section className="grid">
-            <section className="panel">
-              <div className="panel-head"><h3>Assign Asset</h3><span>Live operation</span></div>
-              <form onSubmit={allocate} className="form">
-                <label>Available Asset</label>
-                <select name="asset" required>
-                  {assets.filter((a) => a.status === 'available').map((a) => (
-                    <option key={a.id} value={a.id}>{a.name} ({a.serial})</option>
-                  ))}
-                </select>
-                <label>User</label>
-                <select name="user" required>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                  ))}
-                </select>
-                <button type="submit">Assign</button>
-              </form>
+          <>
+            <section className="inventory-mini-stats assignment-stats">
+              <article><span>Available To Assign</span><strong>{availableAssets.length}</strong></article>
+              <article><span>Active Assignments</span><strong>{activeAllocations.length}</strong></article>
+              <article><span>Employees With Devices</span><strong>{assignedUsersCount}</strong></article>
+              <article><span>Total Employees</span><strong>{employees.length}</strong></article>
             </section>
-            <section className="panel">
-              <h4>Active Assignments</h4>
-              <ul className="list">
-                {activeAllocations.slice(0, 10).map((a) => (
-                  <li key={a.id}>
-                    <div>
-                      <strong>{assetById[a.asset_id]?.name || `Asset ${a.asset_id}`}</strong>
-                      <small>{userById[a.user_id]?.name || `User ${a.user_id}`}</small>
-                    </div>
-                    <button className="small" onClick={() => returnAsset(a.id)}>Return</button>
-                  </li>
-                ))}
-              </ul>
+            <section className="grid assignments-grid">
+              <section className="panel">
+                <div className="panel-head"><h3>Assign Laptop / Device</h3><span>IT handover flow</span></div>
+                <p className="hint">IT personnel can assign available devices to employees. Add note for purpose or ticket.</p>
+                <form onSubmit={allocate} className="form">
+                  <label>Available Asset</label>
+                  <select name="asset" required>
+                    {availableAssets.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.serial})</option>
+                    ))}
+                  </select>
+                  <label>Employee</label>
+                  <select name="user" required>
+                    {employees.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                    ))}
+                  </select>
+                  <label>Notes (optional)</label>
+                  <input name="notes" placeholder="Reason, team, project, ticket..." />
+                  <button type="submit">Assign Asset</button>
+                </form>
+
+                <div className="create-box">
+                  <h4>Employee Load Snapshot</h4>
+                  <ul className="list plain">
+                    {employeeLoad.slice(0, 5).map((e) => (
+                      <li key={e.id}><span>{e.name}</span><strong>{e.assigned}</strong></li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-head"><h3>Employee Assignment Queue</h3><span>{assignmentRows.length} active</span></div>
+                <div className="inventory-filter-grid assignment-filters">
+                  <input
+                    className="inventory-search"
+                    placeholder="Search by employee, asset, serial"
+                    value={assignmentSearch}
+                    onChange={(e) => setAssignmentSearch(e.target.value)}
+                  />
+                  <select value={assignmentUserFilter} onChange={(e) => setAssignmentUserFilter(e.target.value)}>
+                    <option value="all">All Employees</option>
+                    {employees.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Asset</th><th>Employee</th><th>Assigned At</th><th>Action</th></tr></thead>
+                    <tbody>
+                      {assignmentRows.map((a) => (
+                        <tr key={a.id}>
+                          <td>{assetById[a.asset_id]?.name || `Asset ${a.asset_id}`}</td>
+                          <td>{userById[a.user_id]?.name || `User ${a.user_id}`}</td>
+                          <td>{new Date(a.allocated_at).toLocaleString()}</td>
+                          <td>
+                            <button className="small" onClick={() => returnAsset(a.id)}>Return</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </section>
-          </section>
+          </>
         )}
 
         {section === 'insights' && (
