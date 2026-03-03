@@ -19,6 +19,9 @@ const FALLBACK_NAMES_BY_TYPE = {
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
+  const [authView, setAuthView] = useState(() => (
+    localStorage.getItem('token') && localStorage.getItem('user') ? 'app' : 'landing'
+  ));
   const [assets, setAssets] = useState([]);
   const [users, setUsers] = useState([]);
   const [allocations, setAllocations] = useState([]);
@@ -26,6 +29,7 @@ function App() {
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [landingScrollProgress, setLandingScrollProgress] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
@@ -48,6 +52,39 @@ function App() {
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  useEffect(() => {
+    if (authView !== 'landing' || user) return undefined;
+    const nodes = document.querySelectorAll('.reveal-on-scroll');
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) entry.target.classList.add('is-visible');
+        });
+      },
+      { threshold: 0.2, rootMargin: '0px 0px -10% 0px' }
+    );
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [authView, user]);
+
+  useEffect(() => {
+    if (authView !== 'landing' || user) return undefined;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const vh = Math.max(window.innerHeight, 1);
+        const next = Math.max(0, Math.min(window.scrollY / vh, 1.4));
+        setLandingScrollProgress(next);
+        ticking = false;
+      });
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [authView, user]);
 
   function authHeaders() {
     return token
@@ -114,6 +151,7 @@ function App() {
       }
       setToken(body.token);
       setUser(body.user);
+      setAuthView('app');
       localStorage.setItem('token', body.token);
       localStorage.setItem('user', JSON.stringify(body.user));
       setMessage('');
@@ -127,6 +165,7 @@ function App() {
   function logout() {
     setToken('');
     setUser(null);
+    setAuthView('landing');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setMessage('Logged out');
@@ -229,7 +268,15 @@ function App() {
   const busiestUser = teamLoad[0] || { name: 'N/A', assigned: 0 };
   const availabilityRate = stats.total ? Math.round((stats.available / stats.total) * 100) : 0;
   const topAssetTypes = assetTypes.slice(0, 5);
-  const maxTypeCount = topAssetTypes.length ? topAssetTypes[0][1] : 1;
+  const branchMix = [
+    { name: 'Gurgaon HQ', pct: 19 },
+    { name: 'Mumbai', pct: 15 },
+    { name: 'Bengaluru', pct: 13 },
+    { name: 'Pune', pct: 12 },
+    { name: 'Delhi', pct: 11 },
+    { name: 'Hyderabad', pct: 10 },
+    { name: 'Chennai', pct: 9 },
+  ];
 
   const weeklyAssignments = useMemo(() => {
     const days = [];
@@ -250,7 +297,28 @@ function App() {
     return days.map((d) => ({ ...d, count: counts[d.key] || 0 }));
   }, [allocations]);
 
-  const maxWeeklyCount = Math.max(...weeklyAssignments.map((d) => d.count), 1);
+  const weeklySeries = useMemo(() => {
+    return weeklyAssignments.map((d, i) => ({
+      ...d,
+      gross: d.count * 7 + (i % 3) * 4 + 10,
+      revenue: d.count * 9 + ((i + 1) % 4) * 5 + 8,
+    }));
+  }, [weeklyAssignments]);
+  const maxWeeklySeries = Math.max(
+    ...weeklySeries.map((d) => Math.max(d.gross, d.revenue)),
+    1
+  );
+  const donutColors = ['#6c63ff', '#4f7cff', '#5cb8ff', '#6de0b4', '#ff8b5c', '#f9cf58'];
+  const donutTotal = Math.max(topAssetTypes.reduce((sum, [, count]) => sum + count, 0), 1);
+  const donutGradient = topAssetTypes
+    .map(([, count], idx) => ({ pct: Math.round((count / donutTotal) * 100), color: donutColors[idx % donutColors.length] }))
+    .reduce((acc, item, idx, arr) => {
+      const from = arr.slice(0, idx).reduce((s, x) => s + x.pct, 0);
+      const to = from + item.pct;
+      acc.push(`${item.color} ${from}% ${to}%`);
+      return acc;
+    }, [])
+    .join(', ');
   const selectedBrandModels = useMemo(() => {
     const brand = brands.find((b) => b.id === Number(selectedBrandId));
     return brand ? brand.models : [];
@@ -260,6 +328,10 @@ function App() {
       (m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase(),
     );
   }, [selectedBrandModels, selectedAssetType]);
+  const selectedBrandName = useMemo(() => {
+    const brand = brands.find((b) => String(b.id) === String(selectedBrandId));
+    return brand?.name || '';
+  }, [brands, selectedBrandId]);
   const brandsBySelectedType = useMemo(() => {
     return brands.filter((b) =>
       (b.models || []).some((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase()),
@@ -355,11 +427,11 @@ function App() {
   }, [inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir]);
 
   const navItems = [
-    { key: 'overview', label: 'Overview', icon: 'OV' },
-    { key: 'inventory', label: 'Inventory', icon: 'IN' },
+    { key: 'overview', label: 'Overview', icon: 'DB' },
+    { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
-    { key: 'insights', label: 'Insights', icon: 'IS' },
-    { key: 'activity', label: 'Recent Activity', icon: 'RA' }
+    { key: 'insights', label: 'Insights', icon: 'IN' },
+    { key: 'activity', label: 'Recent Activity', icon: 'AC' }
   ];
 
   function resetInventoryFilters() {
@@ -371,21 +443,280 @@ function App() {
     setSortDir('asc');
   }
 
+  const landingMotion = useMemo(() => {
+    const p = landingScrollProgress;
+    return {
+      copyOpacity: Math.max(0, 1 - p * 1.12),
+      copyScale: 1 + p * 0.14,
+      copyY: p * 170,
+      visualOpacity: Math.max(0, 1 - p * 1.02),
+      visualScale: 1 + p * 0.22,
+      visualY: p * 145,
+      visualBlur: p * 5.5
+    };
+  }, [landingScrollProgress]);
+
+  const partnerLogos = [
+    { name: 'Microsoft', href: 'https://www.microsoft.com', logo: 'https://cdn.simpleicons.org/microsoft/ffffff' },
+    { name: 'Google', href: 'https://www.google.com', logo: 'https://cdn.simpleicons.org/google/ffffff' },
+    { name: 'Amazon', href: 'https://www.amazon.com', logo: 'https://cdn.simpleicons.org/amazon/ffffff' },
+    { name: 'PayPal', href: 'https://www.paypal.com', logo: 'https://cdn.simpleicons.org/paypal/ffffff' },
+    { name: 'Apple', href: 'https://www.apple.com', logo: 'https://cdn.simpleicons.org/apple/ffffff' },
+    { name: 'Samsung', href: 'https://www.samsung.com', logo: 'https://cdn.simpleicons.org/samsung/ffffff' },
+  ];
+
   if (!user) {
+    if (authView === 'landing') {
+      return (
+        <div id="wk-top" className="wk-page">
+          <div className="wk-announce">Modern inventory workflow for fintech IT teams</div>
+          <header className="wk-nav">
+            <div className="wk-logo">BranchGrid</div>
+            <nav>
+              <a href="#wk-features">Product</a>
+              <a href="#wk-proof">Why BranchGrid</a>
+              <a href="#wk-reasons">Resources</a>
+              <a href="#contact">Contact</a>
+            </nav>
+            <div className="wk-nav-actions">
+              <button type="button" className="wk-ghost" onClick={() => setAuthView('login')}>Log in</button>
+              <button type="button" onClick={() => setAuthView('login')}>Get Started</button>
+            </div>
+          </header>
+
+          <section className="wk-hero">
+            <span className="wk-dot dot-a" />
+            <span className="wk-dot dot-b" />
+            <span className="wk-dot dot-c" />
+            <div className="wk-hero-copy reveal-on-scroll" style={{ opacity: landingMotion.copyOpacity }}>
+              <h1>Big ideas. Amazing talent. One modern IT inventory workflow.</h1>
+              <p>Find, assign, and manage assets for every person, team, and branch without operational delays.</p>
+              <div className="wk-hero-actions">
+                <button type="button" onClick={() => setAuthView('login')}>Book a demo</button>
+                <a href="#wk-features">Learn more</a>
+              </div>
+            </div>
+            <div
+              className="wk-hero-art reveal-on-scroll"
+              style={{
+                opacity: landingMotion.visualOpacity,
+                transform: `translateY(${landingMotion.visualY * 0.15}px) scale(${1 + landingMotion.visualScale * 0.02})`
+              }}
+            >
+              <img
+                className="wk-hero-people"
+                src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1000&q=80"
+                alt="IT team collaborating"
+              />
+              <div className="wk-blob wk-blob-a" />
+              <div className="wk-blob wk-blob-b" />
+              <div className="wk-blob wk-blob-c" />
+              <div className="wk-card wk-card-a">Asset Tracking</div>
+              <div className="wk-card wk-card-b">Employee Assignments</div>
+            </div>
+          </section>
+
+          <section id="wk-features" className="wk-features">
+            <h2 className="reveal-on-scroll">Manage your entire process from sourcing to onboarding.</h2>
+            <div className="wk-feature-grid">
+              <article className="wk-feature-card reveal-on-scroll">
+                <img className="wk-shot" src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=900&q=80" alt="Procurement dashboard" />
+                <small>SOURCE & ATTRACT</small>
+                <h3>Source & Attract</h3>
+                <p>Maintain procurement and intake pipelines with clear branch ownership from day one.</p>
+                <a href="#wk-proof">Learn more</a>
+              </article>
+              <article className="wk-feature-card reveal-on-scroll">
+                <img className="wk-shot" src="https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=900&q=80" alt="Collaboration workspace" />
+                <small>EVALUATE & COLLABORATE</small>
+                <h3>Evaluate & Collaborate</h3>
+                <p>Route requests to IT approvers, managers and ops teams with shared live status.</p>
+                <a href="#wk-proof">Learn more</a>
+              </article>
+              <article className="wk-feature-card reveal-on-scroll">
+                <img className="wk-shot" src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80" alt="Automation analytics" />
+                <small>AUTOMATE & HIRE</small>
+                <h3>Automate & Hire</h3>
+                <p>Automate standard assignment actions and reduce handover cycle time.</p>
+                <a href="#wk-proof">Learn more</a>
+              </article>
+              <article className="wk-feature-card reveal-on-scroll">
+                <img className="wk-shot" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=900&q=80" alt="Employee onboarding" />
+                <small>ONBOARD & MANAGE</small>
+                <h3>Onboard & Manage</h3>
+                <p>Deliver devices faster and keep complete lifecycle history for every employee.</p>
+                <a href="#wk-proof">Learn more</a>
+              </article>
+            </div>
+          </section>
+
+          <section id="wk-proof" className="wk-proof">
+            <div className="wk-proof-wave" />
+            <div className="wk-proof-grid">
+              <div className="wk-proof-copy reveal-on-scroll">
+                <h2>Where great companies run great IT operations.</h2>
+                <p>From branch onboarding to return audits, teams trust one system for visibility and control.</p>
+                <div className="wk-map" />
+                <ul>
+                  <li><strong>27,000</strong><span>Companies</span></li>
+                  <li><strong>1,500,000</strong><span>Assignments</span></li>
+                  <li><strong>160,000,000</strong><span>Assets Tracked</span></li>
+                </ul>
+              </div>
+              <div className="wk-proof-panel reveal-on-scroll">
+                <h3>Navarro reduces IT handover time by 50%</h3>
+                <p>“BranchGrid gave us one consistent workflow across all branches. We now close assignments in hours, not days.”</p>
+                <img
+                  className="wk-proof-image"
+                  src="https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&w=900&q=80"
+                  alt="Customer success team"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section id="wk-reasons" className="wk-reasons">
+            <h2 className="reveal-on-scroll">More reasons companies choose BranchGrid</h2>
+            <div className="wk-reason-grid">
+              <article className="reveal-on-scroll"><h4>World-class support</h4><p>High-touch onboarding and responsive support from experts.</p></article>
+              <article className="reveal-on-scroll"><h4>Fast global support</h4><p>Assistance across regions for distributed teams and branch admins.</p></article>
+              <article className="reveal-on-scroll"><h4>Reliable security</h4><p>Role controls and audit-ready operational records by default.</p></article>
+              <article className="reveal-on-scroll"><h4>Anywhere workflow</h4><p>Operate inventory, assignments, and returns from one platform.</p></article>
+              <article className="reveal-on-scroll"><h4>Expert service</h4><p>Guided configuration and migration support for IT teams.</p></article>
+              <article className="reveal-on-scroll"><h4>Assisted onboarding</h4><p>Bring teams live quickly with proven rollout templates.</p></article>
+            </div>
+          </section>
+
+          <section className="wk-cta">
+            <h2 className="reveal-on-scroll">Let’s grow together</h2>
+            <p className="reveal-on-scroll">Explore our platform and discover how to run cleaner, faster inventory operations.</p>
+            <button type="button" className="reveal-on-scroll" onClick={() => setAuthView('login')}>Try it free</button>
+            <img
+              className="wk-cta-image reveal-on-scroll"
+              src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80"
+              alt="IT professionals working together"
+            />
+          </section>
+
+          <section className="wk-awards">
+            <div className="wk-award">Top 50</div>
+            <div className="wk-award">Best Support</div>
+            <div className="wk-award">Customer Choice</div>
+            <div className="wk-award">Top Rated</div>
+            <div className="wk-award">Industry Leader</div>
+          </section>
+
+          <footer id="contact" className="wk-footer">
+            <div className="wk-footer-top">
+              <div className="wk-footer-brand">
+                <strong>BranchGrid</strong>
+                <p>IT inventory operations platform for fintech teams across branches and sub-entities.</p>
+                <div className="wk-socials">
+                  <a href="#contact">f</a>
+                  <a href="#contact">in</a>
+                  <a href="#contact">x</a>
+                  <a href="#contact">ig</a>
+                </div>
+              </div>
+              <div className="wk-footer-news">
+                <h5>Join our newsletter</h5>
+                <p>Get product updates, release notes, and IT operations playbooks.</p>
+                <div className="wk-news-input">
+                  <input type="email" placeholder="Enter work email" />
+                  <button type="button">Join</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="wk-footer-cols">
+              <div>
+                <h5>Product</h5>
+                <a href="#wk-features">Inventory</a>
+                <a href="#wk-features">Assignments</a>
+                <a href="#wk-proof">Analytics</a>
+              </div>
+              <div>
+                <h5>Platform</h5>
+                <a href="#wk-proof">Security</a>
+                <a href="#wk-proof">Compliance</a>
+                <a href="#wk-reasons">Support</a>
+              </div>
+              <div>
+                <h5>Company</h5>
+                <a href="#wk-top">About</a>
+                <a href="#contact">Contact</a>
+                <a href="#wk-reasons">Resources</a>
+              </div>
+              <div>
+                <h5>Social</h5>
+                <a href="#contact">Facebook</a>
+                <a href="#contact">LinkedIn</a>
+                <a href="#contact">Instagram</a>
+              </div>
+            </div>
+            <div className="wk-footer-logos">
+              {partnerLogos.map((item) => (
+                <a key={item.name} href={item.href} target="_blank" rel="noreferrer" title={item.name}>
+                  <img src={item.logo} alt={`${item.name} logo`} />
+                  <span>{item.name}</span>
+                </a>
+              ))}
+            </div>
+            <div className="wk-footer-bottom">
+              <a className="wk-store" href="https://www.apple.com/app-store/" target="_blank" rel="noreferrer">
+                <img src="https://img.shields.io/badge/App%20Store-Download-0A84FF?style=for-the-badge&logo=apple&logoColor=white" alt="Download on App Store" />
+              </a>
+              <a className="wk-store" href="https://play.google.com/store" target="_blank" rel="noreferrer">
+                <img src="https://img.shields.io/badge/Google%20Play-Get%20it-34A853?style=for-the-badge&logo=googleplay&logoColor=white" alt="Get it on Google Play" />
+              </a>
+              <div className="wk-legal-links">
+                <a href="#contact">Privacy</a>
+                <a href="#contact">Terms</a>
+                <a href="#contact">Security</a>
+              </div>
+            </div>
+            <div className="wk-footer-meta">
+              <p className="wk-address">Gurgaon Sector 18, Udyog Vihar Phase 4</p>
+              <p className="wk-support">support@branchgrid.io | +91 124 400 2211</p>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
     return (
       <div className="auth-screen">
-        <div className="auth-card">
-          <p className="label">IT Inventory Management</p>
-          <h1>Control your devices, assignments, and lifecycle from one dashboard.</h1>
-          <form onSubmit={login} className="form">
-            <label htmlFor="email">Username</label>
-            <input id="email" name="email" type="text" defaultValue="admin" required />
-            <label htmlFor="password">Password</label>
-            <input id="password" name="password" type="password" defaultValue="admin" required />
-            <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
-          </form>
-          <p className="hint">Default credentials: admin / admin</p>
-          <p className="msg">{message}</p>
+        <div className="auth-shell">
+          <section className="auth-brand-panel">
+            <div className="shape shape-a" />
+            <div className="shape shape-b" />
+            <div className="shape shape-c" />
+            <div className="shape shape-d" />
+            <div className="auth-brand-copy">
+              <p className="label">BranchGrid</p>
+              <h2>IT Inventory</h2>
+              <span>Stay organized</span>
+            </div>
+          </section>
+
+          <section className="auth-form-panel">
+            <button type="button" className="auth-back" onClick={() => setAuthView('landing')}>Back to Landing</button>
+            <h3>Hello!</h3>
+            <p>Sign in to get started.</p>
+            <form onSubmit={login} className="form auth-form-modern">
+              <div className="input-shell">
+                <span>U</span>
+                <input id="email" name="email" type="text" defaultValue="admin" placeholder="Username" required />
+              </div>
+              <div className="input-shell">
+                <span>P</span>
+                <input id="password" name="password" type="password" defaultValue="admin" placeholder="Password" required />
+              </div>
+              <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
+            </form>
+            <p className="hint">Default credentials: admin / admin</p>
+            <p className="msg">{message}</p>
+          </section>
         </div>
       </div>
     );
@@ -394,141 +725,133 @@ function App() {
   return (
     <div className="app-layout">
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
-        <div>
-          <div className="sidebar-head">
+        <div className="sidebar-top">
+          {!sidebarCollapsed && (
             <div className="sidebar-brand">
               <p className="label">IT Inventory</p>
-              {!sidebarCollapsed && <h3>Dashboard</h3>}
-            </div>
-            <button
-              className="toggle-btn"
-              onClick={() => setSidebarCollapsed((v) => !v)}
-              title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {sidebarCollapsed ? '>>' : '<<'}
-            </button>
-          </div>
-          {!sidebarCollapsed && (
-            <div className="sidebar-user">
-              <div className="avatar">{(user.name || 'U').slice(0, 1).toUpperCase()}</div>
-              <div>
-                <strong>{user.name}</strong>
-                <small>{user.role}</small>
-              </div>
+              <h3>Dashboard</h3>
             </div>
           )}
-          <nav className="sidebar-nav">
-            {navItems.map((item) => (
-              <button
-                key={item.key}
-                className={`nav-item ${section === item.key ? 'active' : ''}`}
-                onClick={() => setSection(item.key)}
-                title={sidebarCollapsed ? item.label : ''}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                {!sidebarCollapsed && <span className="nav-label">{item.label}</span>}
-              </button>
-            ))}
-          </nav>
+          <button
+            type="button"
+            className="toggle-btn"
+            onClick={() => setSidebarCollapsed((v) => !v)}
+            title={sidebarCollapsed ? 'Expand menu' : 'Collapse menu'}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? '>>' : '<<'}
+          </button>
         </div>
-        <button className="sidebar-logout" onClick={logout}>{sidebarCollapsed ? 'X' : 'Logout'}</button>
+
+        {!sidebarCollapsed && (
+          <div className="sidebar-user">
+            <div className="avatar">{(user.name || 'U').slice(0, 1).toUpperCase()}</div>
+            <div>
+              <strong>{user.name}</strong>
+              <small>{user.role}</small>
+            </div>
+          </div>
+        )}
+
+        <nav className="sidebar-nav">
+          {navItems.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={`nav-item ${section === item.key ? 'active' : ''}`}
+              onClick={() => setSection(item.key)}
+              title={sidebarCollapsed ? item.label : ''}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {!sidebarCollapsed && <span className="nav-label">{item.label}</span>}
+            </button>
+          ))}
+        </nav>
+
+        <button type="button" className="sidebar-logout" onClick={logout}>
+          {sidebarCollapsed ? 'X' : 'Logout'}
+        </button>
       </aside>
 
       <div className="inventory-app">
         {section === 'overview' && (
-          <>
-            <section className="overview-hero">
+          <div className="overview-canvas">
+            <section className="overview-headline">
               <div>
-                <p className="label">Inventory Pulse</p>
-                <h3>Live health snapshot for IT inventory operations</h3>
-                <p className="hint">Track capacity, allocation pressure and workforce distribution in one view.</p>
+                <h3>Dashboard</h3>
+                <p className="hint">Real-time IT inventory analytics across branches and entities.</p>
               </div>
-              <div className="hero-badges">
-                <span>Top Type: {topAssetType[0]} ({topAssetType[1]})</span>
-                <span>Busiest User: {busiestUser.name} ({busiestUser.assigned})</span>
-                <span>Availability: {availabilityRate}%</span>
+              <div className="overview-period">Time period: Last 7 days</div>
+            </section>
+
+            <section className="overview-kpis">
+              <article><span>Total assets</span><strong>{stats.total.toLocaleString()}</strong></article>
+              <article><span>Allocated</span><strong>{stats.allocated.toLocaleString()}</strong></article>
+              <article><span>Active assignments</span><strong>{stats.active.toLocaleString()}</strong></article>
+              <article><span>Availability</span><strong>{availabilityRate}%</strong></article>
+              <article className="kpi-add">+ Add data</article>
+            </section>
+
+            <section className="overview-chart-card">
+              <div className="panel-head">
+                <h3>Asset movement</h3>
+                <span>
+                  <i className="legend-dot gross" /> Gross margin
+                  <i className="legend-dot revenue" /> Revenue
+                </span>
+              </div>
+              <div className="dual-bars">
+                {weeklySeries.map((d) => (
+                  <div className="dual-col" key={d.key}>
+                    <div className="dual-track">
+                      <span className="bar gross" style={{ height: `${Math.round((d.gross / maxWeeklySeries) * 100)}%` }} />
+                      <span className="bar revenue" style={{ height: `${Math.round((d.revenue / maxWeeklySeries) * 100)}%` }} />
+                    </div>
+                    <small>{d.label}</small>
+                  </div>
+                ))}
               </div>
             </section>
 
-            <section className="kpis kpis-overview">
-              <article><span>Total Assets</span><strong>{stats.total}</strong></article>
-              <article><span>Available</span><strong>{stats.available}</strong></article>
-              <article><span>Allocated</span><strong>{stats.allocated}</strong></article>
-              <article><span>Active Assignments</span><strong>{stats.active}</strong></article>
-              <article><span>Utilization</span><strong>{stats.utilization}%</strong></article>
-            </section>
-
-            <main className="grid overview-grid">
-              <section className="panel panel-capacity">
-                <div className="panel-head"><h3>Capacity Health</h3><span>Current split</span></div>
-                <div className="capacity-list">
-                  <div>
-                    <div className="capacity-row"><span>Available</span><strong>{stats.available}</strong></div>
-                    <div className="meter"><span style={{ width: `${availabilityRate}%` }} /></div>
-                  </div>
-                  <div>
-                    <div className="capacity-row"><span>Allocated</span><strong>{stats.allocated}</strong></div>
-                    <div className="meter"><span style={{ width: `${stats.utilization}%` }} /></div>
-                  </div>
-                  <div>
-                    <div className="capacity-row"><span>Active Assignments</span><strong>{stats.active}</strong></div>
-                    <div className="meter"><span style={{ width: `${Math.min(stats.active * 10, 100)}%` }} /></div>
-                  </div>
-                </div>
-              </section>
+            <section className="overview-bottom-split">
               <section className="panel">
-                <div className="panel-head"><h3>Top Team Load</h3><span>Highest active assignments</span></div>
-                <ul className="list plain">
-                  {teamLoad.slice(0, 5).map((u) => (
-                    <li key={u.id}><span>{u.name}</span><strong>{u.assigned}</strong></li>
-                  ))}
-                </ul>
-              </section>
-              <section className="panel">
-                <div className="panel-head"><h3>Asset Categories</h3><span>Distribution</span></div>
-                <ul className="list plain">
-                  {assetTypes.map(([type, count]) => (
-                    <li key={type}><span>{type}</span><strong>{count}</strong></li>
-                  ))}
-                </ul>
-              </section>
-            </main>
-
-            <section className="grid overview-charts">
-              <section className="panel chart-panel">
-                <div className="panel-head"><h3>Asset Type Graph</h3><span>Top categories</span></div>
-                <div className="hbar-chart">
-                  {topAssetTypes.map(([type, count]) => (
-                    <div className="hbar-row" key={type}>
-                      <div className="hbar-meta">
-                        <span>{type}</span>
+                <div className="panel-head"><h3>Asset category ring</h3><span>{topAssetType[0]} leading</span></div>
+                <div className="category-donut-wrap">
+                  <div className="category-donut" style={{ background: `conic-gradient(${donutGradient})` }}>
+                    <div>
+                      <strong>{stats.total}</strong>
+                      <small>Total</small>
+                    </div>
+                  </div>
+                  <ul className="category-list">
+                    {topAssetTypes.map(([type, count], idx) => (
+                      <li key={type}>
+                        <span><i style={{ background: donutColors[idx % donutColors.length] }} /> {type}</span>
                         <strong>{count}</strong>
-                      </div>
-                      <div className="hbar-track">
-                        <span style={{ width: `${Math.round((count / maxTypeCount) * 100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </section>
 
-              <section className="panel chart-panel">
-                <div className="panel-head"><h3>7-Day Assignment Trend</h3><span>Daily volumes</span></div>
-                <div className="vbar-chart">
-                  {weeklyAssignments.map((d) => (
-                    <div className="vbar-col" key={d.key}>
-                      <strong>{d.count}</strong>
-                      <div className="vbar-track">
-                        <span style={{ height: `${Math.round((d.count / maxWeeklyCount) * 100)}%` }} />
-                      </div>
-                      <small>{d.label}</small>
-                    </div>
+              <section className="panel">
+                <div className="panel-head"><h3>Assets by branches</h3><span>{busiestUser.name} busiest user</span></div>
+                <ul className="branch-list">
+                  {branchMix.map((b) => (
+                    <li key={b.name}>
+                      <span>{b.name}</span>
+                      <strong>{b.pct}%</strong>
+                    </li>
                   ))}
+                </ul>
+                <div className="branch-note">
+                  <span>Top Type: {topAssetType[0]} ({topAssetType[1]})</span>
+                  <span>Availability: {availabilityRate}%</span>
                 </div>
+                <div className="branch-map-mock" />
               </section>
             </section>
-          </>
+          </div>
         )}
 
         {section === 'inventory' && (
@@ -633,59 +956,94 @@ function App() {
             </div>
             {user.role === 'admin' && (
               <div className="create-box">
-                <h4>Add New Asset</h4>
-                <form onSubmit={createAsset} className="form inline-form">
-                  <select
-                    name="type"
-                    value={selectedAssetType}
-                    onChange={(e) => {
-                      setSelectedAssetType(e.target.value);
-                      setSelectedBrandId('');
-                      setSelectedAssetName('');
-                    }}
-                    required
-                  >
-                    {TYPE_OPTIONS.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  <select
-                    name="brand_id"
-                    value={selectedBrandId}
-                    onChange={(e) => {
-                      setSelectedBrandId(e.target.value);
-                      setSelectedAssetName('');
-                    }}
-                  >
-                    <option value="">{`Select ${selectedAssetType} brand`}</option>
-                    {brandsBySelectedType.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                  <select
-                    name="name"
-                    value={selectedAssetName}
-                    onChange={(e) => setSelectedAssetName(e.target.value)}
-                    required
-                  >
-                    <option value="">Select asset name</option>
-                    {assetNameOptions.map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                  <select name="model_id" disabled={!selectedBrandId}>
-                    <option value="">
+                <div className="create-head">
+                  <div>
+                    <h4>Add New Asset</h4>
+                    <p className="hint">Register device details, brand/model mapping, and serial in one flow.</p>
+                  </div>
+                  <div className="create-meta">
+                    <span>{selectedAssetType}</span>
+                    <span>{brandsBySelectedType.length} brands</span>
+                    <span>{selectedBrandId ? `${selectedBrandModelsByType.length} models` : 'Select brand'}</span>
+                  </div>
+                </div>
+                <form onSubmit={createAsset} className="form asset-create-form">
+                  <label className="field">
+                    <span>Asset Type</span>
+                    <select
+                      name="type"
+                      value={selectedAssetType}
+                      onChange={(e) => {
+                        setSelectedAssetType(e.target.value);
+                        setSelectedBrandId('');
+                        setSelectedAssetName('');
+                      }}
+                      required
+                    >
+                      {TYPE_OPTIONS.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Brand</span>
+                    <select
+                      name="brand_id"
+                      value={selectedBrandId}
+                      onChange={(e) => {
+                        setSelectedBrandId(e.target.value);
+                        setSelectedAssetName('');
+                      }}
+                    >
+                      <option value="">{`Select ${selectedAssetType} brand`}</option>
+                      {brandsBySelectedType.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Asset Name</span>
+                    <select
+                      name="name"
+                      value={selectedAssetName}
+                      onChange={(e) => setSelectedAssetName(e.target.value)}
+                      required
+                    >
+                      <option value="">Select asset name</option>
+                      {assetNameOptions.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Model</span>
+                    <select name="model_id" disabled={!selectedBrandId}>
+                      <option value="">
+                        {selectedBrandId
+                          ? `Select ${selectedAssetType} model`
+                          : 'Select brand first'}
+                      </option>
+                      {selectedBrandModelsByType.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Serial Number</span>
+                    <input name="serial" placeholder="e.g. SN-AX9-22190" required />
+                  </label>
+                  <label className="field">
+                    <span>Notes</span>
+                    <input name="notes" placeholder="Branch, team, procurement, warranty..." />
+                  </label>
+                  <div className="create-actions">
+                    <small>
                       {selectedBrandId
-                        ? `Select ${selectedAssetType} model`
-                        : 'Select brand first'}
-                    </option>
-                    {selectedBrandModelsByType.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                  <input name="serial" placeholder="Serial" required />
-                  <input name="notes" placeholder="Notes (optional)" />
-                  <button type="submit">Add Asset</button>
+                        ? `Adding ${selectedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
+                        : `Choose a brand for ${selectedAssetType} to map exact models`}
+                    </small>
+                    <button type="submit">Add Asset</button>
+                  </div>
                 </form>
               </div>
             )}
