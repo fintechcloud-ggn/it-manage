@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
-const { requireRole } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/auth');
+const { writeAuditLog } = require('../audit');
 
 router.get('/', async (req, res) => {
   try {
@@ -37,7 +38,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', requireRole('admin'), async (req, res) => {
+router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const { name, type, serial, store_id, notes, brand_id, model_id } = req.body;
     const result = await query(
@@ -46,13 +47,20 @@ router.post('/', requireRole('admin'), async (req, res) => {
       [name, type, serial, store_id || null, notes || null, brand_id || null, model_id || null],
     );
     const created = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [result.insertId]);
+    await writeAuditLog({
+      user: req.user,
+      action: 'CREATE_ASSET',
+      entityType: 'asset',
+      entityId: result.insertId,
+      details: `name=${name}, type=${type}, serial=${serial}`
+    });
     res.status(201).json(created[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-router.put('/:id', requireRole('admin'), async (req, res) => {
+router.put('/:id', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const { name, type, serial, status, store_id, notes, brand_id, model_id } = req.body;
@@ -63,16 +71,33 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
       [name, type, serial, status, store_id || null, notes || null, brand_id || null, model_id || null, id],
     );
     const updated = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [id]);
+    await writeAuditLog({
+      user: req.user,
+      action: 'UPDATE_ASSET',
+      entityType: 'asset',
+      entityId: id,
+      details: `name=${name}, type=${type}, serial=${serial}, status=${status}`
+    });
     res.json(updated[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+router.delete('/:id', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const id = Number(req.params.id);
+    const rows = await query('SELECT id, name, serial FROM assets WHERE id = ? LIMIT 1', [id]);
+    const existing = rows[0];
+    if (!existing) return res.status(404).json({ error: 'Asset not found' });
     await query('DELETE FROM assets WHERE id = ?', [id]);
+    await writeAuditLog({
+      user: req.user,
+      action: 'DELETE_ASSET',
+      entityType: 'asset',
+      entityId: id,
+      details: `name=${existing.name}, serial=${existing.serial}`
+    });
     res.status(204).end();
   } catch (err) {
     res.status(400).json({ error: err.message });

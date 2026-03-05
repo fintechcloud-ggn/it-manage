@@ -9,6 +9,7 @@ const usersRoute = require('./routes/users');
 const storesRoute = require('./routes/stores');
 const allocationsRoute = require('./routes/allocations');
 const brandsRoute = require('./routes/brands');
+const auditLogsRoute = require('./routes/audit-logs');
 const { attachUser } = require('./middleware/auth');
 
 const app = express();
@@ -21,6 +22,7 @@ app.use('/api/users', usersRoute);
 app.use('/api/stores', storesRoute);
 app.use('/api/allocations', allocationsRoute);
 app.use('/api/brands', brandsRoute);
+app.use('/api/audit-logs', auditLogsRoute);
 const authRoute = require('./routes/auth');
 app.use('/api/auth', authRoute);
 

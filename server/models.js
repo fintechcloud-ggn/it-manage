@@ -28,6 +28,8 @@ async function init() {
       name VARCHAR(120) NOT NULL,
       email VARCHAR(160) NOT NULL UNIQUE,
       role VARCHAR(30) NOT NULL DEFAULT 'user',
+      profile_image_url VARCHAR(500) NULL,
+      permissions_json TEXT NULL,
       password VARCHAR(255) NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB
@@ -66,12 +68,55 @@ async function init() {
       asset_id INT NOT NULL,
       user_id INT NOT NULL,
       allocated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      allocated_at_ms BIGINT NULL,
       returned_at DATETIME NULL,
+      returned_at_ms BIGINT NULL,
       notes TEXT NULL,
       CONSTRAINT fk_alloc_asset FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
       CONSTRAINT fk_alloc_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     ) ENGINE=InnoDB
   `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      actor_user_id INT NULL,
+      actor_name VARCHAR(120) NULL,
+      actor_role VARCHAR(30) NULL,
+      action VARCHAR(80) NOT NULL,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id INT NULL,
+      details TEXT NULL,
+      event_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      event_at_ms BIGINT NULL,
+      INDEX idx_audit_event_at (event_at),
+      INDEX idx_audit_action (action),
+      CONSTRAINT fk_audit_actor_user FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB
+  `);
+
+  // Backward-compatible migration for existing databases.
+  const allocMsCol = await query("SHOW COLUMNS FROM allocations LIKE 'allocated_at_ms'");
+  if (!allocMsCol.length) {
+    await query('ALTER TABLE allocations ADD COLUMN allocated_at_ms BIGINT NULL AFTER allocated_at');
+  }
+  const returnMsCol = await query("SHOW COLUMNS FROM allocations LIKE 'returned_at_ms'");
+  if (!returnMsCol.length) {
+    await query('ALTER TABLE allocations ADD COLUMN returned_at_ms BIGINT NULL AFTER returned_at');
+  }
+
+  const auditMsCol = await query("SHOW COLUMNS FROM audit_logs LIKE 'event_at_ms'");
+  if (!auditMsCol.length) {
+    await query('ALTER TABLE audit_logs ADD COLUMN event_at_ms BIGINT NULL AFTER event_at');
+  }
+  const userProfileImageCol = await query("SHOW COLUMNS FROM users LIKE 'profile_image_url'");
+  if (!userProfileImageCol.length) {
+    await query('ALTER TABLE users ADD COLUMN profile_image_url VARCHAR(500) NULL AFTER role');
+  }
+  const userPermissionsCol = await query("SHOW COLUMNS FROM users LIKE 'permissions_json'");
+  if (!userPermissionsCol.length) {
+    await query('ALTER TABLE users ADD COLUMN permissions_json TEXT NULL AFTER profile_image_url');
+  }
 }
 
 async function seedSample() {
