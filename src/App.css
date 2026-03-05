@@ -3272,14 +3272,18 @@ th {
 .account-dashboard-hero {
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 20px;
-  padding: 24px;
+  padding: 16px 20px;
   background: linear-gradient(135deg, #093028 0%, #237a57 100%);
   display: grid;
-  gap: 20px;
+  gap: 6px;
   box-shadow: 0 10px 30px rgba(9, 48, 40, 0.15);
   color: #ffffff;
   position: relative;
   overflow: hidden;
+}
+
+.account-hero-header {
+  margin-bottom: 0;
 }
 
 .account-dashboard-hero::before {
@@ -3316,15 +3320,15 @@ th {
 
 .account-hero-header .hint {
   color: rgba(255, 255, 255, 0.85);
-  margin-top: 6px;
+  margin-top: 2px;
   margin-bottom: 0;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .account-metric-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 16px;
+  gap: 10px;
   position: relative;
   z-index: 1;
 }
