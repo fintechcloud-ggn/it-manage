@@ -1,32 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { query } = require('./db');
 
-async function ensureColumn(table, column, definition) {
-  const rows = await query(
-    `SELECT 1
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?
-     LIMIT 1`,
-    [table, column],
-  );
-  if (rows.length === 0) {
-    await query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-  }
-}
-
-async function ensureIndex(table, indexName, ddl) {
-  const rows = await query(
-    `SELECT 1
-     FROM information_schema.STATISTICS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?
-     LIMIT 1`,
-    [table, indexName],
-  );
-  if (rows.length === 0) {
-    await query(ddl);
-  }
-}
-
 async function init() {
   await query(`
     CREATE TABLE IF NOT EXISTS brands (
@@ -55,25 +29,9 @@ async function init() {
       email VARCHAR(160) NOT NULL UNIQUE,
       role VARCHAR(30) NOT NULL DEFAULT 'user',
       password VARCHAR(255) NOT NULL,
-      employee_code VARCHAR(40) NULL,
-      company VARCHAR(120) NULL,
-      department VARCHAR(120) NULL,
-      designation VARCHAR(120) NULL,
-      location VARCHAR(120) NULL,
-      employment_type VARCHAR(60) NULL,
-      employment_status VARCHAR(60) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB
   `);
-
-  await ensureColumn('users', 'employee_code', 'VARCHAR(40) NULL');
-  await ensureColumn('users', 'company', 'VARCHAR(120) NULL');
-  await ensureColumn('users', 'department', 'VARCHAR(120) NULL');
-  await ensureColumn('users', 'designation', 'VARCHAR(120) NULL');
-  await ensureColumn('users', 'location', 'VARCHAR(120) NULL');
-  await ensureColumn('users', 'employment_type', 'VARCHAR(60) NULL');
-  await ensureColumn('users', 'employment_status', 'VARCHAR(60) NULL');
-  await ensureIndex('users', 'idx_users_employee_code', 'CREATE UNIQUE INDEX idx_users_employee_code ON users(employee_code)');
 
   await query(`
     CREATE TABLE IF NOT EXISTS stores (
@@ -139,6 +97,11 @@ async function seedSample() {
       { name: 'MacBook Air M3', category: 'Laptop' },
       { name: 'MacBook Pro 14 M3', category: 'Laptop' },
       { name: 'MacBook Pro 16 M3', category: 'Laptop' },
+      { name: 'MacBook Pro 16 M2', category: 'Laptop' },
+      { name: 'MacBook Pro 16 M2', category: 'Laptop' },
+      { name: 'MacBook Pro 16 M1', category: 'Laptop' },
+      { name: 'MacBook Pro 16 M4', category: 'Laptop' },
+      { name: 'MacBook Pro 16 M5', category: 'Laptop' },
       { name: 'iPad Pro', category: 'Tablet' },
       { name: 'iPhone', category: 'Mobile' },
     ],
@@ -301,26 +264,6 @@ async function seedSample() {
       { name: 'DIR-X5460', category: 'Network' },
       { name: 'DGS-1210', category: 'Network' },
     ],
-    Airtel: [
-      { name: 'Airtel 4G SIM', category: 'Sim Card' },
-      { name: 'Airtel 5G SIM', category: 'Sim Card' },
-      { name: 'Airtel Corporate Postpaid', category: 'Sim Card' },
-    ],
-    Jio: [
-      { name: 'Jio 4G SIM', category: 'Sim Card' },
-      { name: 'Jio 5G SIM', category: 'Sim Card' },
-      { name: 'Jio Corporate Postpaid', category: 'Sim Card' },
-    ],
-    Vi: [
-      { name: 'Vi 4G SIM', category: 'Sim Card' },
-      { name: 'Vi 5G SIM', category: 'Sim Card' },
-      { name: 'Vi Corporate Postpaid', category: 'Sim Card' },
-    ],
-    BSNL: [
-      { name: 'BSNL 4G SIM', category: 'Sim Card' },
-      { name: 'BSNL Prepaid SIM', category: 'Sim Card' },
-      { name: 'BSNL Postpaid SIM', category: 'Sim Card' },
-    ],
     Logitech: [
       { name: 'MX Master 3S', category: 'Peripheral' },
       { name: 'MX Keys', category: 'Peripheral' },
@@ -359,10 +302,6 @@ async function seedSample() {
       { name: 'Router', category: 'Network' },
       { name: 'Switch', category: 'Network' },
       { name: 'Access Point', category: 'Network' },
-      { name: 'Airtel SIM', category: 'Sim Card' },
-      { name: 'Jio SIM', category: 'Sim Card' },
-      { name: 'Vi SIM', category: 'Sim Card' },
-      { name: 'BSNL SIM', category: 'Sim Card' },
       { name: 'Printer', category: 'Printer' },
       { name: 'Scanner', category: 'Scanner' },
       { name: 'USB hub', category: 'Peripheral' },
