@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import LandingPage from './components/LandingPage';
+import nextgenLogo from './assets/nextgen-logo.svg';
 
 
 const API = process.env.REACT_APP_API || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
@@ -1153,7 +1154,9 @@ function App() {
         ) : (
           <div className="wk-page">
             <header className="wk-nav">
-              <div className="wk-logo" onClick={() => setAuthView('landing')} style={{ cursor: 'pointer' }}>BranchGrid</div>
+              <div className="wk-logo" onClick={() => setAuthView('landing')} style={{ cursor: 'pointer' }}>
+                <img src={nextgenLogo} alt="NEXTGEN" className="wk-logo-image" />
+              </div>
               <div className="wk-nav-actions">
                 <button type="button" onClick={() => setAuthView('landing')}>Back to Home</button>
               </div>
@@ -1167,7 +1170,7 @@ function App() {
                     <div className="shape shape-c" />
                     <div className="shape shape-d" />
                     <div className="auth-brand-copy">
-                      <p className="label">BranchGrid</p>
+                      <img src={nextgenLogo} alt="NEXTGEN" className="auth-brand-logo" />
                       <h2>IT Inventory</h2>
                       <span>Stay organized</span>
                     </div>
@@ -2145,7 +2148,7 @@ function App() {
                       <div><label>Last Name</label><p>{(selectedEmployee.name || '').split(' ').slice(1).join(' ') || '-'}</p></div>
                       <div><label>Email</label><p>{selectedEmployee.email || '-'}</p></div>
                       <div><label>Role</label><p>{selectedEmployee.role || '-'}</p></div>
-                      <div><label>Company</label><p>BranchGrid</p></div>
+                      <div><label>Company</label><p>NEXTGEN</p></div>
                       <div><label>Last Note</label><p>{selectedEmployeeLatestNote}</p></div>
                     </div>
                   )}

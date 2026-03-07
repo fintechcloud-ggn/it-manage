@@ -134,9 +134,14 @@ p {
 }
 
 .wk-logo {
-  color: #fff;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+}
+
+.wk-logo-image {
+  width: clamp(150px, 15vw, 230px);
+  height: auto;
+  display: block;
 }
 
 .wk-nav-actions {
@@ -195,6 +200,13 @@ p {
   transform: translateY(-50%);
   z-index: 2;
   color: #f2f8ff;
+}
+
+.auth-brand-logo {
+  width: clamp(160px, 19vw, 310px);
+  height: auto;
+  display: block;
+  margin-bottom: 16px;
 }
 
 .auth-brand-copy h2 {

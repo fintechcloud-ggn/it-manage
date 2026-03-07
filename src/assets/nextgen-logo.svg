@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2200 720" role="img" aria-labelledby="nextgenLogoTitle nextgenLogoDesc">
+  <title id="nextgenLogoTitle">NEXTGEN logo</title>
+  <desc id="nextgenLogoDesc">NEXTGEN wordmark with arrow and subtitle Nextgen Rentals and Trading Private Limited.</desc>
+  <rect width="2200" height="720" fill="none"/>
+  <g fill="#06385a" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="360" letter-spacing="8">
+    <text x="20" y="390">NEXTGEN</text>
+  </g>
+  <polygon points="670,40 840,40 955,255 840,470 670,470 780,290 470,290 470,220 780,220" fill="#bccb4f" stroke="#ffffff" stroke-width="14"/>
+  <text x="20" y="645" fill="#06385a" font-family="Arial, sans-serif" font-size="95" font-weight="700" letter-spacing="2">NEXTGEN RENTALS &amp; TRADING PRIVATE LIMITED</text>
+</svg>

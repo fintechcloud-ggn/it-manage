@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './LandingPage.css';
+import nextgenLogo from '../assets/nextgen-logo.svg';
 
 const LandingPage = ({ onLogin }) => {
     const [platformOpen, setPlatformOpen] = useState(false);
@@ -44,7 +45,9 @@ const LandingPage = ({ onLogin }) => {
             </div>
 
             <nav className={`lp-nav ${isScrolled ? 'scrolled' : ''}`}>
-                <div className="lp-logo">BranchGrid</div>
+                <div className="lp-logo">
+                    <img src={nextgenLogo} alt="NEXTGEN" className="lp-logo-image" />
+                </div>
                 <div className="lp-nav-links">
                     <div
                         className="nav-dropdown-wrapper"
@@ -172,7 +175,7 @@ const LandingPage = ({ onLogin }) => {
                     <div className="solutions-text">
                         <label>Solutions</label>
                         <h2>Your Global Fleet, Simplified</h2>
-                        <p>Streamline logistics and inventory across borders. BranchGrid handles the complexity so you can focus on building.</p>
+                        <p>Streamline logistics and inventory across borders. NEXTGEN handles the complexity so you can focus on building.</p>
                         <ul className="lp-checklist">
                             <li>Multi-entity support</li>
                             <li>Automated replacement workflows</li>
@@ -234,7 +237,7 @@ const LandingPage = ({ onLogin }) => {
                     <div className="enterprise-content-new">
                         <label>Enterprise Ready</label>
                         <h2>Mission-Critical Scale. <br />Fintech-Grade Security.</h2>
-                        <p>Designed for the rigorous demands of modern financial institutions. BranchGrid provides the transparency, control, and compliance required to manage global IT operations at scale.</p>
+                        <p>Designed for the rigorous demands of modern financial institutions. NEXTGEN provides the transparency, control, and compliance required to manage global IT operations at scale.</p>
 
                         <div className="ent-feature-list">
                             <div className="ent-feature">
@@ -348,7 +351,9 @@ const LandingPage = ({ onLogin }) => {
             <footer className="lp-footer">
                 <div className="footer-top reveal-on-scroll">
                     <div className="f-brand">
-                        <div className="lp-logo">BranchGrid</div>
+                        <div className="lp-logo">
+                            <img src={nextgenLogo} alt="NEXTGEN" className="lp-logo-image" />
+                        </div>
                         <p>Leading the next generation of IT operations for the global enterprise.</p>
                     </div>
                     <div className="f-links">
@@ -373,7 +378,7 @@ const LandingPage = ({ onLogin }) => {
                     </div>
                 </div>
                 <div className="footer-bottom">
-                    <p>© {new Date().getFullYear()} BranchGrid Inc. All rights reserved.</p>
+                    <p>© {new Date().getFullYear()} NEXTGEN Rentals and Trading Private Limited. All rights reserved.</p>
                     <div className="f-social">
                         <a href="#t">Twitter</a>
                         <a href="#li">LinkedIn</a>

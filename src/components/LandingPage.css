@@ -90,10 +90,15 @@ html {
 }
 
 .lp-logo {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: var(--lp-text);
-    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+}
+
+.lp-logo-image {
+    width: clamp(160px, 17vw, 260px);
+    height: auto;
+    display: block;
 }
 
 .lp-nav-links {
@@ -705,6 +710,10 @@ button {
     max-width: 300px;
 }
 
+.f-brand .lp-logo-image {
+    width: clamp(180px, 21vw, 300px);
+}
+
 .f-links {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -772,6 +781,14 @@ button {
 @media (max-width: 768px) {
     .lp-nav-links {
         display: none;
+    }
+
+    .lp-logo-image {
+        width: 160px;
+    }
+
+    .f-brand .lp-logo-image {
+        width: 190px;
     }
 }
 
