@@ -2,6 +2,7 @@ const models = require('../server/models');
 const app = require('../server/index');
 
 let initPromise;
+const shouldAutoInit = process.env.AUTO_INIT_DB === 'true';
 
 function ensureInit() {
   if (!initPromise) {
@@ -15,7 +16,9 @@ function ensureInit() {
 
 module.exports = async (req, res) => {
   try {
-    await ensureInit();
+    if (shouldAutoInit) {
+      await ensureInit();
+    }
     return app(req, res);
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Server failed to initialize' });

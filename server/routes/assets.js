@@ -7,7 +7,7 @@ const { writeAuditLog } = require('../audit');
 router.get('/', async (req, res) => {
   try {
     const rows = await query(`
-      SELECT a.id, a.name, a.type, a.serial, a.status, a.store_id, a.notes, a.brand_id, a.model_id,
+      SELECT a.id, a.name, a.type, a.serial, a.status, a.store_id, a.vendor, a.notes, a.brand_id, a.model_id,
              b.name AS brand_name, m.name AS model_name
       FROM assets a
       LEFT JOIN brands b ON b.id = a.brand_id
@@ -24,7 +24,7 @@ router.get('/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     const rows = await query(`
-      SELECT a.id, a.name, a.type, a.serial, a.status, a.store_id, a.notes, a.brand_id, a.model_id,
+      SELECT a.id, a.name, a.type, a.serial, a.status, a.store_id, a.vendor, a.notes, a.brand_id, a.model_id,
              b.name AS brand_name, m.name AS model_name
       FROM assets a
       LEFT JOIN brands b ON b.id = a.brand_id
@@ -40,11 +40,11 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   try {
-    const { name, type, serial, store_id, notes, brand_id, model_id } = req.body;
+    const { name, type, serial, store_id, vendor, notes, brand_id, model_id } = req.body;
     const result = await query(
-      `INSERT INTO assets (name, type, serial, status, store_id, notes, brand_id, model_id)
-       VALUES (?, ?, ?, 'available', ?, ?, ?, ?)`,
-      [name, type, serial, store_id || null, notes || null, brand_id || null, model_id || null],
+      `INSERT INTO assets (name, type, serial, status, store_id, vendor, notes, brand_id, model_id)
+       VALUES (?, ?, ?, 'available', ?, ?, ?, ?, ?)`,
+      [name, type, serial, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null],
     );
     const created = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [result.insertId]);
     await writeAuditLog({
@@ -63,12 +63,12 @@ router.post('/', requirePermission('inventory.manage'), async (req, res) => {
 router.put('/:id', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { name, type, serial, status, store_id, notes, brand_id, model_id } = req.body;
+    const { name, type, serial, status, store_id, vendor, notes, brand_id, model_id } = req.body;
     await query(
       `UPDATE assets
-       SET name = ?, type = ?, serial = ?, status = ?, store_id = ?, notes = ?, brand_id = ?, model_id = ?
+       SET name = ?, type = ?, serial = ?, status = ?, store_id = ?, vendor = ?, notes = ?, brand_id = ?, model_id = ?
        WHERE id = ?`,
-      [name, type, serial, status, store_id || null, notes || null, brand_id || null, model_id || null, id],
+      [name, type, serial, status, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null, id],
     );
     const updated = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [id]);
     await writeAuditLog({

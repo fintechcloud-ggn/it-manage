@@ -279,7 +279,7 @@ function App() {
     setAuthView('landing');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setMessage('Logged out');
+    setMessage('');
   }
 
   async function allocate(e) {
@@ -358,13 +358,14 @@ function App() {
     const name = e.target.name.value;
     const type = e.target.type.value;
     const serial = e.target.serial.value;
+    const vendor = e.target.vendor.value;
     const notes = e.target.notes.value;
     const brand_id = e.target.brand_id.value ? Number(e.target.brand_id.value) : null;
     const model_id = e.target.model_id.value ? Number(e.target.model_id.value) : null;
     const res = await fetch(`${API}/api/assets`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ name, type, serial, notes, brand_id, model_id })
+      body: JSON.stringify({ name, type, serial, vendor, notes, brand_id, model_id })
     });
     const body = await res.json().catch(() => ({}));
     if (res.status === 401) {
@@ -1033,7 +1034,7 @@ function App() {
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
     const filtered = assets.filter((a) => {
-      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.status || ''}`.toLowerCase().includes(q);
+      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.status || ''}`.toLowerCase().includes(q);
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
@@ -1329,7 +1330,6 @@ function App() {
                     </div>
                     <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
                   </form>
-                  <p className="hint">Default credentials: admin / admin</p>
                   <p className="msg">{message}</p>
                 </section>
               </div>
@@ -1580,12 +1580,13 @@ function App() {
                   type="button"
                   className="outline"
                   onClick={() => {
-                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Serial', 'Status'];
+                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Vendor', 'Serial', 'Status'];
                     const rows = filteredSortedAssets.map((a) => [
                       a.name || '',
                       a.type || '',
                       a.brand_name || '',
                       a.model_name || '',
+                      a.vendor || '',
                       a.serial || '',
                       a.status || ''
                     ]);
@@ -1685,6 +1686,10 @@ function App() {
                     <input name="serial" placeholder="e.g. SN-AX9-22190" required />
                   </label>
                   <label className="field">
+                    <span>Vendor (optional)</span>
+                    <input name="vendor" placeholder="e.g. Dell Partner, Amazon, Local Supplier" />
+                  </label>
+                  <label className="field">
                     <span>Notes</span>
                     <input name="notes" placeholder="Branch, team, procurement, warranty..." />
                   </label>
@@ -1701,12 +1706,12 @@ function App() {
             )}
 
             <div className="inventory-filter-grid">
-              <input
-                className="inventory-search"
-                placeholder="Search by asset, serial, brand, model, status..."
-                value={inventoryQuery}
-                onChange={(e) => setInventoryQuery(e.target.value)}
-              />
+                <input
+                  className="inventory-search"
+                  placeholder="Search by asset, serial, vendor, brand, model, status..."
+                  value={inventoryQuery}
+                  onChange={(e) => setInventoryQuery(e.target.value)}
+                />
               <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                 <option value="all">All Status</option>
                 <option value="available">Available</option>
@@ -1744,11 +1749,11 @@ function App() {
             <div className="inventory-table-shell">
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
+                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
                   <tbody>
                     {paginatedAssets.map((a) => (
                       <tr key={a.id}>
-                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.serial}</td>
+                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
                         <td><span className={`status ${a.status}`}>{a.status}</span></td>
                         <td>
                           <div className="asset-qr-cell">

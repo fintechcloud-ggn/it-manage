@@ -54,6 +54,7 @@ async function init() {
       serial VARCHAR(180) NOT NULL UNIQUE,
       status VARCHAR(30) NOT NULL DEFAULT 'available',
       store_id INT NULL,
+      vendor VARCHAR(180) NULL,
       notes TEXT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT fk_assets_brand FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE SET NULL,
@@ -116,6 +117,10 @@ async function init() {
   const userPermissionsCol = await query("SHOW COLUMNS FROM users LIKE 'permissions_json'");
   if (!userPermissionsCol.length) {
     await query('ALTER TABLE users ADD COLUMN permissions_json TEXT NULL AFTER profile_image_url');
+  }
+  const assetVendorCol = await query("SHOW COLUMNS FROM assets LIKE 'vendor'");
+  if (!assetVendorCol.length) {
+    await query('ALTER TABLE assets ADD COLUMN vendor VARCHAR(180) NULL AFTER store_id');
   }
 }
 
