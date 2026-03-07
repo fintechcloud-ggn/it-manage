@@ -45,7 +45,6 @@ function App() {
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [landingScrollProgress, setLandingScrollProgress] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
@@ -150,24 +149,6 @@ function App() {
     );
     nodes.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [authView, user]);
-
-  useEffect(() => {
-    if (authView !== 'landing' || user) return undefined;
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(() => {
-        const vh = Math.max(window.innerHeight, 1);
-        const next = Math.max(0, Math.min(window.scrollY / vh, 1.4));
-        setLandingScrollProgress(next);
-        ticking = false;
-      });
-    };
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
   }, [authView, user]);
 
   useEffect(() => {
@@ -1132,19 +1113,6 @@ function App() {
     setSortBy('name');
     setSortDir('asc');
   }
-
-  const landingMotion = useMemo(() => {
-    const p = landingScrollProgress;
-    return {
-      copyOpacity: Math.max(0, 1 - p * 1.12),
-      copyScale: 1 + p * 0.14,
-      copyY: p * 170,
-      visualOpacity: Math.max(0, 1 - p * 1.02),
-      visualScale: 1 + p * 0.22,
-      visualY: p * 145,
-      visualBlur: p * 5.5
-    };
-  }, [landingScrollProgress]);
 
   if (!user) {
     return (
