@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
+import LandingPage from './components/LandingPage';
+
 
 const API = process.env.REACT_APP_API || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
@@ -1145,200 +1147,58 @@ function App() {
 
   if (!user) {
     return (
-      <div id="wk-top" className="wk-page">
-        <div className="wk-announce">Modern inventory workflow for fintech IT teams</div>
-        <header className="wk-nav">
-          <div className="wk-logo">BranchGrid</div>
-          <nav>
-            <a href="#wk-features">Product</a>
-            <a href="#wk-proof">Why BranchGrid</a>
-            <a href="#wk-reasons">Resources</a>
-            <a href="#contact">Contact</a>
-          </nav>
-          <div className="wk-nav-actions">
-            <button type="button" className="wk-ghost" onClick={() => setAuthView('login')}>Log in</button>
-            <button type="button" onClick={() => setAuthView('login')}>Get Started</button>
-          </div>
-        </header>
-
-        <section className="wk-hero">
-          <span className="wk-dot dot-a" />
-          <span className="wk-dot dot-b" />
-          <span className="wk-dot dot-c" />
-          <div className="wk-hero-copy reveal-on-scroll" style={{ opacity: landingMotion.copyOpacity }}>
-            <h1>Big ideas. Amazing talent. One modern IT inventory workflow.</h1>
-            <p>Find, assign, and manage assets for every person, team, and branch without operational delays.</p>
-            <div className="wk-hero-actions">
-              <button type="button" onClick={() => setAuthView('login')}>Book a demo</button>
-              <a href="#wk-features">Learn more</a>
-            </div>
-          </div>
-          <div
-            className="wk-hero-art reveal-on-scroll"
-            style={{
-              opacity: landingMotion.visualOpacity,
-              transform: `translateY(${landingMotion.visualY * 0.15}px) scale(${1 + landingMotion.visualScale * 0.02})`
-            }}
-          >
-            <img
-              className="wk-hero-people"
-              src="https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1000&q=80"
-              alt="IT team collaborating"
-            />
-            <div className="wk-blob wk-blob-a" />
-            <div className="wk-blob wk-blob-b" />
-            <div className="wk-blob wk-blob-c" />
-            <div className="wk-card wk-card-a">Asset Tracking</div>
-            <div className="wk-card wk-card-b">Employee Assignments</div>
-          </div>
-        </section>
-
-        <section id="wk-features" className="wk-features">
-          <h2 className="reveal-on-scroll">Manage your entire process from sourcing to onboarding.</h2>
-          <div className="wk-feature-grid">
-            <article className="wk-feature-card reveal-on-scroll">
-              <img className="wk-shot" src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=900&q=80" alt="Procurement dashboard" />
-              <small>SOURCE & ATTRACT</small>
-              <h3>Source & Attract</h3>
-              <p>Maintain procurement and intake pipelines with clear branch ownership from day one.</p>
-              <a href="#wk-proof">Learn more</a>
-            </article>
-            <article className="wk-feature-card reveal-on-scroll">
-              <img className="wk-shot" src="https://images.unsplash.com/photo-1551434678-e076c223a692?auto=format&fit=crop&w=900&q=80" alt="Collaboration workspace" />
-              <small>EVALUATE & COLLABORATE</small>
-              <h3>Evaluate & Collaborate</h3>
-              <p>Route requests to IT approvers, managers and ops teams with shared live status.</p>
-              <a href="#wk-proof">Learn more</a>
-            </article>
-            <article className="wk-feature-card reveal-on-scroll">
-              <img className="wk-shot" src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80" alt="Automation analytics" />
-              <small>AUTOMATE & HIRE</small>
-              <h3>Automate & Hire</h3>
-              <p>Automate standard assignment actions and reduce handover cycle time.</p>
-              <a href="#wk-proof">Learn more</a>
-            </article>
-            <article className="wk-feature-card reveal-on-scroll">
-              <img className="wk-shot" src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=900&q=80" alt="Employee onboarding" />
-              <small>ONBOARD & MANAGE</small>
-              <h3>Onboard & Manage</h3>
-              <p>Deliver devices faster and keep complete lifecycle history for every employee.</p>
-              <a href="#wk-proof">Learn more</a>
-            </article>
-          </div>
-        </section>
-
-        <section id="wk-proof" className="wk-proof">
-          <div className="wk-proof-wave" />
-          <div className="wk-proof-grid">
-            <div className="wk-proof-copy reveal-on-scroll">
-              <h2>Where great companies run great IT operations.</h2>
-              <p>From branch onboarding to return audits, teams trust one system for visibility and control.</p>
-              <div className="wk-map" />
-              <ul>
-                <li><strong>27,000</strong><span>Companies</span></li>
-                <li><strong>1,500,000</strong><span>Assignments</span></li>
-                <li><strong>160,000,000</strong><span>Assets Tracked</span></li>
-              </ul>
-            </div>
-            <div className="wk-proof-panel reveal-on-scroll">
-              <h3>Navarro reduces IT handover time by 50%</h3>
-              <p>“BranchGrid gave us one consistent workflow across all branches. We now close assignments in hours, not days.”</p>
-              <img
-                className="wk-proof-image"
-                src="https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&w=900&q=80"
-                alt="Customer success team"
-              />
-            </div>
-          </div>
-        </section>
-
-        <section id="wk-reasons" className="wk-reasons">
-          <h2 className="reveal-on-scroll">More reasons companies choose BranchGrid</h2>
-          <div className="wk-reason-grid">
-            <article className="reveal-on-scroll"><h4>World-class support</h4><p>High-touch onboarding and responsive support from experts.</p></article>
-            <article className="reveal-on-scroll"><h4>Fast global support</h4><p>Assistance across regions for distributed teams and branch admins.</p></article>
-            <article className="reveal-on-scroll"><h4>Reliable security</h4><p>Role controls and audit-ready operational records by default.</p></article>
-            <article className="reveal-on-scroll"><h4>Anywhere workflow</h4><p>Operate inventory, assignments, and returns from one platform.</p></article>
-            <article className="reveal-on-scroll"><h4>Expert service</h4><p>Guided configuration and migration support for IT teams.</p></article>
-            <article className="reveal-on-scroll"><h4>Assisted onboarding</h4><p>Bring teams live quickly with proven rollout templates.</p></article>
-          </div>
-        </section>
-
-        <section className="wk-cta">
-          <h2 className="reveal-on-scroll">Let’s grow together</h2>
-          <p className="reveal-on-scroll">Explore our platform and discover how to run cleaner, faster inventory operations.</p>
-          <button type="button" className="reveal-on-scroll" onClick={() => setAuthView('login')}>Try it free</button>
-          <img
-            className="wk-cta-image reveal-on-scroll"
-            src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80"
-            alt="IT professionals working together"
-          />
-        </section>
-
-        <section className="wk-awards">
-          <div className="wk-award">Top 50</div>
-          <div className="wk-award">Best Support</div>
-          <div className="wk-award">Customer Choice</div>
-          <div className="wk-award">Top Rated</div>
-          <div className="wk-award">Industry Leader</div>
-        </section>
-
-        <footer id="contact" className="wk-footer">
-          <div className="wk-footer-inner">
-            <strong>BranchGrid</strong>
-            <nav className="wk-footer-links" aria-label="Footer">
-              <a href="#wk-features">Product</a>
-              <a href="#wk-proof">Security</a>
-              <a href="#contact">Contact</a>
-              <a href="#contact">Privacy</a>
-            </nav>
-          </div>
-          <div className="wk-footer-meta">
-            <p>support@branchgrid.io | +91 124 400 2211</p>
-            <p>© {new Date().getFullYear()} BranchGrid</p>
-          </div>
-        </footer>
-
-        {authView === 'login' && (
-          <div className="auth-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title" onClick={() => setAuthView('landing')}>
-            <div className="auth-modal-frame" onClick={(event) => event.stopPropagation()}>
-              <div className="auth-shell">
-                <section className="auth-brand-panel">
-                  <div className="shape shape-a" />
-                  <div className="shape shape-b" />
-                  <div className="shape shape-c" />
-                  <div className="shape shape-d" />
-                  <div className="auth-brand-copy">
-                    <p className="label">BranchGrid</p>
-                    <h2>IT Inventory</h2>
-                    <span>Stay organized</span>
-                  </div>
-                </section>
-
-                <section className="auth-form-panel">
-                  <button type="button" className="auth-back" onClick={() => setAuthView('landing')}>Back to Landing</button>
-                  <h3 id="login-title">Hello!</h3>
-                  <p>Sign in to get started.</p>
-                  <form onSubmit={login} className="form auth-form-modern">
-                    <div className="input-shell">
-                      <span>U</span>
-                      <input id="email" name="email" type="text" defaultValue="admin" placeholder="Username" required />
+      <>
+        {authView === 'landing' ? (
+          <LandingPage onLogin={() => setAuthView('login')} />
+        ) : (
+          <div className="wk-page">
+            <header className="wk-nav">
+              <div className="wk-logo" onClick={() => setAuthView('landing')} style={{ cursor: 'pointer' }}>BranchGrid</div>
+              <div className="wk-nav-actions">
+                <button type="button" onClick={() => setAuthView('landing')}>Back to Home</button>
+              </div>
+            </header>
+            <div className="auth-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
+              <div className="auth-modal-frame">
+                <div className="auth-shell">
+                  <section className="auth-brand-panel">
+                    <div className="shape shape-a" />
+                    <div className="shape shape-b" />
+                    <div className="shape shape-c" />
+                    <div className="shape shape-d" />
+                    <div className="auth-brand-copy">
+                      <p className="label">BranchGrid</p>
+                      <h2>IT Inventory</h2>
+                      <span>Stay organized</span>
                     </div>
-                    <div className="input-shell">
-                      <span>P</span>
-                      <input id="password" name="password" type="password" defaultValue="admin" placeholder="Password" required />
-                    </div>
-                    <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
-                  </form>
-                  <p className="msg">{message}</p>
-                </section>
+                  </section>
+
+                  <section className="auth-form-panel">
+                    <button type="button" className="auth-back" onClick={() => setAuthView('landing')}>Back to Landing</button>
+                    <h3 id="login-title">Hello!</h3>
+                    <p>Sign in to get started.</p>
+                    <form onSubmit={login} className="form auth-form-modern">
+                      <div className="input-shell">
+                        <span>U</span>
+                        <input id="email" name="email" type="text" defaultValue="admin" placeholder="Username" required />
+                      </div>
+                      <div className="input-shell">
+                        <span>P</span>
+                        <input id="password" name="password" type="password" defaultValue="admin" placeholder="Password" required />
+                      </div>
+                      <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
+                    </form>
+                    <p className="msg">{message}</p>
+                  </section>
+                </div>
               </div>
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
+
 
   return (
     <div className="app-layout">
@@ -1706,12 +1566,12 @@ function App() {
             )}
 
             <div className="inventory-filter-grid">
-                <input
-                  className="inventory-search"
-                  placeholder="Search by asset, serial, vendor, brand, model, status..."
-                  value={inventoryQuery}
-                  onChange={(e) => setInventoryQuery(e.target.value)}
-                />
+              <input
+                className="inventory-search"
+                placeholder="Search by asset, serial, vendor, brand, model, status..."
+                value={inventoryQuery}
+                onChange={(e) => setInventoryQuery(e.target.value)}
+              />
               <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                 <option value="all">All Status</option>
                 <option value="available">Available</option>
