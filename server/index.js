@@ -1,7 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const models = require('./models');
 const assetsRoute = require('./routes/assets');
@@ -13,7 +14,8 @@ const auditLogsRoute = require('./routes/audit-logs');
 const { attachUser } = require('./middleware/auth');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: true }));
+app.options('*', cors({ origin: true }));
 app.use(bodyParser.json());
 app.use(attachUser);
 
@@ -40,6 +42,8 @@ async function start() {
   }
 }
 
-start();
+if (require.main === module) {
+  start();
+}
 
 module.exports = app;

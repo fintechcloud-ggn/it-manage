@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
-const API = process.env.REACT_APP_API || 'http://localhost:4000';
+const API = process.env.REACT_APP_API || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
 const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
 const FALLBACK_NAMES_BY_TYPE = {
   Laptop: ['Business Laptop', 'Developer Laptop', 'Ultrabook', 'High config'],
