@@ -57,6 +57,13 @@ function App() {
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [assignmentSearchDraft, setAssignmentSearchDraft] = useState('');
   const [assignmentUserFilter, setAssignmentUserFilter] = useState('all');
+  const [quickAssignForm, setQuickAssignForm] = useState({
+    userId: '',
+    assetId: '',
+    assetType: 'all',
+    assetSearch: '',
+    notes: ''
+  });
   const [accountSearch, setAccountSearch] = useState('');
   const [createAdminPopupOpen, setCreateAdminPopupOpen] = useState(false);
   const [selectedAdminPermissionId, setSelectedAdminPermissionId] = useState(null);
@@ -166,6 +173,18 @@ function App() {
       : { 'Content-Type': 'application/json' };
   }
 
+  function handleUnauthorized(status) {
+    if (status !== 401) return false;
+    setToken('');
+    setUser(null);
+    setAuditLogs([]);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setAuthView('login');
+    setMessage('Session expired or unauthorized. Please login again as admin.');
+    return true;
+  }
+
   function fetchAssets() {
     fetch(`${API}/api/assets`)
       .then((r) => {
@@ -179,36 +198,49 @@ function App() {
   function fetchUsers() {
     fetch(`${API}/api/users`, { headers: authHeaders() })
       .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`users_${r.status}`);
         return r.json();
       })
       .then(setUsers)
-      .catch(() => setMessage('Unable to load users from server.'));
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setMessage('Unable to load users from server.');
+      });
   }
 
   function fetchAllocations() {
     fetch(`${API}/api/allocations`, { headers: authHeaders() })
       .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`allocations_${r.status}`);
         return r.json();
       })
       .then(setAllocations)
-      .catch(() => setMessage('Unable to load allocations from server.'));
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setMessage('Unable to load allocations from server.');
+      });
   }
 
   function fetchAuditLogs() {
     fetch(`${API}/api/audit-logs?limit=150`, { headers: authHeaders() })
       .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`audit_${r.status}`);
         return r.json();
       })
       .then(setAuditLogs)
-      .catch(() => setAuditLogs([]));
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setAuditLogs([]);
+      });
   }
 
   function fetchStores() {
     fetch(`${API}/api/stores`, { headers: authHeaders() })
       .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`stores_${r.status}`);
         return r.json();
       })
@@ -219,11 +251,15 @@ function App() {
   function fetchBrands() {
     fetch(`${API}/api/brands`, { headers: authHeaders() })
       .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`brands_${r.status}`);
         return r.json();
       })
       .then(setBrands)
-      .catch(() => setMessage('Unable to load brands/models from server.'));
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setMessage('Unable to load brands/models from server.');
+      });
   }
 
   async function login(e) {
@@ -268,9 +304,13 @@ function App() {
 
   async function allocate(e) {
     e.preventDefault();
-    const asset_id = Number(e.target.asset.value);
-    const user_id = Number(e.target.user.value);
-    const notes = e.target.notes?.value || '';
+    const asset_id = Number(quickAssignForm.assetId);
+    const user_id = Number(quickAssignForm.userId);
+    const notes = quickAssignForm.notes.trim();
+    if (!asset_id || !user_id) {
+      setMessage('Select employee and available asset to assign');
+      return;
+    }
     const res = await fetch(`${API}/api/allocations`, {
       method: 'POST',
       headers: authHeaders(),
@@ -282,7 +322,13 @@ function App() {
       fetchAssets();
       fetchAllocations();
       fetchAuditLogs();
-      e.target.reset();
+      setQuickAssignForm((prev) => ({
+        ...prev,
+        assetId: '',
+        assetType: 'all',
+        assetSearch: '',
+        notes: ''
+      }));
     }
   }
 
@@ -386,6 +432,21 @@ function App() {
     });
   }
 
+  function buildAssignedAssetQrData(asset, employee, assignmentAuditLog = null) {
+    return JSON.stringify({
+      allocationId: asset.id,
+      employeeName: employee?.name || '-',
+      employeeEmail: employee?.email || '-',
+      assetName: asset.assetName,
+      assetType: asset.type,
+      serialNumber: asset.serial,
+      assignedAt: asset.allocatedAt ? new Date(asset.allocatedAt).toISOString() : null,
+      assignedByAdmin: assignmentAuditLog?.actor_name || 'Unknown',
+      assignedByAdminId: assignmentAuditLog?.actor_user_id || null,
+      assignedByRole: assignmentAuditLog?.actor_role || null
+    });
+  }
+
   function getQrImageUrl(data) {
     return `https://api.qrserver.com/v1/create-qr-code/?size=128x128&margin=6&data=${encodeURIComponent(data)}`;
   }
@@ -414,6 +475,57 @@ function App() {
             <p><strong>Type:</strong> ${asset.type || '-'}</p>
             <p><strong>Asset ID:</strong> ${asset.id}</p>
             <img src="${qrUrl}" alt="Asset QR code" />
+          </div>
+          <script>window.onload = () => window.print();</script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  }
+
+  function printAssignedAssetQr(asset, employee, assignmentAuditLog = null) {
+    const qrData = buildAssignedAssetQrData(asset, employee, assignmentAuditLog);
+    const qrUrl = getQrImageUrl(qrData);
+    const assignedAtText = asset.allocatedAt ? new Date(asset.allocatedAt).toLocaleString() : '-';
+    const assignedBy = assignmentAuditLog?.actor_name || 'Unknown';
+    const popup = window.open('', '_blank', 'width=780,height=360');
+    if (!popup) return;
+    popup.document.write(`
+      <html>
+        <head>
+          <title>Assigned Asset QR</title>
+          <style>
+            @page { margin: 4mm; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 8px; color: #1d3247; }
+            .label {
+              border: 1.8px solid #1f3850;
+              border-radius: 10px;
+              padding: 8px;
+              width: fit-content;
+              display: flex;
+              align-items: center;
+              gap: 12px;
+            }
+            .qr-wrap { display: grid; place-items: center; min-width: 122px; }
+            img { width: 118px; height: 118px; border: 1px solid #d5e2ee; border-radius: 6px; background: #fff; }
+            .info { min-width: 300px; max-width: 460px; }
+            h2 { margin: 0 0 4px; font-size: 16px; line-height: 1.2; }
+            p { margin: 2px 0; font-size: 12px; line-height: 1.35; }
+          </style>
+        </head>
+        <body>
+          <div class="label">
+            <div class="qr-wrap">
+              <img src="${qrUrl}" alt="Assigned asset QR code" />
+            </div>
+            <div class="info">
+              <h2>${asset.assetName}</h2>
+              <p><strong>Serial:</strong> ${asset.serial || '-'}</p>
+              <p><strong>Type:</strong> ${asset.type || '-'}</p>
+              <p><strong>Assigned To:</strong> ${employee?.name || '-'} (${employee?.email || '-'})</p>
+              <p><strong>Assigned At:</strong> ${assignedAtText}</p>
+              <p><strong>Assigned By:</strong> ${assignedBy}</p>
+            </div>
           </div>
           <script>window.onload = () => window.print();</script>
         </body>
@@ -666,6 +778,14 @@ function App() {
     return events.sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 12);
   }, [allocations, assetById, userById]);
   const recentAuditLogs = useMemo(() => auditLogs.slice(0, 50), [auditLogs]);
+  const allocationAssignAuditById = useMemo(() => {
+    const byAllocation = {};
+    auditLogs.forEach((log) => {
+      if (log.entity_type !== 'allocation' || log.action !== 'ALLOCATE_ASSET' || !log.entity_id) return;
+      if (!byAllocation[log.entity_id]) byAllocation[log.entity_id] = log;
+    });
+    return byAllocation;
+  }, [auditLogs]);
   const activitySummary = useMemo(() => {
     const allocatedCount = recentActivity.filter((item) => item.action === 'Allocated').length;
     const returnedCount = recentActivity.filter((item) => item.action === 'Returned').length;
@@ -834,6 +954,21 @@ function App() {
     const nonAdmins = users.filter((u) => u.role !== 'admin');
     return nonAdmins.length ? nonAdmins : users;
   }, [users]);
+  const quickAssignTypeOptions = useMemo(
+    () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [availableAssets]
+  );
+  const quickAssignAssetOptions = useMemo(() => {
+    const q = quickAssignForm.assetSearch.trim().toLowerCase();
+    return availableAssets
+      .filter((asset) => quickAssignForm.assetType === 'all' || (asset.type || '') === quickAssignForm.assetType)
+      .filter((asset) => {
+        if (!q) return true;
+        const haystack = `${asset.name || ''} ${asset.serial || ''} ${asset.type || ''} ${asset.brand_name || ''} ${asset.model_name || ''}`;
+        return haystack.toLowerCase().includes(q);
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '') || (a.serial || '').localeCompare(b.serial || ''));
+  }, [availableAssets, quickAssignForm.assetSearch, quickAssignForm.assetType]);
   const managedAdmins = useMemo(
     () => users.filter((u) => (u.role || '').toLowerCase() === 'admin' && !u.is_super_admin),
     [users]
@@ -927,6 +1062,23 @@ function App() {
     return availableAssets.filter((asset) => (asset.type || '') === replacementForm.replacementType);
   }, [availableAssets, replacementForm.replacementType]);
   useEffect(() => {
+    if (employees.length === 0) {
+      setQuickAssignForm((prev) => (prev.userId ? { ...prev, userId: '' } : prev));
+      return;
+    }
+    setQuickAssignForm((prev) => {
+      if (prev.userId && employees.some((emp) => String(emp.id) === String(prev.userId))) return prev;
+      return { ...prev, userId: String(employees[0].id) };
+    });
+  }, [employees]);
+  useEffect(() => {
+    setQuickAssignForm((prev) => {
+      if (!prev.assetId) return prev;
+      const stillAvailable = quickAssignAssetOptions.some((asset) => String(asset.id) === String(prev.assetId));
+      return stillAvailable ? prev : { ...prev, assetId: '' };
+    });
+  }, [quickAssignAssetOptions]);
+  useEffect(() => {
     if (!selectedEmployee) return;
     setEmployeeEditForm({
       name: selectedEmployee.name || '',
@@ -966,6 +1118,13 @@ function App() {
       [adminUser.id]: Array.isArray(adminUser.permissions) ? adminUser.permissions : []
     }));
     setSelectedAdminPermissionId(adminUser.id);
+  }
+  function startQuickAssignForEmployee(employeeId) {
+    setQuickAssignForm((prev) => ({ ...prev, userId: String(employeeId) }));
+    const quickAssignPanel = document.getElementById('assignment-quick-form');
+    if (quickAssignPanel) {
+      quickAssignPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
   const selectedEmployeeAssetBreakdown = useMemo(() => {
     if (!selectedEmployee) return [];
@@ -1651,20 +1810,55 @@ function App() {
               {hasAdminPermission('assignments.manage') && (
                 <div className="create-box assignment-quick-assign">
                   <h4>Quick Assign Asset</h4>
-                  <form onSubmit={allocate} className="form assignment-inline-form">
-                    <select name="asset" required>
-                      {availableAssets.map((a) => (
-                        <option key={a.id} value={a.id}>{a.name} ({a.serial})</option>
-                      ))}
-                    </select>
-                    <select name="user" required>
+                  <form id="assignment-quick-form" onSubmit={allocate} className="form assignment-inline-form">
+                    <select
+                      name="user"
+                      required
+                      value={quickAssignForm.userId}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, userId: e.target.value }))}
+                    >
+                      <option value="">{employees.length ? 'Select employee' : 'No employees available'}</option>
                       {employees.map((u) => (
                         <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
                       ))}
                     </select>
-                    <input name="notes" placeholder="Reason, team, project, ticket..." />
-                    <button type="submit">Assign Asset</button>
+                    <select
+                      value={quickAssignForm.assetType}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
+                    >
+                      <option value="all">All asset types</option>
+                      {quickAssignTypeOptions.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                    <input
+                      value={quickAssignForm.assetSearch}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetSearch: e.target.value }))}
+                      placeholder="Search available asset by name, serial, brand..."
+                    />
+                    <select
+                      name="asset"
+                      required
+                      value={quickAssignForm.assetId}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetId: e.target.value }))}
+                    >
+                      <option value="">{quickAssignAssetOptions.length ? 'Select available asset' : 'No matching available asset'}</option>
+                      {quickAssignAssetOptions.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name} ({a.serial || '-'})</option>
+                      ))}
+                    </select>
+                    <input
+                      name="notes"
+                      value={quickAssignForm.notes}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
+                      placeholder="Reason, team, project, ticket..."
+                    />
+                    <button type="submit" disabled={!quickAssignForm.userId || !quickAssignForm.assetId}>Assign Asset</button>
                   </form>
+                  <p className="assignment-inline-meta">
+                    {quickAssignAssetOptions.length} matching available assets
+                    {quickAssignForm.assetType !== 'all' ? ` in ${quickAssignForm.assetType}` : ''}
+                  </p>
                 </div>
               )}
 
@@ -1695,7 +1889,12 @@ function App() {
                         <td><span className="count-pill">{emp.assignedCount}</span></td>
                         <td>{emp.latestAllocatedAt ? emp.latestAllocatedAt.toLocaleString() : '-'}</td>
                         <td>
-                          <button type="button" className="small assignment-view-btn" onClick={() => setSelectedEmployeeId(emp.id)}>View</button>
+                          <div className="assignment-row-actions">
+                            <button type="button" className="small assignment-view-btn" onClick={() => setSelectedEmployeeId(emp.id)}>View</button>
+                            {hasAdminPermission('assignments.manage') && (
+                              <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Assign</button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1708,108 +1907,160 @@ function App() {
 
         {section === 'accounts' && (
           <section className="panel wide account-management-panel">
-            <header className="account-dashboard-hero">
-              <div className="account-hero-header">
-                <div>
-                  <h3>Account Management</h3>
-                  <p className="hint">Provision admin users and control access across every module.</p>
+
+            {/* ── Hero Banner ── */}
+            <div className="acct-hero-banner">
+              <div className="acct-hero-glow acct-hero-glow-1" />
+              <div className="acct-hero-glow acct-hero-glow-2" />
+              <div className="acct-hero-inner">
+                <div className="acct-hero-text">
+                  <div className="acct-hero-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
+                    Admin Console
+                  </div>
+                  <h2 className="acct-hero-title">Account Management</h2>
+                  <p className="acct-hero-sub">Control admin access, permissions, and account lifecycle from one place.</p>
                 </div>
+                {isSuperAdmin && (
+                  <button type="button" className="acct-hero-cta" onClick={() => setCreateAdminPopupOpen(true)}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+                    Create Admin
+                  </button>
+                )}
               </div>
-              <div className="account-metric-cards">
-                <article className="account-metric-card">
-                  <div className="metric-icon">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+
+              {/* ── Metric Cards inside hero ── */}
+              <div className="acct-metric-row">
+                <div className="acct-metric-card">
+                  <div className="acct-metric-icon acct-icon-blue">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                   </div>
-                  <div className="metric-info">
-                    <span>Avg / Admin</span>
-                    <strong>{accountSummary.avgPermissions}</strong>
+                  <div className="acct-metric-body">
+                    <span>Managed Admins</span>
+                    <strong>{accountSummary.totalManaged}</strong>
                   </div>
-                </article>
-                <article className="account-metric-card">
-                  <div className="metric-icon">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2l3 9h9l-7 5 3 9-8-6-8 6 3-9-7-5h9z" /></svg>
+                </div>
+                <div className="acct-metric-card">
+                  <div className="acct-metric-icon acct-icon-indigo">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
                   </div>
-                  <div className="metric-info">
-                    <span>Max Permissions</span>
-                    <strong>{accountSummary.maxPermissions}</strong>
-                  </div>
-                </article>
-                <article className="account-metric-card">
-                  <div className="metric-icon">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                  </div>
-                  <div className="metric-info">
+                  <div className="acct-metric-body">
                     <span>Total Admins</span>
                     <strong>{accountSummary.totalAdmins}</strong>
                   </div>
-                </article>
-                <article className="account-metric-card">
-                  <div className="metric-icon">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                </div>
+                <div className="acct-metric-card">
+                  <div className="acct-metric-icon acct-icon-emerald">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                   </div>
-                  <div className="metric-info">
-                    <span>Managed</span>
-                    <strong>{accountSummary.totalManaged}</strong>
-                  </div>
-                </article>
-                <article className="account-metric-card">
-                  <div className="metric-icon">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
-                  </div>
-                  <div className="metric-info">
+                  <div className="acct-metric-body">
                     <span>Full Access</span>
                     <strong>{accountSummary.fullyPrivileged}</strong>
                   </div>
-                </article>
+                </div>
+                <div className="acct-metric-card">
+                  <div className="acct-metric-icon acct-icon-amber">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                  </div>
+                  <div className="acct-metric-body">
+                    <span>Avg Permissions</span>
+                    <strong>{accountSummary.avgPermissions}</strong>
+                  </div>
+                </div>
+                <div className="acct-metric-card">
+                  <div className="acct-metric-icon acct-icon-rose">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+                  </div>
+                  <div className="acct-metric-body">
+                    <span>Max Permissions</span>
+                    <strong>{accountSummary.maxPermissions}</strong>
+                  </div>
+                </div>
               </div>
-            </header>
+            </div>
 
+            {/* ── Content ── */}
             {!isSuperAdmin ? (
-              <div className="account-readonly">
-                <h4>Restricted Area</h4>
-                <p>Only super admin (`admin`) can create admin accounts and change permissions.</p>
+              <div className="acct-restricted">
+                <div className="acct-restricted-icon">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+                </div>
+                <div>
+                  <h4>Restricted Area</h4>
+                  <p>Only the super admin can create admin accounts and change permissions.</p>
+                </div>
               </div>
             ) : (
-              <section className="account-admin-list">
-                <div className="panel-head">
-                  <h4>Admin Permission Control</h4>
-                  <span>{filteredManagedAdmins.length} accounts</span>
+              <section className="acct-table-section">
+                <div className="acct-table-header">
+                  <div className="acct-table-title-group">
+                    <h4>Admin Permission Control</h4>
+                    <span className="acct-count-badge">{filteredManagedAdmins.length} accounts</span>
+                  </div>
+                  <div className="acct-search-wrap">
+                    <svg className="acct-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                    <input
+                      className="acct-search-input"
+                      placeholder="Search by name or email…"
+                      value={accountSearch}
+                      onChange={(e) => setAccountSearch(e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className="account-list-tools">
-                  <input
-                    className="inventory-search"
-                    placeholder="Search admin by name or email"
-                    value={accountSearch}
-                    onChange={(e) => setAccountSearch(e.target.value)}
-                  />
-                  <button type="button" className="small" onClick={() => setCreateAdminPopupOpen(true)}>Create Account</button>
-                </div>
-                <div className="table-wrap account-admin-table-wrap">
-                  <table>
+
+                <div className="acct-table-wrap">
+                  <table className="acct-table">
                     <thead>
                       <tr>
                         <th>Admin</th>
-                        <th>Email</th>
-                        <th>Permissions</th>
-                        <th>Action</th>
+                        <th>Permission Access</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredManagedAdmins.length === 0 ? (
-                        <tr><td colSpan={4}>No managed admin accounts found.</td></tr>
+                        <tr>
+                          <td colSpan={3} className="acct-empty-row">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
+                            <span>No managed admin accounts found.</span>
+                          </td>
+                        </tr>
                       ) : (
-                        filteredManagedAdmins.map((adminUser) => (
-                          <tr key={adminUser.id}>
-                            <td>{adminUser.name}</td>
-                            <td>{adminUser.email}</td>
-                            <td>{(adminUser.permissions || []).length}</td>
-                            <td>
-                              <button type="button" className="small account-view-btn" onClick={() => openAdminPermissionPopup(adminUser)}>
-                                View
-                              </button>
-                            </td>
-                          </tr>
-                        ))
+                        filteredManagedAdmins.map((adminUser) => {
+                          const permissionCount = (adminUser.permissions || []).length;
+                          const hasFullAccess = permissionCount === ADMIN_PERMISSION_OPTIONS.length;
+                          const pct = Math.round((permissionCount / ADMIN_PERMISSION_OPTIONS.length) * 100);
+                          return (
+                            <tr key={adminUser.id} className="acct-admin-row">
+                              <td>
+                                <div className="acct-admin-cell">
+                                  <span className="acct-admin-avatar">{(adminUser.name || 'A').slice(0, 1).toUpperCase()}</span>
+                                  <div className="acct-admin-info">
+                                    <strong>{adminUser.name}</strong>
+                                    <small>{adminUser.email}</small>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="acct-perm-cell">
+                                  <div className="acct-perm-bar-wrap">
+                                    <div className="acct-perm-bar"><div className="acct-perm-fill" style={{ width: `${pct}%`, background: hasFullAccess ? '#10b981' : '#f59e0b' }} /></div>
+                                    <span className="acct-perm-fraction">{permissionCount}/{ADMIN_PERMISSION_OPTIONS.length}</span>
+                                  </div>
+                                  <span className={`acct-access-chip ${hasFullAccess ? 'chip-full' : 'chip-limited'}`}>
+                                    {hasFullAccess ? '✦ Full Access' : 'Limited'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td>
+                                <button type="button" className="acct-manage-btn" onClick={() => openAdminPermissionPopup(adminUser)}>
+                                  Manage
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -2162,11 +2413,20 @@ function App() {
                             <td>{asset.allocatedAt ? new Date(asset.allocatedAt).toLocaleString() : '-'}</td>
                             <td>{asset.notes ? <span className="note-pill">{asset.notes}</span> : '-'}</td>
                             <td>
-                              <img
-                                className="inline-asset-qr"
-                                src={getQrImageUrl(JSON.stringify({ asset: asset.assetName, serial: asset.serial, type: asset.type }))}
-                                alt={`${asset.assetName} QR`}
-                              />
+                              <div className="inline-asset-qr-cell">
+                                <img
+                                  className="inline-asset-qr"
+                                  src={getQrImageUrl(buildAssignedAssetQrData(asset, selectedEmployee, allocationAssignAuditById[asset.id]))}
+                                  alt={`${asset.assetName} QR`}
+                                />
+                                <button
+                                  type="button"
+                                  className="small outline"
+                                  onClick={() => printAssignedAssetQr(asset, selectedEmployee, allocationAssignAuditById[asset.id])}
+                                >
+                                  Print QR
+                                </button>
+                              </div>
                             </td>
                             <td>
                               {hasAdminPermission('assignments.manage')
