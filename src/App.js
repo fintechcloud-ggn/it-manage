@@ -52,7 +52,6 @@ const API_CANDIDATES = (() => {
   candidates.push('');
   return candidates;
 })();
-let activeApiBase = API_CANDIDATES[0] || '';
 let resolvedApiBase = '';
 let apiBaseResolutionPromise = null;
 
@@ -70,7 +69,6 @@ async function resolveApiBase(forceRefresh = false) {
           lastError = new Error(`health_${response.status}`);
           continue;
         }
-        activeApiBase = base;
         resolvedApiBase = base;
         persistApiBase(base);
         return base;
@@ -95,7 +93,6 @@ async function apiFetch(path, options = {}) {
 
   try {
     const response = await fetch(`${base}${normalizedPath}`, options);
-    activeApiBase = base;
     resolvedApiBase = base;
     persistApiBase(base);
     return response;
@@ -103,7 +100,6 @@ async function apiFetch(path, options = {}) {
     const fallbackBase = await resolveApiBase(true);
     if (fallbackBase === base) throw error;
     const retryResponse = await fetch(`${fallbackBase}${normalizedPath}`, options);
-    activeApiBase = fallbackBase;
     resolvedApiBase = fallbackBase;
     persistApiBase(fallbackBase);
     return retryResponse;
