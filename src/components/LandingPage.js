@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import './LandingPage.css';
 import nextgenLogo from '../assets/nextgen-logo.svg';
+import {
+    HEADER_NAV_ITEMS,
+    MARKETING_HOME_PATH,
+    PLATFORM_DROPDOWN_ITEMS
+} from '../pages/marketingPages';
 
-const LandingPage = ({ onLogin }) => {
+const LandingPage = ({ onLogin, navigate, currentPath }) => {
     const [platformOpen, setPlatformOpen] = useState(false);
     const [isScrolled, setIsScrolled] = useState(false);
 
@@ -36,6 +41,12 @@ const LandingPage = ({ onLogin }) => {
         };
     }, []);
 
+    const handleNavigate = (event, path) => {
+        event.preventDefault();
+        setPlatformOpen(false);
+        if (navigate) navigate(path);
+    };
+
     return (
         <div className="landing-container light-mode">
             <div className="lp-bg-elements">
@@ -45,9 +56,11 @@ const LandingPage = ({ onLogin }) => {
             </div>
 
             <nav className={`lp-nav ${isScrolled ? 'scrolled' : ''}`}>
-                <div className="lp-logo">
-                    <img src={nextgenLogo} alt="NEXTGEN" className="lp-logo-image" />
-                </div>
+                <button type="button" className="lp-logo-button" onClick={() => navigate?.(MARKETING_HOME_PATH)}>
+                    <span className="lp-logo">
+                        <img src={nextgenLogo} alt="NEXTGEN" className="lp-logo-image" />
+                    </span>
+                </button>
                 <div className="lp-nav-links">
                     <div
                         className="nav-dropdown-wrapper"
@@ -55,28 +68,32 @@ const LandingPage = ({ onLogin }) => {
                         onMouseLeave={() => setPlatformOpen(false)}
                     >
                         <a
-                            href="#platform"
-                            className="nav-link dropdown-trigger"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                setPlatformOpen(!platformOpen);
-                                document.getElementById('platform')?.scrollIntoView({ behavior: 'smooth' });
-                            }}
+                            href="/platform"
+                            className={`nav-link dropdown-trigger ${String(currentPath || '').startsWith('/platform') ? 'active' : ''}`}
+                            onClick={(event) => handleNavigate(event, '/platform')}
                         >
                             Platform <span className="chevron">⌄</span>
                         </a>
                         {platformOpen && (
                             <div className="lp-dropdown">
-                                <a href="#features" onClick={() => setPlatformOpen(false)}>Asset Tracking</a>
-                                <a href="#solutions" onClick={() => setPlatformOpen(false)}>Global Fleet</a>
-                                <a href="#enterprise" onClick={() => setPlatformOpen(false)}>Security Ops</a>
+                                {PLATFORM_DROPDOWN_ITEMS.map((item) => (
+                                    <a key={item.path} href={item.path} onClick={(event) => handleNavigate(event, item.path)}>
+                                        {item.label}
+                                    </a>
+                                ))}
                             </div>
                         )}
                     </div>
-                    <a href="#solutions" className="nav-link">Solutions</a>
-                    <a href="#enterprise" className="nav-link">Enterprise</a>
-                    <a href="#resources" className="nav-link">Resources</a>
-                    <a href="#pricing" className="nav-link">Pricing</a>
+                    {HEADER_NAV_ITEMS.filter((item) => item.path !== '/platform').map((item) => (
+                        <a
+                            key={item.path}
+                            href={item.path}
+                            className={`nav-link ${currentPath === item.path ? 'active' : ''}`}
+                            onClick={(event) => handleNavigate(event, item.path)}
+                        >
+                            {item.label}
+                        </a>
+                    ))}
                 </div>
                 <div className="lp-nav-actions">
                     <button className="btn-ghost" onClick={onLogin}>Log in</button>
@@ -351,37 +368,38 @@ const LandingPage = ({ onLogin }) => {
             <footer className="lp-footer">
                 <div className="footer-top reveal-on-scroll">
                     <div className="f-brand">
-                        <div className="lp-logo">
-                            <img src={nextgenLogo} alt="NEXTGEN" className="lp-logo-image" />
-                        </div>
+                        <button type="button" className="lp-logo-button" onClick={() => navigate?.(MARKETING_HOME_PATH)}>
+                            <span className="lp-logo">
+                                <img src={nextgenLogo} alt="NEXTGEN" className="lp-logo-image" />
+                            </span>
+                        </button>
                         <p>Leading the next generation of IT operations for the global enterprise.</p>
                     </div>
                     <div className="f-links">
                         <div className="f-col">
                             <strong>Platform</strong>
-                            <a href="#features">Inventory</a>
-                            <a href="#solutions">Fleet</a>
-                            <a href="#enterprise">Security</a>
+                            <a href="/platform/asset-tracking" onClick={(event) => handleNavigate(event, '/platform/asset-tracking')}>Inventory</a>
+                            <a href="/platform/global-fleet" onClick={(event) => handleNavigate(event, '/platform/global-fleet')}>Fleet</a>
+                            <a href="/platform/security-ops" onClick={(event) => handleNavigate(event, '/platform/security-ops')}>Security</a>
                         </div>
                         <div className="f-col">
                             <strong>Product</strong>
-                            <a href="#pricing">Pricing</a>
-                            <a href="#docs">Documentation</a>
-                            <a href="#api">API</a>
+                            <a href="/pricing" onClick={(event) => handleNavigate(event, '/pricing')}>Pricing</a>
+                            <a href="/resources" onClick={(event) => handleNavigate(event, '/resources')}>Resources</a>
+                            <a href="/solutions" onClick={(event) => handleNavigate(event, '/solutions')}>Solutions</a>
                         </div>
                         <div className="f-col">
                             <strong>Company</strong>
-                            <a href="#about">About</a>
-                            <a href="#careers">Careers</a>
-                            <a href="#privacy">Privacy</a>
+                            <a href="/enterprise" onClick={(event) => handleNavigate(event, '/enterprise')}>Enterprise</a>
+                            <a href="/" onClick={(event) => handleNavigate(event, MARKETING_HOME_PATH)}>Home</a>
                         </div>
                     </div>
                 </div>
                 <div className="footer-bottom">
                     <p>© {new Date().getFullYear()} NEXTGEN Rentals and Trading Private Limited. All rights reserved.</p>
                     <div className="f-social">
-                        <a href="#t">Twitter</a>
-                        <a href="#li">LinkedIn</a>
+                        <a href="/resources" onClick={(event) => handleNavigate(event, '/resources')}>Resources</a>
+                        <a href="/pricing" onClick={(event) => handleNavigate(event, '/pricing')}>Pricing</a>
                     </div>
                 </div>
             </footer>

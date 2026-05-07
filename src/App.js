@@ -2,9 +2,52 @@ import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import LandingPage from './components/LandingPage';
 import nextgenLogo from './assets/nextgen-logo.svg';
+import AssetTrackingPage from './pages/AssetTrackingPage';
+import EnterprisePage from './pages/EnterprisePage';
+import GlobalFleetPage from './pages/GlobalFleetPage';
+import PlatformPage from './pages/PlatformPage';
+import PricingPage from './pages/PricingPage';
+import ResourcesPage from './pages/ResourcesPage';
+import SecurityOpsPage from './pages/SecurityOpsPage';
+import SolutionsPage from './pages/SolutionsPage';
+import { MARKETING_HOME_PATH, normalizeMarketingPath } from './pages/marketingPages';
 
 
-const API = process.env.REACT_APP_API || (process.env.NODE_ENV === 'development' ? 'http://localhost:4000' : '');
+const DEV_API_PORTS = Array.from({ length: 20 }, (_, index) => 4000 + index);
+const API_CANDIDATES = (() => {
+  const configuredApi = String(process.env.REACT_APP_API || '').trim().replace(/\/$/, '');
+  if (process.env.NODE_ENV !== 'development') {
+    return configuredApi ? [configuredApi] : [''];
+  }
+
+  const hostname = window.location.hostname || 'localhost';
+  const candidates = configuredApi ? [configuredApi] : [];
+  DEV_API_PORTS.forEach((port) => {
+    const candidate = `http://${hostname}:${port}`;
+    if (!candidates.includes(candidate)) candidates.push(candidate);
+  });
+  candidates.push('');
+  return candidates;
+})();
+let activeApiBase = API_CANDIDATES[0] || '';
+
+async function apiFetch(path, options = {}) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const candidates = [activeApiBase, ...API_CANDIDATES.filter((candidate) => candidate !== activeApiBase)];
+  let lastError = null;
+
+  for (const base of candidates) {
+    try {
+      const response = await fetch(`${base}${normalizedPath}`, options);
+      activeApiBase = base;
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Unable to reach API');
+}
 const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
 const FALLBACK_NAMES_BY_TYPE = {
   Laptop: ['Business Laptop', 'Developer Laptop', 'Ultrabook', 'High config'],
@@ -30,9 +73,21 @@ const ADMIN_PERMISSION_OPTIONS = [
   { key: 'accounts.manage', label: 'Account Management' }
 ];
 
+const MARKETING_PAGE_COMPONENTS = {
+  '/platform': PlatformPage,
+  '/platform/asset-tracking': AssetTrackingPage,
+  '/platform/global-fleet': GlobalFleetPage,
+  '/platform/security-ops': SecurityOpsPage,
+  '/solutions': SolutionsPage,
+  '/enterprise': EnterprisePage,
+  '/resources': ResourcesPage,
+  '/pricing': PricingPage
+};
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
+  const [marketingPath, setMarketingPath] = useState(() => normalizeMarketingPath(window.location.pathname));
   const [authView, setAuthView] = useState(() => (
     localStorage.getItem('token') && localStorage.getItem('user') ? 'app' : 'landing'
   ));
@@ -132,6 +187,16 @@ function App() {
     return Array.from(next);
   }
 
+  function navigateMarketing(path) {
+    const nextPath = normalizeMarketingPath(path);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+    setMarketingPath(nextPath);
+    setAuthView('landing');
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
   useEffect(() => {
     if (!token) return;
     fetchAssets();
@@ -163,9 +228,23 @@ function App() {
     const onKeyDown = (event) => {
       if (event.key === 'Escape') setAuthView('landing');
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [authView, user]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setMarketingPath(normalizeMarketingPath(window.location.pathname));
+      setAuthView('landing');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   function authHeaders() {
     return token
@@ -186,17 +265,17 @@ function App() {
   }
 
   function fetchAssets() {
-    fetch(`${API}/api/assets`)
+    apiFetch('/api/assets')
       .then((r) => {
         if (!r.ok) throw new Error(`assets_${r.status}`);
         return r.json();
       })
       .then(setAssets)
-      .catch(() => setMessage('Unable to load assets. Ensure backend is running on port 4000.'));
+      .catch(() => setMessage('Unable to load assets. Ensure the backend is running.'));
   }
 
   function fetchUsers() {
-    fetch(`${API}/api/users`, { headers: authHeaders() })
+    apiFetch('/api/users', { headers: authHeaders() })
       .then((r) => {
         if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`users_${r.status}`);
@@ -210,7 +289,7 @@ function App() {
   }
 
   function fetchAllocations() {
-    fetch(`${API}/api/allocations`, { headers: authHeaders() })
+    apiFetch('/api/allocations', { headers: authHeaders() })
       .then((r) => {
         if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`allocations_${r.status}`);
@@ -224,7 +303,7 @@ function App() {
   }
 
   function fetchAuditLogs() {
-    fetch(`${API}/api/audit-logs?limit=150`, { headers: authHeaders() })
+    apiFetch('/api/audit-logs?limit=150', { headers: authHeaders() })
       .then((r) => {
         if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`audit_${r.status}`);
@@ -238,7 +317,7 @@ function App() {
   }
 
   function fetchStores() {
-    fetch(`${API}/api/stores`, { headers: authHeaders() })
+    apiFetch('/api/stores', { headers: authHeaders() })
       .then((r) => {
         if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`stores_${r.status}`);
@@ -249,7 +328,7 @@ function App() {
   }
 
   function fetchBrands() {
-    fetch(`${API}/api/brands`, { headers: authHeaders() })
+    apiFetch('/api/brands', { headers: authHeaders() })
       .then((r) => {
         if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`brands_${r.status}`);
@@ -268,7 +347,7 @@ function App() {
     const email = e.target.email.value;
     const password = e.target.password.value;
     try {
-      const res = await fetch(`${API}/api/auth/login`, {
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -311,7 +390,7 @@ function App() {
       setMessage('Select employee and available asset to assign');
       return;
     }
-    const res = await fetch(`${API}/api/allocations`, {
+    const res = await apiFetch('/api/allocations', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ asset_id, user_id, notes })
@@ -333,7 +412,7 @@ function App() {
   }
 
   async function returnAsset(allocationId, returnContext = null) {
-    const res = await fetch(`${API}/api/allocations/${allocationId}/return`, {
+    const res = await apiFetch(`/api/allocations/${allocationId}/return`, {
       method: 'PUT',
       headers: authHeaders(),
       body: returnContext ? JSON.stringify(returnContext) : undefined
@@ -358,7 +437,7 @@ function App() {
       setMessage('Please provide a reason for Other');
       return;
     }
-    const res = await fetch(`${API}/api/allocations/${replacementForm.allocationId}/replace`, {
+    const res = await apiFetch(`/api/allocations/${replacementForm.allocationId}/replace`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
@@ -392,7 +471,7 @@ function App() {
     const notes = e.target.notes.value;
     const brand_id = e.target.brand_id.value ? Number(e.target.brand_id.value) : null;
     const model_id = e.target.model_id.value ? Number(e.target.model_id.value) : null;
-    const res = await fetch(`${API}/api/assets`, {
+    const res = await apiFetch('/api/assets', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ name, type, serial, vendor, notes, brand_id, model_id })
@@ -588,7 +667,7 @@ function App() {
       setMessage('Name and email are required');
       return;
     }
-    const res = await fetch(`${API}/api/users/${selectedEmployee.id}`, {
+    const res = await apiFetch(`/api/users/${selectedEmployee.id}`, {
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify(payload)
@@ -616,7 +695,7 @@ function App() {
         const leavingDetail = employeeEditForm.leavingReason.trim() || 'Employee marked as leaving company';
         await Promise.all(
           selectedEmployee.assignedAssets.map((asset) =>
-            fetch(`${API}/api/allocations/${asset.id}/return`, {
+            apiFetch(`/api/allocations/${asset.id}/return`, {
               method: 'PUT',
               headers: authHeaders(),
               body: JSON.stringify({ reason: 'User Leaving', reason_detail: leavingDetail })
@@ -655,7 +734,7 @@ function App() {
       setMessage('Admin name and email are required.');
       return;
     }
-    const res = await fetch(`${API}/api/users/admin`, {
+    const res = await apiFetch('/api/users/admin', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(payload)
@@ -696,7 +775,7 @@ function App() {
       setMessage('Select at least one permission before saving.');
       return false;
     }
-    const res = await fetch(`${API}/api/users/${targetUserId}/permissions`, {
+    const res = await apiFetch(`/api/users/${targetUserId}/permissions`, {
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify({ permissions })
@@ -1274,20 +1353,30 @@ function App() {
   }
 
   if (!user) {
+    const SelectedMarketingPage = MARKETING_PAGE_COMPONENTS[marketingPath] || null;
+    const marketingScreen = SelectedMarketingPage ? (
+      <SelectedMarketingPage
+        currentPath={marketingPath}
+        navigate={navigateMarketing}
+        onLogin={() => setAuthView('login')}
+      />
+    ) : (
+      <LandingPage
+        currentPath={MARKETING_HOME_PATH}
+        navigate={navigateMarketing}
+        onLogin={() => setAuthView('login')}
+      />
+    );
+
     return (
       <>
         {authView === 'landing' ? (
-          <LandingPage onLogin={() => setAuthView('login')} />
+          marketingScreen
         ) : (
-          <div className="wk-page">
-            <header className="wk-nav">
-              <div className="wk-logo" onClick={() => setAuthView('landing')} style={{ cursor: 'pointer' }}>
-                <img src={nextgenLogo} alt="NEXTGEN" className="wk-logo-image" />
-              </div>
-              <div className="wk-nav-actions">
-                <button type="button" onClick={() => setAuthView('landing')}>Back to Home</button>
-              </div>
-            </header>
+          <>
+            <div className="auth-page-underlay" aria-hidden="true">
+              {marketingScreen}
+            </div>
             <div className="auth-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
               <div className="auth-modal-frame">
                 <div className="auth-shell">
@@ -1304,7 +1393,14 @@ function App() {
                   </section>
 
                   <section className="auth-form-panel">
-                    <button type="button" className="auth-back" onClick={() => setAuthView('landing')}>Back to Landing</button>
+                    <button
+                      type="button"
+                      className="auth-close"
+                      aria-label="Close login"
+                      onClick={() => setAuthView('landing')}
+                    >
+                      ×
+                    </button>
                     <h3 id="login-title">Hello!</h3>
                     <p>Sign in to get started.</p>
                     <form onSubmit={login} className="form auth-form-modern">
@@ -1323,7 +1419,7 @@ function App() {
                 </div>
               </div>
             </div>
-          </div>
+          </>
         )}
       </>
     );
@@ -1331,7 +1427,7 @@ function App() {
 
 
   return (
-    <div className="app-layout">
+    <div className="app-layout dashboard-shell">
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-top">
           {!sidebarCollapsed && (

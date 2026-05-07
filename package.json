@@ -14,7 +14,7 @@
   },
   "scripts": {
     "start": "node scripts/start-both.js",
-    "start:frontend": "HOST=localhost PORT=3000 react-scripts start",
+    "start:frontend": "react-scripts start",
     "start:backend": "npm --prefix server run start:api",
     "build": "react-scripts build",
     "test": "react-scripts test",
