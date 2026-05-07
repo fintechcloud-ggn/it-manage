@@ -1118,6 +1118,12 @@ function App() {
       (m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase(),
     );
   }, [selectedBrandModels, selectedAssetType]);
+  const allModelsBySelectedType = useMemo(() => {
+    return brands
+      .flatMap((brand) => brand.models || [])
+      .filter((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase());
+  }, [brands, selectedAssetType]);
+  const modelOptionsByType = selectedBrandId ? selectedBrandModelsByType : allModelsBySelectedType;
   const selectedBrandName = useMemo(() => {
     const brand = brands.find((b) => String(b.id) === String(selectedBrandId));
     return brand?.name || '';
@@ -1128,10 +1134,10 @@ function App() {
     );
   }, [brands, selectedAssetType]);
   const assetNameOptions = useMemo(() => {
-    const modelNames = selectedBrandModelsByType.map((m) => m.name);
+    const modelNames = modelOptionsByType.map((m) => m.name);
     if (modelNames.length > 0) return modelNames;
     return FALLBACK_NAMES_BY_TYPE[selectedAssetType] || ['Generic Asset'];
-  }, [selectedBrandModelsByType, selectedAssetType]);
+  }, [modelOptionsByType, selectedAssetType]);
   useEffect(() => {
     if (!selectedBrandId) return;
     const existsForType = brandsBySelectedType.some((b) => String(b.id) === String(selectedBrandId));
@@ -1815,7 +1821,7 @@ function App() {
                   <div className="create-meta">
                     <span>{selectedAssetType}</span>
                     <span>{brandsBySelectedType.length} brands</span>
-                    <span>{selectedBrandId ? `${selectedBrandModelsByType.length} models` : 'Select brand'}</span>
+                    <span>{modelOptionsByType.length} models</span>
                   </div>
                 </div>
                 <form onSubmit={createAsset} className="form asset-create-form">
@@ -1868,13 +1874,9 @@ function App() {
                   </label>
                   <label className="field">
                     <span>Model</span>
-                    <select name="model_id" disabled={!selectedBrandId}>
-                      <option value="">
-                        {selectedBrandId
-                          ? `Select ${selectedAssetType} model`
-                          : 'Select brand first'}
-                      </option>
-                      {selectedBrandModelsByType.map((m) => (
+                    <select name="model_id" key={`${selectedAssetType}-${selectedBrandId || 'all'}`}>
+                      <option value="">{`Select ${selectedAssetType} model`}</option>
+                      {modelOptionsByType.map((m) => (
                         <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
                     </select>
@@ -1895,7 +1897,7 @@ function App() {
                     <small>
                       {selectedBrandId
                         ? `Adding ${selectedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
-                        : `Choose a brand for ${selectedAssetType} to map exact models`}
+                        : `Choose any ${selectedAssetType} model or narrow by brand`}
                     </small>
                     <button type="submit">Add Asset</button>
                   </div>
