@@ -2813,18 +2813,18 @@ body {
 .dashboard-shell .assignment-inline-form button,
 .dashboard-shell .assignment-view-btn,
 .dashboard-shell .assignment-assign-btn {
-  background: linear-gradient(135deg, #20a889 0%, #149b78 100%);
+  background: linear-gradient(135deg, #2b92c1 0%, #27ba8e 100%);
   color: #fff;
   border: 0;
-  box-shadow: 0 14px 26px rgba(20, 155, 120, 0.22);
+  box-shadow: 0 14px 26px rgba(35, 167, 136, 0.22);
 }
 
 .dashboard-shell .assignment-search-top .small:hover,
 .dashboard-shell .assignment-inline-form button:not(:disabled):hover,
 .dashboard-shell .assignment-view-btn:hover,
 .dashboard-shell .assignment-assign-btn:hover {
-  background: linear-gradient(135deg, #22b991 0%, #108d70 100%);
-  box-shadow: 0 16px 30px rgba(20, 155, 120, 0.28);
+  background: linear-gradient(135deg, #2fa4d3 0%, #25b884 100%);
+  box-shadow: 0 16px 30px rgba(35, 167, 136, 0.28);
 }
 
 .dashboard-shell .assignment-inline-form button:disabled {
@@ -2837,19 +2837,19 @@ body {
 .dashboard-shell .employee-edit-actions .small,
 .dashboard-shell .employee-modal-assets .small,
 .dashboard-shell .replacement-form .small {
-  background: linear-gradient(135deg, #20a889 0%, #149b78 100%);
+  background: linear-gradient(135deg, #2b92c1 0%, #27ba8e 100%);
   color: #fff;
   border: 0;
-  box-shadow: 0 14px 26px rgba(20, 155, 120, 0.22);
+  box-shadow: 0 14px 26px rgba(35, 167, 136, 0.22);
 }
 
 .dashboard-shell .employee-modal-actions .small:hover,
 .dashboard-shell .employee-edit-actions .small:hover,
 .dashboard-shell .employee-modal-assets .small:hover,
 .dashboard-shell .replacement-form .small:hover {
-  background: linear-gradient(135deg, #22b991 0%, #108d70 100%);
+  background: linear-gradient(135deg, #2fa4d3 0%, #25b884 100%);
   color: #fff;
-  box-shadow: 0 16px 30px rgba(20, 155, 120, 0.28);
+  box-shadow: 0 16px 30px rgba(35, 167, 136, 0.28);
 }
 
 @media (max-width: 1024px) {
