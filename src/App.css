@@ -2809,6 +2809,49 @@ body {
   font-size: 16px;
 }
 
+.dashboard-shell .assignment-search-top .small,
+.dashboard-shell .assignment-inline-form button,
+.dashboard-shell .assignment-view-btn,
+.dashboard-shell .assignment-assign-btn {
+  background: linear-gradient(135deg, #20a889 0%, #149b78 100%);
+  color: #fff;
+  border: 0;
+  box-shadow: 0 14px 26px rgba(20, 155, 120, 0.22);
+}
+
+.dashboard-shell .assignment-search-top .small:hover,
+.dashboard-shell .assignment-inline-form button:not(:disabled):hover,
+.dashboard-shell .assignment-view-btn:hover,
+.dashboard-shell .assignment-assign-btn:hover {
+  background: linear-gradient(135deg, #22b991 0%, #108d70 100%);
+  box-shadow: 0 16px 30px rgba(20, 155, 120, 0.28);
+}
+
+.dashboard-shell .assignment-inline-form button:disabled {
+  background: linear-gradient(135deg, #8da69f 0%, #71817c 100%);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: none;
+}
+
+.dashboard-shell .employee-modal-actions .small,
+.dashboard-shell .employee-edit-actions .small,
+.dashboard-shell .employee-modal-assets .small,
+.dashboard-shell .replacement-form .small {
+  background: linear-gradient(135deg, #20a889 0%, #149b78 100%);
+  color: #fff;
+  border: 0;
+  box-shadow: 0 14px 26px rgba(20, 155, 120, 0.22);
+}
+
+.dashboard-shell .employee-modal-actions .small:hover,
+.dashboard-shell .employee-edit-actions .small:hover,
+.dashboard-shell .employee-modal-assets .small:hover,
+.dashboard-shell .replacement-form .small:hover {
+  background: linear-gradient(135deg, #22b991 0%, #108d70 100%);
+  color: #fff;
+  box-shadow: 0 16px 30px rgba(20, 155, 120, 0.28);
+}
+
 @media (max-width: 1024px) {
   .dashboard-shell {
     padding: 14px;
@@ -3892,13 +3935,13 @@ body {
 .toast {
   position: fixed;
   right: 16px;
-  bottom: 16px;
-  background: #102634;
+  top: 16px;
+  background: #16834a;
   color: #fff;
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 13px;
-  box-shadow: 0 10px 24px rgba(10, 28, 42, 0.28);
+  box-shadow: 0 10px 24px rgba(22, 131, 74, 0.28);
 }
 
 @media (max-width: 1180px) {

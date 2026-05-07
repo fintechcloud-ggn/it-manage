@@ -1,7 +1,6 @@
 const net = require('net');
 const { spawn } = require('child_process');
 
-const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const children = [];
 
 function isPortAvailable(port) {
@@ -32,9 +31,18 @@ async function findAvailablePort(startPort, maxAttempts = 20) {
 }
 
 function run(name, args, extraEnv = {}) {
-  const child = spawn(npmCmd, args, {
+  const command = process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'npm';
+  const commandArgs = process.platform === 'win32'
+    ? ['/d', '/s', '/c', ['npm', ...args].join(' ')]
+    : args;
+
+  const child = spawn(command, commandArgs, {
     stdio: 'inherit',
     env: { ...process.env, ...extraEnv },
+  });
+  child.on('error', (error) => {
+    console.error(`[${name}] failed to start: ${error.message}`);
+    shutdown(1);
   });
   child.on('exit', (code, signal) => {
     if (signal) {

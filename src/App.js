@@ -182,6 +182,13 @@ function App() {
     assetSearch: '',
     notes: ''
   });
+
+  useEffect(() => {
+    if (!message) return undefined;
+
+    const timeoutId = setTimeout(() => setMessage(''), 5000);
+    return () => clearTimeout(timeoutId);
+  }, [message]);
   const [accountSearch, setAccountSearch] = useState('');
   const [createAdminPopupOpen, setCreateAdminPopupOpen] = useState(false);
   const [selectedAdminPermissionId, setSelectedAdminPermissionId] = useState(null);
@@ -2064,7 +2071,7 @@ function App() {
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
                       placeholder="Reason, team, project, ticket..."
                     />
-                    <button type="submit" disabled={!quickAssignForm.userId || !quickAssignForm.assetId}>Assign Asset</button>
+                    <button type="submit" disabled={!quickAssignForm.userId}>Assign Asset</button>
                   </form>
                   <p className="assignment-inline-meta">
                     {quickAssignAssetOptions.length} matching available assets
