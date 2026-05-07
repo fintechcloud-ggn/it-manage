@@ -1080,6 +1080,40 @@ button {
 
 /* Responsive */
 @media (max-width: 1024px) {
+    .lp-nav {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .lp-nav-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .lp-page-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .enterprise-container {
+        grid-template-columns: 1fr;
+        gap: 3rem;
+    }
+
+    .security-visual-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .security-visual {
+        min-height: auto;
+    }
+
+    .footer-bottom {
+        gap: 1.5rem;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
     .lp-hero {
         grid-template-columns: 1fr;
         text-align: center;
@@ -1109,6 +1143,18 @@ button {
 }
 
 @media (max-width: 768px) {
+    .lp-nav {
+        padding: 0.9rem 1rem;
+    }
+
+    .lp-nav-actions {
+        justify-content: stretch;
+    }
+
+    .lp-nav-actions button {
+        flex: 1;
+    }
+
     .lp-nav-links {
         display: none;
     }
@@ -1120,15 +1166,118 @@ button {
     .f-brand .lp-logo-image {
         width: 190px;
     }
+
+    .lp-page-shell,
+    .lp-section,
+    .lp-footer {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .lp-page-hero {
+        margin-top: 1rem;
+        gap: 1.5rem;
+    }
+
+    .lp-page-copy {
+        padding: 0;
+    }
+
+    .lp-page-copy h1 {
+        font-size: clamp(2rem, 9vw, 3rem);
+    }
+
+    .lp-page-stats,
+    .f-links,
+    .security-visual-grid,
+    .footer-top {
+        grid-template-columns: 1fr;
+    }
+
+    .page-panel-header,
+    .security-card-heading {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .lp-hero-stats {
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .pricing-card.featured {
+        transform: none;
+    }
+
+    .map-view,
+    .security-visual {
+        height: auto;
+        min-height: 320px;
+    }
+
+    .lp-page-panel,
+    .lp-feature-card,
+    .pricing-card,
+    .lp-resource-card,
+    .enterprise-svg-wrapper {
+        border-radius: 22px;
+    }
 }
 
 @media (max-width: 480px) {
+    .lp-nav {
+        padding: 0.85rem 0.85rem;
+    }
+
+    .lp-nav-actions {
+        flex-direction: column;
+    }
+
     .lp-hero-btns {
         flex-direction: column;
     }
 
+    .lp-hero-btns button,
+    .lp-nav-actions button,
+    .btn-primary-large,
+    .btn-secondary-large {
+        width: 100%;
+    }
+
     .pricing-card {
         padding: 3rem 1.5rem;
+    }
+
+    .lp-page-shell {
+        padding-top: 1rem;
+        padding-bottom: 3rem;
+    }
+
+    .lp-page-grid,
+    .lp-feature-grid,
+    .pricing-container {
+        grid-template-columns: 1fr;
+    }
+
+    .lp-page-stat,
+    .lp-feature-card,
+    .resource-info,
+    .pricing-card {
+        padding: 1.25rem;
+    }
+
+    .section-header {
+        margin-bottom: 2.5rem;
+    }
+
+    .section-header h2,
+    .solutions-text h2,
+    .enterprise-content-new h2 {
+        font-size: clamp(1.8rem, 8vw, 2.4rem);
+    }
+
+    .lp-resource-grid {
+        grid-template-columns: 1fr;
     }
 }
 

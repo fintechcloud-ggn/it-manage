@@ -2746,10 +2746,19 @@ body {
 .dashboard-shell .assignment-stats .donut-card {
   min-height: 300px;
   padding: 22px 18px;
+  width: 100%;
+  max-width: none;
   border-radius: 28px;
   border: 1px solid rgba(214, 224, 234, 0.95);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 250, 252, 0.98) 100%);
   box-shadow: 0 18px 42px rgba(96, 120, 148, 0.09);
+}
+
+.dashboard-shell .assignment-stats {
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .dashboard-shell .assignment-stats .metric-title {
@@ -2805,6 +2814,10 @@ body {
     padding: 14px;
   }
 
+  .dashboard-shell.app-layout {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-shell .sidebar,
   .dashboard-shell .inventory-app {
     min-height: auto;
@@ -2812,16 +2825,42 @@ body {
   }
 
   .dashboard-shell .sidebar {
+    position: relative;
+    top: auto;
+    height: auto;
+    overflow: visible;
+    width: 100%;
     border-right: 1px solid rgba(208, 220, 233, 0.95);
     margin-bottom: 12px;
+    border-radius: 28px;
   }
 
   .dashboard-shell .inventory-app {
     overflow: visible;
+    border-radius: 28px;
   }
 }
 
 @media (max-width: 768px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .auth-brand-panel {
+    min-height: 280px;
+  }
+
+  .auth-brand-copy {
+    left: 10%;
+    right: 10%;
+    top: 50%;
+  }
+
+  .auth-form-panel {
+    padding: 28px 20px 24px;
+  }
+
   .dashboard-shell .inventory-app {
     padding: 18px;
     background-size: 120px 110px, 120px 110px, auto;
@@ -2842,6 +2881,29 @@ body {
     width: 100%;
   }
 
+  .dashboard-shell .inventory-head-actions,
+  .dashboard-shell .employee-modal-actions,
+  .dashboard-shell .assignment-row-actions,
+  .dashboard-shell .create-meta {
+    width: 100%;
+  }
+
+  .dashboard-shell .inventory-head-actions .outline,
+  .dashboard-shell .employee-modal-actions button,
+  .dashboard-shell .assignment-row-actions button,
+  .dashboard-shell .create-actions button,
+  .dashboard-shell .sidebar-logout {
+    width: 100%;
+  }
+
+  .dashboard-shell .asset-qr-cell {
+    justify-items: stretch;
+  }
+
+  .dashboard-shell .asset-qr-cell .small {
+    width: 100%;
+  }
+
   .dashboard-shell .assignment-stats .metric-donut {
     width: 164px;
     height: 164px;
@@ -2849,6 +2911,155 @@ body {
 
   .dashboard-shell .assignment-stats .metric-center strong {
     font-size: 36px;
+  }
+
+  .table-wrap,
+  .inventory-table-shell .table-wrap,
+  .employee-modal-assets .table-wrap,
+  .assignment-employee-table,
+  .audit-table-wrap,
+  .acct-table-wrap,
+  .account-admin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-modal-overlay {
+    padding: 8px;
+  }
+
+  .auth-brand-panel {
+    min-height: 220px;
+  }
+
+  .auth-brand-copy h2 {
+    font-size: clamp(34px, 12vw, 52px);
+  }
+
+  .auth-brand-copy span {
+    font-size: 1.25rem;
+  }
+
+  .dashboard-shell {
+    padding: 8px;
+  }
+
+  .dashboard-shell .sidebar,
+  .dashboard-shell .inventory-app {
+    border-radius: 22px;
+  }
+
+  .dashboard-shell .sidebar {
+    padding: 16px 12px 12px;
+  }
+
+  .dashboard-shell .sidebar-brand h3 {
+    font-size: 24px;
+  }
+
+  .dashboard-shell .toggle-btn {
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+  }
+
+  .dashboard-shell .inventory-app::before {
+    inset: 10px;
+    border-radius: 20px;
+  }
+
+  .dashboard-shell .overview-headline,
+  .dashboard-shell .overview-kpis article,
+  .dashboard-shell .panel,
+  .dashboard-shell .create-box,
+  .dashboard-shell .inventory-table-shell,
+  .dashboard-shell .assignment-stats .donut-card {
+    border-radius: 20px;
+  }
+
+  .dashboard-shell .overview-headline,
+  .dashboard-shell .panel,
+  .dashboard-shell .create-box {
+    padding: 16px;
+  }
+
+  .dashboard-shell .inventory-head h3,
+  .dashboard-shell .overview-headline h3 {
+    font-size: 28px;
+  }
+
+  .dashboard-shell .overview-headline .hint,
+  .dashboard-shell .inventory-head .hint {
+    font-size: 14px;
+  }
+
+  .dashboard-shell .overview-kpis strong,
+  .dashboard-shell .inventory-mini-stats strong {
+    font-size: 30px;
+  }
+
+  .dashboard-shell .overview-search input,
+  .dashboard-shell .inventory-search,
+  .dashboard-shell .inventory-filter-grid select,
+  .dashboard-shell .asset-create-form .field input,
+  .dashboard-shell .asset-create-form .field select,
+  .dashboard-shell .outline,
+  .dashboard-shell .form button,
+  .dashboard-shell .small {
+    min-height: 50px;
+    border-radius: 16px;
+  }
+
+  .assignment-search-top .small,
+  .assignment-inline-form button,
+  .assignment-view-btn,
+  .assignment-assign-btn {
+    width: 100%;
+  }
+
+  .inventory-pager,
+  .dashboard-shell .inventory-pager {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .inventory-pager button,
+  .dashboard-shell .inventory-pager .outline {
+    width: 100%;
+  }
+
+  .employee-modal {
+    padding: 10px;
+  }
+
+  .employee-modal-hero {
+    padding: 10px;
+  }
+
+  .employee-modal-headcopy h3 {
+    font-size: 26px;
+  }
+
+  .employee-modal-photo {
+    width: 84px;
+    height: 84px;
+  }
+
+  .replacement-form,
+  .employee-field-grid,
+  .cause-grid,
+  .employee-modal-meta,
+  .employee-modal-stats,
+  .employee-modal-detail-grid,
+  .employee-modal-ops-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-admin-cards {
+    max-height: none;
   }
 }
 

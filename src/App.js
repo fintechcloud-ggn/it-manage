@@ -14,14 +14,37 @@ import { MARKETING_HOME_PATH, normalizeMarketingPath } from './pages/marketingPa
 
 
 const DEV_API_PORTS = Array.from({ length: 20 }, (_, index) => 4000 + index);
+const API_BASE_STORAGE_KEY = 'itmanage.apiBase';
+
+function readStoredApiBase() {
+  try {
+    return String(window.sessionStorage.getItem(API_BASE_STORAGE_KEY) || '').trim().replace(/\/$/, '');
+  } catch (_error) {
+    return '';
+  }
+}
+
+function persistApiBase(base) {
+  try {
+    if (!base) {
+      window.sessionStorage.removeItem(API_BASE_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(API_BASE_STORAGE_KEY, base);
+  } catch (_error) {
+    // Ignore storage issues in restricted browser contexts.
+  }
+}
+
 const API_CANDIDATES = (() => {
   const configuredApi = String(process.env.REACT_APP_API || '').trim().replace(/\/$/, '');
+  const storedApi = readStoredApiBase();
   if (process.env.NODE_ENV !== 'development') {
-    return configuredApi ? [configuredApi] : [''];
+    return [storedApi, '', configuredApi].filter((value, index, list) => value || value === '' ? list.indexOf(value) === index : false);
   }
 
   const hostname = window.location.hostname || 'localhost';
-  const candidates = configuredApi ? [configuredApi] : [];
+  const candidates = [storedApi, `http://${hostname}:4000`, configuredApi].filter(Boolean);
   DEV_API_PORTS.forEach((port) => {
     const candidate = `http://${hostname}:${port}`;
     if (!candidates.includes(candidate)) candidates.push(candidate);
@@ -30,23 +53,61 @@ const API_CANDIDATES = (() => {
   return candidates;
 })();
 let activeApiBase = API_CANDIDATES[0] || '';
+let resolvedApiBase = '';
+let apiBaseResolutionPromise = null;
+
+async function resolveApiBase(forceRefresh = false) {
+  if (!forceRefresh && resolvedApiBase) return resolvedApiBase;
+  if (!forceRefresh && apiBaseResolutionPromise) return apiBaseResolutionPromise;
+
+  apiBaseResolutionPromise = (async () => {
+    let lastError = null;
+
+    for (const base of API_CANDIDATES) {
+      try {
+        const response = await fetch(`${base}/api/health`);
+        if (!response.ok) {
+          lastError = new Error(`health_${response.status}`);
+          continue;
+        }
+        activeApiBase = base;
+        resolvedApiBase = base;
+        persistApiBase(base);
+        return base;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error('Unable to resolve API base');
+  })();
+
+  try {
+    return await apiBaseResolutionPromise;
+  } finally {
+    apiBaseResolutionPromise = null;
+  }
+}
 
 async function apiFetch(path, options = {}) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const candidates = [activeApiBase, ...API_CANDIDATES.filter((candidate) => candidate !== activeApiBase)];
-  let lastError = null;
+  const base = await resolveApiBase();
 
-  for (const base of candidates) {
-    try {
-      const response = await fetch(`${base}${normalizedPath}`, options);
-      activeApiBase = base;
-      return response;
-    } catch (error) {
-      lastError = error;
-    }
+  try {
+    const response = await fetch(`${base}${normalizedPath}`, options);
+    activeApiBase = base;
+    resolvedApiBase = base;
+    persistApiBase(base);
+    return response;
+  } catch (error) {
+    const fallbackBase = await resolveApiBase(true);
+    if (fallbackBase === base) throw error;
+    const retryResponse = await fetch(`${fallbackBase}${normalizedPath}`, options);
+    activeApiBase = fallbackBase;
+    resolvedApiBase = fallbackBase;
+    persistApiBase(fallbackBase);
+    return retryResponse;
   }
-
-  throw lastError || new Error('Unable to reach API');
 }
 const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
 const FALLBACK_NAMES_BY_TYPE = {
@@ -93,8 +154,10 @@ function App() {
   ));
   const [assets, setAssets] = useState([]);
   const [users, setUsers] = useState([]);
+  const [quickAssignUsers, setQuickAssignUsers] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLogsLoaded, setAuditLogsLoaded] = useState(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
@@ -201,12 +264,18 @@ function App() {
     if (!token) return;
     fetchAssets();
     fetchUsers();
+    fetchQuickAssignUsers();
     fetchAllocations();
-    fetchAuditLogs();
     fetchStores();
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  useEffect(() => {
+    if (!token || section !== 'activity' || auditLogsLoaded) return;
+    fetchAuditLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, section, auditLogsLoaded]);
 
   useEffect(() => {
     if (authView !== 'landing' || user) return undefined;
@@ -257,6 +326,7 @@ function App() {
     setToken('');
     setUser(null);
     setAuditLogs([]);
+    setAuditLogsLoaded(false);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setAuthView('login');
@@ -288,6 +358,40 @@ function App() {
       });
   }
 
+  function fetchQuickAssignUsers() {
+    apiFetch('/api/users?assignment_options=1', { headers: authHeaders() })
+      .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
+        if (!r.ok) throw new Error(`assignment_options_${r.status}`);
+        return r.json();
+      })
+      .then(setQuickAssignUsers)
+      .catch(async (err) => {
+        if (err.message === 'unauthorized') return;
+        if (err.message === 'assignment_options_404' || err.message === 'assignment_options_500') {
+          try {
+            const fallbackRes = await apiFetch('/api/users', { headers: authHeaders() });
+            if (handleUnauthorized(fallbackRes.status)) return;
+            if (!fallbackRes.ok) throw new Error(`users_${fallbackRes.status}`);
+            const fallbackUsers = await fallbackRes.json();
+            setQuickAssignUsers(
+              fallbackUsers
+                .filter((u) => String(u.role || '').toLowerCase() === 'user')
+                .map((u) => ({
+                  id: u.id,
+                  name: u.name,
+                  label: u.name,
+                }))
+            );
+            return;
+          } catch (fallbackErr) {
+            if (fallbackErr.message === 'unauthorized') return;
+          }
+        }
+        setQuickAssignUsers([]);
+      });
+  }
+
   function fetchAllocations() {
     apiFetch('/api/allocations', { headers: authHeaders() })
       .then((r) => {
@@ -309,10 +413,14 @@ function App() {
         if (!r.ok) throw new Error(`audit_${r.status}`);
         return r.json();
       })
-      .then(setAuditLogs)
+      .then((rows) => {
+        setAuditLogs(rows);
+        setAuditLogsLoaded(true);
+      })
       .catch((err) => {
         if (err.message === 'unauthorized') return;
         setAuditLogs([]);
+        setAuditLogsLoaded(true);
       });
   }
 
@@ -375,6 +483,7 @@ function App() {
     setToken('');
     setUser(null);
     setAuditLogs([]);
+    setAuditLogsLoaded(false);
     setAuthView('landing');
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -1913,9 +2022,15 @@ function App() {
                       value={quickAssignForm.userId}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, userId: e.target.value }))}
                     >
-                      <option value="">{employees.length ? 'Select employee' : 'No employees available'}</option>
-                      {employees.map((u) => (
-                        <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                      <option value="">{quickAssignUsers.length ? 'Select employee' : 'No employees available'}</option>
+                      {quickAssignUsers.map((u) => (
+                        <option
+                          key={`${u.source || 'user'}-${u.external_employee_id || u.id || u.name}`}
+                          value={u.local_user_id || ''}
+                          disabled={!u.is_assignable}
+                        >
+                          {u.label || u.name}
+                        </option>
                       ))}
                     </select>
                     <select
