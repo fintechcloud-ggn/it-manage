@@ -118,6 +118,34 @@ async function init() {
   if (!userPermissionsCol.length) {
     await query('ALTER TABLE users ADD COLUMN permissions_json TEXT NULL AFTER profile_image_url');
   }
+  const userEmployeeCodeCol = await query("SHOW COLUMNS FROM users LIKE 'employee_code'");
+  if (!userEmployeeCodeCol.length) {
+    await query('ALTER TABLE users ADD COLUMN employee_code VARCHAR(120) NULL AFTER password');
+  }
+  const userCompanyCol = await query("SHOW COLUMNS FROM users LIKE 'company'");
+  if (!userCompanyCol.length) {
+    await query('ALTER TABLE users ADD COLUMN company VARCHAR(160) NULL AFTER employee_code');
+  }
+  const userDepartmentCol = await query("SHOW COLUMNS FROM users LIKE 'department'");
+  if (!userDepartmentCol.length) {
+    await query('ALTER TABLE users ADD COLUMN department VARCHAR(160) NULL AFTER company');
+  }
+  const userDesignationCol = await query("SHOW COLUMNS FROM users LIKE 'designation'");
+  if (!userDesignationCol.length) {
+    await query('ALTER TABLE users ADD COLUMN designation VARCHAR(160) NULL AFTER department');
+  }
+  const userLocationCol = await query("SHOW COLUMNS FROM users LIKE 'location'");
+  if (!userLocationCol.length) {
+    await query('ALTER TABLE users ADD COLUMN location VARCHAR(160) NULL AFTER designation');
+  }
+  const userEmploymentTypeCol = await query("SHOW COLUMNS FROM users LIKE 'employment_type'");
+  if (!userEmploymentTypeCol.length) {
+    await query('ALTER TABLE users ADD COLUMN employment_type VARCHAR(100) NULL AFTER location');
+  }
+  const userEmploymentStatusCol = await query("SHOW COLUMNS FROM users LIKE 'employment_status'");
+  if (!userEmploymentStatusCol.length) {
+    await query('ALTER TABLE users ADD COLUMN employment_status VARCHAR(100) NULL AFTER employment_type');
+  }
   const assetVendorCol = await query("SHOW COLUMNS FROM assets LIKE 'vendor'");
   if (!assetVendorCol.length) {
     await query('ALTER TABLE assets ADD COLUMN vendor VARCHAR(180) NULL AFTER store_id');

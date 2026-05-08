@@ -234,6 +234,7 @@ function App() {
   });
   const [selectedAssetType, setSelectedAssetType] = useState('Laptop');
   const [selectedAssetName, setSelectedAssetName] = useState('');
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   const isSuperAdmin = useMemo(
     () => !!user && String(user.email || '').toLowerCase() === 'admin',
@@ -285,15 +286,38 @@ function App() {
   }
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setSessionChecked(true);
+      return;
+    }
+    setSessionChecked(false);
+    apiFetch('/api/users', { headers: authHeaders() })
+      .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
+        if (!r.ok) throw new Error(`session_${r.status}`);
+        return r.json();
+      })
+      .then((rows) => {
+        setUsers(Array.isArray(rows) ? rows : []);
+        setAuthView('app');
+        setSessionChecked(true);
+      })
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setSessionChecked(true);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || !sessionChecked || authView !== 'app') return;
     fetchAssets();
-    fetchUsers();
     fetchQuickAssignUsers();
     fetchAllocations();
     fetchStores();
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, sessionChecked, authView]);
 
   useEffect(() => {
     if (!token || section !== 'activity' || auditLogsLoaded) return;
@@ -390,28 +414,8 @@ function App() {
         return r.json();
       })
       .then(setQuickAssignUsers)
-      .catch(async (err) => {
+      .catch((err) => {
         if (err.message === 'unauthorized') return;
-        if (err.message === 'assignment_options_404' || err.message === 'assignment_options_500') {
-          try {
-            const fallbackRes = await apiFetch('/api/users', { headers: authHeaders() });
-            if (handleUnauthorized(fallbackRes.status)) return;
-            if (!fallbackRes.ok) throw new Error(`users_${fallbackRes.status}`);
-            const fallbackUsers = await fallbackRes.json();
-            setQuickAssignUsers(
-              fallbackUsers
-                .filter((u) => String(u.role || '').toLowerCase() === 'user')
-                .map((u) => ({
-                  id: u.id,
-                  name: u.name,
-                  label: u.name,
-                }))
-            );
-            return;
-          } catch (fallbackErr) {
-            if (fallbackErr.message === 'unauthorized') return;
-          }
-        }
         setQuickAssignUsers([]);
       });
   }
@@ -1201,6 +1205,10 @@ function App() {
   const quickAssignTypeOptions = useMemo(
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [availableAssets]
+  );
+  const employeeDropdownOptions = useMemo(
+    () => quickAssignUsers,
+    [quickAssignUsers]
   );
   const quickAssignAssetOptions = useMemo(() => {
     const q = quickAssignForm.assetSearch.trim().toLowerCase();
@@ -2099,7 +2107,14 @@ function App() {
                 />
                 <select value={assignmentUserFilter} onChange={(e) => setAssignmentUserFilter(e.target.value)}>
                   <option value="all">All Employees</option>
-                  {employees.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  {employeeDropdownOptions.map((u) => (
+                    <option
+                      key={`${u.source || 'employee'}-${u.external_employee_id || u.local_user_id || u.name}`}
+                      value={u.local_user_id}
+                    >
+                      {u.label || u.name}
+                    </option>
+                  ))}
                 </select>
                 <button type="submit" className="small">Search</button>
               </form>
@@ -2114,12 +2129,11 @@ function App() {
                       value={quickAssignForm.userId}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, userId: e.target.value }))}
                     >
-                      <option value="">{quickAssignUsers.length ? 'Select employee' : 'No employees available'}</option>
-                      {quickAssignUsers.map((u) => (
+                      <option value="">{employeeDropdownOptions.length ? 'Select employee' : 'No employees available'}</option>
+                      {employeeDropdownOptions.map((u) => (
                         <option
                           key={`${u.source || 'user'}-${u.external_employee_id || u.id || u.name}`}
                           value={u.local_user_id || ''}
-                          disabled={!u.is_assignable}
                         >
                           {u.label || u.name}
                         </option>

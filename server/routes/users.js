@@ -22,82 +22,245 @@ function pickFirst(columns, candidates) {
   return candidates.find((candidate) => columns.includes(candidate)) || null;
 }
 
-async function getAssignmentOptionRows() {
+function normalizeValue(value) {
+  if (value == null) return '';
+  return String(value).trim();
+}
+
+function buildEmployeeLabel(name, employeeCode) {
+  return employeeCode ? `${name} (${employeeCode})` : name;
+}
+
+async function syncEmployeesFromDb() {
   const [localUserColumns, employeeColumns] = await Promise.all([
     getColumnNames(PRIMARY_DB_NAME, 'users'),
     getColumnNames(EMPLOYEE_DB_NAME, 'employees'),
   ]);
 
+  const selectEmployeeCode = localUserColumns.includes('employee_code') ? 'employee_code' : 'NULL AS employee_code';
   const localUsers = await query(
-    `SELECT id, name, email, role, ${localUserColumns.includes('employee_code') ? 'employee_code' : 'NULL AS employee_code'}
+    `SELECT id, name, email, role, ${selectEmployeeCode}
      FROM users
      WHERE LOWER(role) = 'user'
      ORDER BY name ASC`
   );
 
   if (!employeeColumns.length) {
-    return localUsers.map((userRow) => ({
-      id: userRow.id,
-      local_user_id: userRow.id,
-      name: userRow.name,
-      employee_code: userRow.employee_code || null,
-      label: userRow.employee_code ? `${userRow.name} (${userRow.employee_code})` : userRow.name,
-      is_assignable: true,
-      source: 'local_users',
-    }));
+    return { localUsers, localUserColumns, employeeRows: [] };
   }
 
   const employeeNameColumn = pickFirst(employeeColumns, ['employee_name', 'name', 'full_name']);
-  const employeeCodeColumn = pickFirst(employeeColumns, ['employee_code', 'emp_code', 'employee_id', 'code']);
-
   if (!employeeNameColumn) {
-    return localUsers.map((userRow) => ({
-      id: userRow.id,
-      local_user_id: userRow.id,
-      name: userRow.name,
-      employee_code: userRow.employee_code || null,
-      label: userRow.employee_code ? `${userRow.name} (${userRow.employee_code})` : userRow.name,
-      is_assignable: true,
-      source: 'local_users',
-    }));
+    return { localUsers, localUserColumns, employeeRows: [] };
   }
 
   const employeeIdColumn = pickFirst(employeeColumns, ['id', 'employee_id', 'emp_id']);
+  const employeeCodeColumn = pickFirst(employeeColumns, ['employee_code', 'emp_code', 'employee_id', 'code']);
+  const employeeEmailColumn = pickFirst(employeeColumns, ['email', 'email_id', 'official_email', 'work_email']);
+  const companyColumn = pickFirst(employeeColumns, ['company', 'company_name']);
+  const departmentColumn = pickFirst(employeeColumns, ['department', 'dept']);
+  const designationColumn = pickFirst(employeeColumns, ['designation', 'title', 'job_title']);
+  const locationColumn = pickFirst(employeeColumns, ['location', 'office_location', 'branch']);
+  const employmentTypeColumn = pickFirst(employeeColumns, ['employment_type', 'employee_type', 'type']);
+  const employmentStatusColumn = pickFirst(employeeColumns, ['employment_status', 'status']);
 
   const employeeRows = await query(
     `SELECT
         ${employeeIdColumn ? `\`${employeeIdColumn}\`` : 'NULL'} AS employee_row_id,
         \`${employeeNameColumn}\` AS employee_name,
-        ${employeeCodeColumn ? `\`${employeeCodeColumn}\`` : 'NULL'} AS employee_code
+        ${employeeCodeColumn ? `\`${employeeCodeColumn}\`` : 'NULL'} AS employee_code,
+        ${employeeEmailColumn ? `\`${employeeEmailColumn}\`` : 'NULL'} AS employee_email,
+        ${companyColumn ? `\`${companyColumn}\`` : 'NULL'} AS company,
+        ${departmentColumn ? `\`${departmentColumn}\`` : 'NULL'} AS department,
+        ${designationColumn ? `\`${designationColumn}\`` : 'NULL'} AS designation,
+        ${locationColumn ? `\`${locationColumn}\`` : 'NULL'} AS location,
+        ${employmentTypeColumn ? `\`${employmentTypeColumn}\`` : 'NULL'} AS employment_type,
+        ${employmentStatusColumn ? `\`${employmentStatusColumn}\`` : 'NULL'} AS employment_status
      FROM \`${EMPLOYEE_DB_NAME}\`.\`employees\`
      WHERE TRIM(COALESCE(\`${employeeNameColumn}\`, '')) <> ''
      ORDER BY \`${employeeNameColumn}\` ASC`
   );
 
+  const usersByCode = new Map();
+  const usersByName = new Map();
+  const usersByEmail = new Map();
+  localUsers.forEach((userRow) => {
+    const codeKey = normalizeValue(userRow.employee_code).toLowerCase();
+    const nameKey = normalizeValue(userRow.name).toLowerCase();
+    const emailKey = normalizeValue(userRow.email).toLowerCase();
+    if (codeKey && !usersByCode.has(codeKey)) usersByCode.set(codeKey, userRow);
+    if (nameKey && !usersByName.has(nameKey)) usersByName.set(nameKey, userRow);
+    if (emailKey && !usersByEmail.has(emailKey)) usersByEmail.set(emailKey, userRow);
+  });
+
+  const insertPasswordHash = bcrypt.hashSync('password', 8);
+  const syncedUsers = [...localUsers];
+
+  for (const employeeRow of employeeRows) {
+    const employeeName = normalizeValue(employeeRow.employee_name);
+    if (!employeeName) continue;
+
+    const employeeCode = normalizeValue(employeeRow.employee_code);
+    const employeeEmail = normalizeValue(employeeRow.employee_email);
+    const codeKey = employeeCode.toLowerCase();
+    const nameKey = employeeName.toLowerCase();
+    const emailKey = employeeEmail.toLowerCase();
+
+    let matchedUser =
+      (codeKey && usersByCode.get(codeKey)) ||
+      (emailKey && usersByEmail.get(emailKey)) ||
+      usersByName.get(nameKey) ||
+      null;
+
+    const nextEmail = employeeEmail || `${(employeeCode || `employee-${employeeRow.employee_row_id || employeeName}`).toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '')}@employee-db.local`;
+
+    if (matchedUser) {
+      const updates = [];
+      const params = [];
+
+      updates.push('name = ?');
+      params.push(employeeName);
+
+      if (localUserColumns.includes('employee_code')) {
+        updates.push('employee_code = ?');
+        params.push(employeeCode || null);
+      }
+      if (localUserColumns.includes('company')) {
+        updates.push('company = ?');
+        params.push(normalizeValue(employeeRow.company) || null);
+      }
+      if (localUserColumns.includes('department')) {
+        updates.push('department = ?');
+        params.push(normalizeValue(employeeRow.department) || null);
+      }
+      if (localUserColumns.includes('designation')) {
+        updates.push('designation = ?');
+        params.push(normalizeValue(employeeRow.designation) || null);
+      }
+      if (localUserColumns.includes('location')) {
+        updates.push('location = ?');
+        params.push(normalizeValue(employeeRow.location) || null);
+      }
+      if (localUserColumns.includes('employment_type')) {
+        updates.push('employment_type = ?');
+        params.push(normalizeValue(employeeRow.employment_type) || null);
+      }
+      if (localUserColumns.includes('employment_status')) {
+        updates.push('employment_status = ?');
+        params.push(normalizeValue(employeeRow.employment_status) || null);
+      }
+
+      if (employeeEmail && normalizeValue(matchedUser.email) !== employeeEmail) {
+        const conflictingEmailUser = usersByEmail.get(emailKey);
+        if (!conflictingEmailUser || conflictingEmailUser.id === matchedUser.id) {
+          updates.push('email = ?');
+          params.push(employeeEmail);
+        }
+      }
+
+      params.push(matchedUser.id);
+      await query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+
+      matchedUser = {
+        ...matchedUser,
+        name: employeeName,
+        email: employeeEmail || matchedUser.email,
+        employee_code: employeeCode || matchedUser.employee_code || null,
+      };
+    } else {
+      const safeEmail = usersByEmail.has(nextEmail.toLowerCase())
+        ? `employee.${employeeRow.employee_row_id || Date.now()}@employee-db.local`
+        : nextEmail;
+
+      const insertColumns = ['name', 'email', 'role', 'password'];
+      const insertValues = [employeeName, safeEmail, 'user', insertPasswordHash];
+
+      if (localUserColumns.includes('employee_code')) {
+        insertColumns.push('employee_code');
+        insertValues.push(employeeCode || null);
+      }
+      if (localUserColumns.includes('company')) {
+        insertColumns.push('company');
+        insertValues.push(normalizeValue(employeeRow.company) || null);
+      }
+      if (localUserColumns.includes('department')) {
+        insertColumns.push('department');
+        insertValues.push(normalizeValue(employeeRow.department) || null);
+      }
+      if (localUserColumns.includes('designation')) {
+        insertColumns.push('designation');
+        insertValues.push(normalizeValue(employeeRow.designation) || null);
+      }
+      if (localUserColumns.includes('location')) {
+        insertColumns.push('location');
+        insertValues.push(normalizeValue(employeeRow.location) || null);
+      }
+      if (localUserColumns.includes('employment_type')) {
+        insertColumns.push('employment_type');
+        insertValues.push(normalizeValue(employeeRow.employment_type) || null);
+      }
+      if (localUserColumns.includes('employment_status')) {
+        insertColumns.push('employment_status');
+        insertValues.push(normalizeValue(employeeRow.employment_status) || null);
+      }
+
+      const placeholders = insertColumns.map(() => '?').join(', ');
+      const result = await query(
+        `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders})`,
+        insertValues
+      );
+
+      matchedUser = {
+        id: result.insertId,
+        name: employeeName,
+        email: safeEmail,
+        role: 'user',
+        employee_code: employeeCode || null,
+      };
+      syncedUsers.push(matchedUser);
+    }
+
+    const syncedCodeKey = normalizeValue(matchedUser.employee_code).toLowerCase();
+    const syncedNameKey = normalizeValue(matchedUser.name).toLowerCase();
+    const syncedEmailKey = normalizeValue(matchedUser.email).toLowerCase();
+    if (syncedCodeKey) usersByCode.set(syncedCodeKey, matchedUser);
+    if (syncedNameKey) usersByName.set(syncedNameKey, matchedUser);
+    if (syncedEmailKey) usersByEmail.set(syncedEmailKey, matchedUser);
+  }
+
+  return { localUsers: syncedUsers, localUserColumns, employeeRows };
+}
+
+async function getAssignmentOptionRows() {
+  const { localUsers, employeeRows } = await syncEmployeesFromDb();
+
+  if (!employeeRows.length) {
+    return [];
+  }
+
   const byCode = new Map();
   const byName = new Map();
   localUsers.forEach((userRow) => {
-    const codeKey = String(userRow.employee_code || '').trim().toLowerCase();
-    const nameKey = String(userRow.name || '').trim().toLowerCase();
+    const codeKey = normalizeValue(userRow.employee_code).toLowerCase();
+    const nameKey = normalizeValue(userRow.name).toLowerCase();
     if (codeKey && !byCode.has(codeKey)) byCode.set(codeKey, userRow);
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, userRow);
   });
 
   return employeeRows.map((employeeRow, index) => {
-    const codeKey = String(employeeRow.employee_code || '').trim().toLowerCase();
-    const nameKey = String(employeeRow.employee_name || '').trim().toLowerCase();
+    const employeeName = normalizeValue(employeeRow.employee_name);
+    const employeeCode = normalizeValue(employeeRow.employee_code);
+    const codeKey = employeeCode.toLowerCase();
+    const nameKey = employeeName.toLowerCase();
     const matchedUser = (codeKey && byCode.get(codeKey)) || byName.get(nameKey) || null;
-    const labelBase = employeeRow.employee_code
-      ? `${employeeRow.employee_name} (${employeeRow.employee_code})`
-      : employeeRow.employee_name;
 
     return {
       id: matchedUser?.id || '',
       local_user_id: matchedUser?.id || null,
       external_employee_id: employeeRow.employee_row_id || index + 1,
-      name: employeeRow.employee_name || matchedUser.name,
-      employee_code: employeeRow.employee_code || matchedUser.employee_code || null,
-      label: matchedUser ? labelBase : `${labelBase} (not synced)`,
+      name: employeeName || matchedUser?.name || '',
+      employee_code: employeeCode || matchedUser?.employee_code || null,
+      label: buildEmployeeLabel(employeeName || matchedUser?.name || '', employeeCode || matchedUser?.employee_code),
       is_assignable: !!matchedUser,
       source: 'employee_db',
     };
@@ -133,6 +296,8 @@ router.get('/', requireAuth, async (req, res) => {
       const rows = await getAssignmentOptionRows();
       return res.json(rows);
     }
+
+    await syncEmployeesFromDb();
 
     const rows = await query(
       'SELECT id, name, email, role, profile_image_url, permissions_json FROM users ORDER BY id DESC'

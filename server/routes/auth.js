@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query } = require('../db');
-const { SECRET, parsePermissions, isSuperAdmin } = require('../middleware/auth');
+const { SECRET, parsePermissions, isSuperAdmin, requireAuth } = require('../middleware/auth');
 
 router.post('/login', async (req, res) => {
   try {
@@ -34,6 +34,21 @@ router.post('/login', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+router.get('/session', requireAuth, async (req, res) => {
+  const user = req.user;
+  res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      profile_image_url: user.profile_image_url || null,
+      permissions: parsePermissions(user.permissions_json),
+      is_super_admin: isSuperAdmin(user)
+    }
+  });
 });
 
 module.exports = router;
