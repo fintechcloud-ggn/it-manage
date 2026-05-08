@@ -992,6 +992,32 @@ function App() {
       auditCount: recentAuditLogs.length
     };
   }, [recentActivity, recentAuditLogs]);
+  const activityLogRows = useMemo(() => {
+    const auditRows = recentAuditLogs.map((log) => {
+      const timeMs = log.event_at_ms ? Number(log.event_at_ms) : new Date(log.event_at || '').getTime();
+      return {
+        key: `audit-${log.id}`,
+        timeMs: Number.isFinite(timeMs) ? timeMs : 0,
+        timeLabel: log.event_at_ms ? new Date(Number(log.event_at_ms)).toLocaleString() : (log.event_at ? new Date(log.event_at).toLocaleString() : '-'),
+        actor: `${log.actor_name || 'System'}${log.actor_role ? ` (${log.actor_role})` : ''}`,
+        action: log.action || 'AUDIT_EVENT',
+        entity: `${log.entity_type || 'Audit'}${log.entity_id ? ` #${log.entity_id}` : ''}`,
+        details: log.details || '-'
+      };
+    });
+    const timelineRows = recentActivity.map((event) => ({
+      key: `timeline-${event.id}`,
+      timeMs: event.timestampMs || 0,
+      timeLabel: event.timestampMs ? new Date(event.timestampMs).toLocaleString() : '-',
+      actor: event.userName || 'System',
+      action: event.action === 'Allocated' ? 'ALLOCATE_ASSET' : 'RETURN_ASSET',
+      entity: `Allocation #${event.allocationId}`,
+      details: `${event.assetName} ${event.action.toLowerCase()} for ${event.userName}`
+    }));
+    return [...auditRows, ...timelineRows]
+      .sort((a, b) => b.timeMs - a.timeMs)
+      .slice(0, 60);
+  }, [recentAuditLogs, recentActivity]);
 
   function formatAuditAction(action) {
     return (action || '').replaceAll('_', ' ').trim() || 'UNKNOWN';
@@ -2871,7 +2897,8 @@ function App() {
               </div>
             </section>
 
-            <section className="activity-grid">
+            <section className="activity-grid activity-grid-single">
+              {/*
               <section className="panel activity-panel timeline-panel">
                 <div className="panel-head"><h3>Timeline</h3><span>Latest assignment events</span></div>
                 <ul className="timeline">
@@ -2886,9 +2913,10 @@ function App() {
                   ))}
                 </ul>
               </section>
+              */}
 
               <section className="panel activity-panel">
-                <div className="panel-head"><h3>Audit Log</h3><span>Persisted with timestamp</span></div>
+                <div className="panel-head"><h3>Activity Log</h3></div>
                 <div className="table-wrap audit-table-wrap">
                   <table>
                     <thead>
@@ -2901,20 +2929,20 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {recentAuditLogs.length === 0 && (
-                        <tr><td colSpan={5}>No audit entries yet.</td></tr>
+                      {activityLogRows.length === 0 && (
+                        <tr><td colSpan={5}>No activity entries yet.</td></tr>
                       )}
-                      {recentAuditLogs.map((log) => (
-                        <tr key={log.id}>
-                          <td>{log.event_at_ms ? new Date(Number(log.event_at_ms)).toLocaleString() : (log.event_at ? new Date(log.event_at).toLocaleString() : '-')}</td>
-                          <td>{log.actor_name || 'System'}{log.actor_role ? ` (${log.actor_role})` : ''}</td>
+                      {activityLogRows.map((log) => (
+                        <tr key={log.key}>
+                          <td>{log.timeLabel}</td>
+                          <td>{log.actor}</td>
                           <td>
                             <span className={`activity-action-badge action-${(log.action || '').toLowerCase()}`}>
                               {formatAuditAction(log.action)}
                             </span>
                           </td>
-                          <td>{log.entity_type}{log.entity_id ? ` #${log.entity_id}` : ''}</td>
-                          <td>{log.details || '-'}</td>
+                          <td>{log.entity}</td>
+                          <td>{log.details}</td>
                         </tr>
                       ))}
                     </tbody>

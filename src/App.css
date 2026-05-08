@@ -2299,6 +2299,13 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 250, 253, 0.96) 100%);
   box-shadow: 0 22px 60px rgba(94, 118, 148, 0.16);
   color: #1d2d3f;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dashboard-shell .sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-shell .sidebar.collapsed {
@@ -3871,6 +3878,10 @@ body {
   gap: 10px;
 }
 
+.activity-grid-single {
+  grid-template-columns: 1fr;
+}
+
 .activity-panel {
   min-height: 0;
   overflow: hidden;
@@ -3883,7 +3894,7 @@ body {
 }
 
 .audit-table-wrap {
-  max-height: 460px;
+  max-height: 560px;
 }
 
 .audit-table-wrap td,
