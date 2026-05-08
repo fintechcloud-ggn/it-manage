@@ -348,9 +348,46 @@ p {
   width: 100%;
 }
 
+.auth-form-modern .input-shell input::-ms-clear,
+.auth-form-modern .input-shell input::-ms-reveal {
+  display: none;
+}
+
 .auth-form-modern .input-shell input:focus {
   outline: none;
   box-shadow: none;
+}
+
+.auth-form-modern .auth-visibility-toggle {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: #758395;
+  box-shadow: none;
+}
+
+.auth-form-modern .auth-visibility-toggle:hover,
+.auth-form-modern .auth-visibility-toggle:focus-visible {
+  background: #eef6fd;
+  color: #30506d;
+  outline: none;
+}
+
+.auth-form-modern .auth-visibility-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .auth-form-modern .input-shell input:-webkit-autofill,

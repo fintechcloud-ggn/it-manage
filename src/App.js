@@ -95,6 +95,25 @@ async function apiFetch(path, options = {}) {
     const response = await fetch(`${base}${normalizedPath}`, options);
     resolvedApiBase = base;
     persistApiBase(base);
+    if (
+      process.env.NODE_ENV === 'development' &&
+      normalizedPath === '/api/auth/login' &&
+      response.status >= 500
+    ) {
+      for (const fallbackBase of API_CANDIDATES) {
+        if (fallbackBase === base) continue;
+        try {
+          const retryResponse = await fetch(`${fallbackBase}${normalizedPath}`, options);
+          if (retryResponse.status < 500) {
+            resolvedApiBase = fallbackBase;
+            persistApiBase(fallbackBase);
+            return retryResponse;
+          }
+        } catch (_retryError) {
+          // Try the next development API candidate.
+        }
+      }
+    }
     return response;
   } catch (error) {
     const fallbackBase = await resolveApiBase(true);
@@ -159,6 +178,8 @@ function App() {
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showLoginUsername, setShowLoginUsername] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
@@ -1547,14 +1568,54 @@ function App() {
                     </button>
                     <h3 id="login-title">Hello!</h3>
                     <p>Sign in to get started.</p>
-                    <form onSubmit={login} className="form auth-form-modern">
+                    <form onSubmit={login} className="form auth-form-modern" autoComplete="off">
                       <div className="input-shell">
                         <span>U</span>
-                        <input id="email" name="email" type="text" defaultValue="admin" placeholder="Username" required />
+                        <input
+                          id="email"
+                          name="email"
+                          type={showLoginUsername ? 'text' : 'password'}
+                          placeholder="Username"
+                          autoComplete="off"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="auth-visibility-toggle"
+                          aria-label={showLoginUsername ? 'Hide username' : 'Show username'}
+                          aria-pressed={showLoginUsername}
+                          onClick={() => setShowLoginUsername((v) => !v)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                            <circle cx="12" cy="12" r="3" />
+                            {!showLoginUsername && <path d="M4 4l16 16" />}
+                          </svg>
+                        </button>
                       </div>
                       <div className="input-shell">
                         <span>P</span>
-                        <input id="password" name="password" type="password" defaultValue="admin" placeholder="Password" required />
+                        <input
+                          id="password"
+                          name="password"
+                          type={showLoginPassword ? 'text' : 'password'}
+                          placeholder="Password"
+                          autoComplete="new-password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          className="auth-visibility-toggle"
+                          aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                          aria-pressed={showLoginPassword}
+                          onClick={() => setShowLoginPassword((v) => !v)}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                            <circle cx="12" cy="12" r="3" />
+                            {!showLoginPassword && <path d="M4 4l16 16" />}
+                          </svg>
+                        </button>
                       </div>
                       <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
                     </form>

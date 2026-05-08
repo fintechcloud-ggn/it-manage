@@ -12,6 +12,7 @@ const allocationsRoute = require('./routes/allocations');
 const brandsRoute = require('./routes/brands');
 const auditLogsRoute = require('./routes/audit-logs');
 const { attachUser } = require('./middleware/auth');
+const { query } = require('./db');
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -28,7 +29,14 @@ app.use('/api/audit-logs', auditLogsRoute);
 const authRoute = require('./routes/auth');
 app.use('/api/auth', authRoute);
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', async (req, res) => {
+  try {
+    await query('SELECT 1');
+    res.json({ status: 'ok' });
+  } catch (err) {
+    res.status(503).json({ status: 'error', error: 'Database unavailable' });
+  }
+});
 
 async function start() {
   try {
