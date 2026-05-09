@@ -6,7 +6,7 @@ const { requireAuth, requireRole, parsePermissions, isSuperAdmin } = require('..
 const { writeAuditLog } = require('../audit');
 
 const PRIMARY_DB_NAME = process.env.DB_NAME || 'IT_admin';
-const EMPLOYEE_DB_NAME = process.env.EMPLOYEE_DB_NAME || 'employee_db';
+const ASSIGNMENT_EMPLOYEE_DB_NAME = PRIMARY_DB_NAME;
 
 async function getColumnNames(schemaName, tableName) {
   const rows = await query(
@@ -19,7 +19,14 @@ async function getColumnNames(schemaName, tableName) {
 }
 
 function pickFirst(columns, candidates) {
-  return candidates.find((candidate) => columns.includes(candidate)) || null;
+  const normalizedColumns = new Map(
+    columns.map((column) => [String(column).trim().toLowerCase(), column])
+  );
+  for (const candidate of candidates) {
+    const matched = normalizedColumns.get(String(candidate).trim().toLowerCase());
+    if (matched) return matched;
+  }
+  return null;
 }
 
 function normalizeValue(value) {
@@ -31,10 +38,10 @@ function buildEmployeeLabel(name, employeeCode) {
   return employeeCode ? `${name} (${employeeCode})` : name;
 }
 
-async function syncEmployeesFromDb() {
+async function getAssignmentEmployeeRows() {
   const [localUserColumns, employeeColumns] = await Promise.all([
     getColumnNames(PRIMARY_DB_NAME, 'users'),
-    getColumnNames(EMPLOYEE_DB_NAME, 'employees'),
+    getColumnNames(ASSIGNMENT_EMPLOYEE_DB_NAME, 'employees'),
   ]);
 
   const selectEmployeeCode = localUserColumns.includes('employee_code') ? 'employee_code' : 'NULL AS employee_code';
@@ -46,17 +53,17 @@ async function syncEmployeesFromDb() {
   );
 
   if (!employeeColumns.length) {
-    return { localUsers, localUserColumns, employeeRows: [] };
+    return { localUsers, employeeRows: [] };
   }
 
-  const employeeNameColumn = pickFirst(employeeColumns, ['employee_name', 'name', 'full_name']);
+  const employeeNameColumn = pickFirst(employeeColumns, ['employee_name', 'employee_name_', 'name', 'full_name', 'employee']);
   if (!employeeNameColumn) {
-    return { localUsers, localUserColumns, employeeRows: [] };
+    return { localUsers, employeeRows: [] };
   }
 
-  const employeeIdColumn = pickFirst(employeeColumns, ['id', 'employee_id', 'emp_id']);
-  const employeeCodeColumn = pickFirst(employeeColumns, ['employee_code', 'emp_code', 'employee_id', 'code']);
-  const employeeEmailColumn = pickFirst(employeeColumns, ['email', 'email_id', 'official_email', 'work_email']);
+  const employeeIdColumn = pickFirst(employeeColumns, ['id', 'employee_id', 'emp_id', 'employeeid']);
+  const employeeCodeColumn = pickFirst(employeeColumns, ['employee_code', 'employeecode', 'emp_code', 'empcode', 'employee_id', 'code']);
+  const employeeEmailColumn = pickFirst(employeeColumns, ['email', 'email_id', 'official_email', 'work_email', 'mail']);
   const companyColumn = pickFirst(employeeColumns, ['company', 'company_name']);
   const departmentColumn = pickFirst(employeeColumns, ['department', 'dept']);
   const designationColumn = pickFirst(employeeColumns, ['designation', 'title', 'job_title']);
@@ -76,163 +83,15 @@ async function syncEmployeesFromDb() {
         ${locationColumn ? `\`${locationColumn}\`` : 'NULL'} AS location,
         ${employmentTypeColumn ? `\`${employmentTypeColumn}\`` : 'NULL'} AS employment_type,
         ${employmentStatusColumn ? `\`${employmentStatusColumn}\`` : 'NULL'} AS employment_status
-     FROM \`${EMPLOYEE_DB_NAME}\`.\`employees\`
+     FROM \`${ASSIGNMENT_EMPLOYEE_DB_NAME}\`.\`employees\`
      WHERE TRIM(COALESCE(\`${employeeNameColumn}\`, '')) <> ''
      ORDER BY \`${employeeNameColumn}\` ASC`
   );
-
-  const usersByCode = new Map();
-  const usersByName = new Map();
-  const usersByEmail = new Map();
-  localUsers.forEach((userRow) => {
-    const codeKey = normalizeValue(userRow.employee_code).toLowerCase();
-    const nameKey = normalizeValue(userRow.name).toLowerCase();
-    const emailKey = normalizeValue(userRow.email).toLowerCase();
-    if (codeKey && !usersByCode.has(codeKey)) usersByCode.set(codeKey, userRow);
-    if (nameKey && !usersByName.has(nameKey)) usersByName.set(nameKey, userRow);
-    if (emailKey && !usersByEmail.has(emailKey)) usersByEmail.set(emailKey, userRow);
-  });
-
-  const insertPasswordHash = bcrypt.hashSync('password', 8);
-  const syncedUsers = [...localUsers];
-
-  for (const employeeRow of employeeRows) {
-    const employeeName = normalizeValue(employeeRow.employee_name);
-    if (!employeeName) continue;
-
-    const employeeCode = normalizeValue(employeeRow.employee_code);
-    const employeeEmail = normalizeValue(employeeRow.employee_email);
-    const codeKey = employeeCode.toLowerCase();
-    const nameKey = employeeName.toLowerCase();
-    const emailKey = employeeEmail.toLowerCase();
-
-    let matchedUser =
-      (codeKey && usersByCode.get(codeKey)) ||
-      (emailKey && usersByEmail.get(emailKey)) ||
-      usersByName.get(nameKey) ||
-      null;
-
-    const nextEmail = employeeEmail || `${(employeeCode || `employee-${employeeRow.employee_row_id || employeeName}`).toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '')}@employee-db.local`;
-
-    if (matchedUser) {
-      const updates = [];
-      const params = [];
-
-      updates.push('name = ?');
-      params.push(employeeName);
-
-      if (localUserColumns.includes('employee_code')) {
-        updates.push('employee_code = ?');
-        params.push(employeeCode || null);
-      }
-      if (localUserColumns.includes('company')) {
-        updates.push('company = ?');
-        params.push(normalizeValue(employeeRow.company) || null);
-      }
-      if (localUserColumns.includes('department')) {
-        updates.push('department = ?');
-        params.push(normalizeValue(employeeRow.department) || null);
-      }
-      if (localUserColumns.includes('designation')) {
-        updates.push('designation = ?');
-        params.push(normalizeValue(employeeRow.designation) || null);
-      }
-      if (localUserColumns.includes('location')) {
-        updates.push('location = ?');
-        params.push(normalizeValue(employeeRow.location) || null);
-      }
-      if (localUserColumns.includes('employment_type')) {
-        updates.push('employment_type = ?');
-        params.push(normalizeValue(employeeRow.employment_type) || null);
-      }
-      if (localUserColumns.includes('employment_status')) {
-        updates.push('employment_status = ?');
-        params.push(normalizeValue(employeeRow.employment_status) || null);
-      }
-
-      if (employeeEmail && normalizeValue(matchedUser.email) !== employeeEmail) {
-        const conflictingEmailUser = usersByEmail.get(emailKey);
-        if (!conflictingEmailUser || conflictingEmailUser.id === matchedUser.id) {
-          updates.push('email = ?');
-          params.push(employeeEmail);
-        }
-      }
-
-      params.push(matchedUser.id);
-      await query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
-
-      matchedUser = {
-        ...matchedUser,
-        name: employeeName,
-        email: employeeEmail || matchedUser.email,
-        employee_code: employeeCode || matchedUser.employee_code || null,
-      };
-    } else {
-      const safeEmail = usersByEmail.has(nextEmail.toLowerCase())
-        ? `employee.${employeeRow.employee_row_id || Date.now()}@employee-db.local`
-        : nextEmail;
-
-      const insertColumns = ['name', 'email', 'role', 'password'];
-      const insertValues = [employeeName, safeEmail, 'user', insertPasswordHash];
-
-      if (localUserColumns.includes('employee_code')) {
-        insertColumns.push('employee_code');
-        insertValues.push(employeeCode || null);
-      }
-      if (localUserColumns.includes('company')) {
-        insertColumns.push('company');
-        insertValues.push(normalizeValue(employeeRow.company) || null);
-      }
-      if (localUserColumns.includes('department')) {
-        insertColumns.push('department');
-        insertValues.push(normalizeValue(employeeRow.department) || null);
-      }
-      if (localUserColumns.includes('designation')) {
-        insertColumns.push('designation');
-        insertValues.push(normalizeValue(employeeRow.designation) || null);
-      }
-      if (localUserColumns.includes('location')) {
-        insertColumns.push('location');
-        insertValues.push(normalizeValue(employeeRow.location) || null);
-      }
-      if (localUserColumns.includes('employment_type')) {
-        insertColumns.push('employment_type');
-        insertValues.push(normalizeValue(employeeRow.employment_type) || null);
-      }
-      if (localUserColumns.includes('employment_status')) {
-        insertColumns.push('employment_status');
-        insertValues.push(normalizeValue(employeeRow.employment_status) || null);
-      }
-
-      const placeholders = insertColumns.map(() => '?').join(', ');
-      const result = await query(
-        `INSERT INTO users (${insertColumns.join(', ')}) VALUES (${placeholders})`,
-        insertValues
-      );
-
-      matchedUser = {
-        id: result.insertId,
-        name: employeeName,
-        email: safeEmail,
-        role: 'user',
-        employee_code: employeeCode || null,
-      };
-      syncedUsers.push(matchedUser);
-    }
-
-    const syncedCodeKey = normalizeValue(matchedUser.employee_code).toLowerCase();
-    const syncedNameKey = normalizeValue(matchedUser.name).toLowerCase();
-    const syncedEmailKey = normalizeValue(matchedUser.email).toLowerCase();
-    if (syncedCodeKey) usersByCode.set(syncedCodeKey, matchedUser);
-    if (syncedNameKey) usersByName.set(syncedNameKey, matchedUser);
-    if (syncedEmailKey) usersByEmail.set(syncedEmailKey, matchedUser);
-  }
-
-  return { localUsers: syncedUsers, localUserColumns, employeeRows };
+  return { localUsers, employeeRows };
 }
 
 async function getAssignmentOptionRows() {
-  const { localUsers, employeeRows } = await syncEmployeesFromDb();
+  const { localUsers, employeeRows } = await getAssignmentEmployeeRows();
 
   if (!employeeRows.length) {
     return [];
@@ -262,7 +121,7 @@ async function getAssignmentOptionRows() {
       employee_code: employeeCode || matchedUser?.employee_code || null,
       label: buildEmployeeLabel(employeeName || matchedUser?.name || '', employeeCode || matchedUser?.employee_code),
       is_assignable: !!matchedUser,
-      source: 'employee_db',
+      source: 'it_admin.employees',
     };
   });
 }
@@ -296,8 +155,6 @@ router.get('/', requireAuth, async (req, res) => {
       const rows = await getAssignmentOptionRows();
       return res.json(rows);
     }
-
-    await syncEmployeesFromDb();
 
     const rows = await query(
       'SELECT id, name, email, role, profile_image_url, permissions_json FROM users ORDER BY id DESC'

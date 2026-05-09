@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import LandingPage from './components/LandingPage';
 import nextgenLogo from './assets/nextgen-logo.svg';
@@ -159,6 +159,103 @@ const MARKETING_PAGE_COMPONENTS = {
   '/resources': ResourcesPage,
   '/pricing': PricingPage
 };
+
+function SearchableSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  emptyMessage,
+  className = '',
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const selectedOption = useMemo(
+    () => options.find((option) => String(option.value) === String(value)) || null,
+    [options, value]
+  );
+
+  const filteredOptions = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return options;
+    return options.filter((option) =>
+      `${option.label || ''} ${option.searchText || ''}`.toLowerCase().includes(normalizedQuery)
+    );
+  }, [options, query]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery('');
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    const focusTimer = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 0);
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={rootRef} className={`searchable-select ${className}`.trim()}>
+      <button
+        type="button"
+        className={`searchable-select__trigger${isOpen ? ' is-open' : ''}`}
+        onClick={() => setIsOpen((prev) => !prev)}
+      >
+        <span className={`searchable-select__value${selectedOption ? '' : ' is-placeholder'}`}>
+          {selectedOption?.label || placeholder}
+        </span>
+        <span className="searchable-select__caret" aria-hidden="true">▾</span>
+      </button>
+
+      {isOpen && (
+        <div className="searchable-select__menu">
+          <input
+            ref={searchInputRef}
+            className="searchable-select__search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={searchPlaceholder}
+          />
+          <div className="searchable-select__list">
+            {filteredOptions.length ? (
+              filteredOptions.map((option) => (
+                <button
+                  key={`${option.value}-${option.label}`}
+                  type="button"
+                  className={`searchable-select__option${String(option.value) === String(value) ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))
+            ) : (
+              <div className="searchable-select__empty">{emptyMessage}</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
@@ -1210,6 +1307,29 @@ function App() {
     () => quickAssignUsers,
     [quickAssignUsers]
   );
+  const quickAssignEmployeeOptions = useMemo(
+    () => employeeDropdownOptions
+      .filter((user) => user.local_user_id)
+      .map((user) => ({
+        value: String(user.local_user_id),
+        label: user.label || user.name,
+        searchText: `${user.name || ''} ${user.employee_code || ''}`,
+      })),
+    [employeeDropdownOptions]
+  );
+  const assignmentFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All Employees', searchText: 'all employees' },
+      ...employeeDropdownOptions
+        .filter((user) => user.local_user_id)
+        .map((user) => ({
+          value: String(user.local_user_id),
+          label: user.label || user.name,
+          searchText: `${user.name || ''} ${user.employee_code || ''}`,
+        })),
+    ],
+    [employeeDropdownOptions]
+  );
   const quickAssignAssetOptions = useMemo(() => {
     const q = quickAssignForm.assetSearch.trim().toLowerCase();
     return availableAssets
@@ -1319,8 +1439,10 @@ function App() {
       return;
     }
     setQuickAssignForm((prev) => {
-      if (prev.userId && employees.some((emp) => String(emp.id) === String(prev.userId))) return prev;
-      return { ...prev, userId: String(employees[0].id) };
+      if (!prev.userId) return prev;
+      return employees.some((emp) => String(emp.id) === String(prev.userId))
+        ? prev
+        : { ...prev, userId: '' };
     });
   }, [employees]);
   useEffect(() => {
@@ -2105,17 +2227,14 @@ function App() {
                   value={assignmentSearchDraft}
                   onChange={(e) => setAssignmentSearchDraft(e.target.value)}
                 />
-                <select value={assignmentUserFilter} onChange={(e) => setAssignmentUserFilter(e.target.value)}>
-                  <option value="all">All Employees</option>
-                  {employeeDropdownOptions.map((u) => (
-                    <option
-                      key={`${u.source || 'employee'}-${u.external_employee_id || u.local_user_id || u.name}`}
-                      value={u.local_user_id}
-                    >
-                      {u.label || u.name}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  value={assignmentUserFilter}
+                  onChange={setAssignmentUserFilter}
+                  options={assignmentFilterOptions}
+                  placeholder="All Employees"
+                  searchPlaceholder="Search employee..."
+                  emptyMessage="No employee found"
+                />
                 <button type="submit" className="small">Search</button>
               </form>
 
@@ -2123,22 +2242,14 @@ function App() {
                 <div className="create-box assignment-quick-assign">
                   <h4>Quick Assign Asset</h4>
                   <form id="assignment-quick-form" onSubmit={allocate} className="form assignment-inline-form">
-                    <select
-                      name="user"
-                      required
+                    <SearchableSelect
                       value={quickAssignForm.userId}
-                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, userId: e.target.value }))}
-                    >
-                      <option value="">{employeeDropdownOptions.length ? 'Select employee' : 'No employees available'}</option>
-                      {employeeDropdownOptions.map((u) => (
-                        <option
-                          key={`${u.source || 'user'}-${u.external_employee_id || u.id || u.name}`}
-                          value={u.local_user_id || ''}
-                        >
-                          {u.label || u.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, userId: nextValue }))}
+                      options={quickAssignEmployeeOptions}
+                      placeholder={quickAssignEmployeeOptions.length ? 'Select employee' : 'No employees available'}
+                      searchPlaceholder="Search employee..."
+                      emptyMessage="No employee found"
+                    />
                     <select
                       value={quickAssignForm.assetType}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
