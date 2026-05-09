@@ -2788,8 +2788,8 @@ body {
 }
 
 .dashboard-shell .assignment-stats .donut-card {
-  min-height: 300px;
-  padding: 22px 18px;
+  min-height: 260px;
+  padding: 20px 16px 18px;
   width: 100%;
   max-width: none;
   border-radius: 28px;
@@ -2812,9 +2812,10 @@ body {
 }
 
 .dashboard-shell .assignment-stats .metric-donut {
-  width: 192px;
-  height: 192px;
-  margin-top: 10px;
+  width: min(168px, 100%);
+  aspect-ratio: 1;
+  height: auto;
+  margin-top: 6px;
   background: conic-gradient(from -90deg, #2a3440 0%, #343e4b 60%, #242d37 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
@@ -2832,18 +2833,18 @@ body {
 }
 
 .dashboard-shell .assignment-stats .metric-donut::after {
-  inset: 24px;
-  background: radial-gradient(circle at 30% 20%, #101722 0%, #0c131c 100%);
-  border: 1px solid #1d2936;
+  inset: 22px;
+  background: #ffffff;
+  border: 1px solid #d9e5ef;
 }
 
 .dashboard-shell .assignment-stats .metric-center strong {
-  color: #ecf3fb;
-  font-size: 44px;
+  color: #152235;
+  font-size: 38px;
 }
 
 .dashboard-shell .assignment-stats .metric-center span {
-  color: #91a2b6;
+  color: #63758a;
   font-size: 15px;
   font-weight: 700;
 }
