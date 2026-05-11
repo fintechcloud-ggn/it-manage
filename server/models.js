@@ -150,6 +150,54 @@ async function init() {
   if (!assetVendorCol.length) {
     await query('ALTER TABLE assets ADD COLUMN vendor VARCHAR(180) NULL AFTER store_id');
   }
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS employee_device_inventory (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employee_id INT NULL,
+      source_sheet VARCHAR(120) NOT NULL,
+      employee_code VARCHAR(100) NOT NULL,
+      employee_name VARCHAR(255) NOT NULL,
+      doj_raw VARCHAR(40) NULL,
+      personal_mobile_no VARCHAR(30) NULL,
+      laptop_make VARCHAR(160) NULL,
+      laptop_product_no VARCHAR(160) NULL,
+      laptop_serial_no VARCHAR(180) NULL,
+      mobile_handset VARCHAR(160) NULL,
+      remarks VARCHAR(255) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_employee_device_row (source_sheet, employee_code, employee_name, laptop_serial_no),
+      INDEX idx_employee_device_code (employee_code),
+      INDEX idx_employee_device_employee_id (employee_id),
+      CONSTRAINT fk_employee_device_employee
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB
+  `);
+
+  await query(`
+    CREATE OR REPLACE VIEW employee_device_directory AS
+    SELECT
+      d.id,
+      d.employee_id,
+      d.source_sheet,
+      d.employee_code,
+      d.employee_name,
+      d.doj_raw,
+      d.personal_mobile_no,
+      d.laptop_make,
+      d.laptop_product_no,
+      d.laptop_serial_no,
+      d.mobile_handset,
+      d.remarks,
+      d.created_at,
+      d.updated_at,
+      e.employee_name AS master_employee_name,
+      e.company AS employee_company
+    FROM employee_device_inventory d
+    LEFT JOIN employees e
+      ON e.id = d.employee_id
+  `);
 }
 
 async function seedSample() {

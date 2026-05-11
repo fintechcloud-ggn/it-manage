@@ -257,6 +257,16 @@ function SearchableSelect({
   );
 }
 
+function getNameInitials(name) {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!parts.length) return 'U';
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
@@ -331,6 +341,7 @@ function App() {
   });
   const [selectedAssetType, setSelectedAssetType] = useState('Laptop');
   const [selectedAssetName, setSelectedAssetName] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const isSuperAdmin = useMemo(
@@ -698,13 +709,17 @@ function App() {
 
   async function createAsset(e) {
     e.preventDefault();
-    const name = e.target.name.value;
-    const type = e.target.type.value;
+    const name = selectedAssetName.trim();
+    const type = selectedAssetType;
     const serial = e.target.serial.value;
     const vendor = e.target.vendor.value;
     const notes = e.target.notes.value;
-    const brand_id = e.target.brand_id.value ? Number(e.target.brand_id.value) : null;
-    const model_id = e.target.model_id.value ? Number(e.target.model_id.value) : null;
+    const brand_id = selectedBrandId ? Number(selectedBrandId) : null;
+    const model_id = selectedModelId ? Number(selectedModelId) : null;
+    if (!name) {
+      setMessage('Select asset name.');
+      return;
+    }
     const res = await apiFetch('/api/assets', {
       method: 'POST',
       headers: authHeaders(),
@@ -733,6 +748,7 @@ function App() {
       setSelectedBrandId('');
       setSelectedAssetType('Laptop');
       setSelectedAssetName('');
+      setSelectedModelId('');
     }
   }
 
@@ -1292,8 +1308,14 @@ function App() {
     if (!existsForType) {
       setSelectedBrandId('');
       setSelectedAssetName('');
+      setSelectedModelId('');
     }
   }, [brandsBySelectedType, selectedBrandId]);
+  useEffect(() => {
+    setSelectedModelId((prev) => (
+      prev && modelOptionsByType.some((model) => String(model.id) === String(prev)) ? prev : ''
+    ));
+  }, [modelOptionsByType]);
   const availableAssets = useMemo(() => assets.filter((a) => a.status === 'available'), [assets]);
   const employees = useMemo(() => {
     const nonAdmins = users.filter((u) => u.role !== 'admin');
@@ -1316,6 +1338,22 @@ function App() {
         searchText: `${user.name || ''} ${user.employee_code || ''}`,
       })),
     [employeeDropdownOptions]
+  );
+  const assetNameDropdownOptions = useMemo(
+    () => assetNameOptions.map((name) => ({
+      value: name,
+      label: name,
+      searchText: name,
+    })),
+    [assetNameOptions]
+  );
+  const modelDropdownOptions = useMemo(
+    () => modelOptionsByType.map((model) => ({
+      value: String(model.id),
+      label: model.name,
+      searchText: `${model.name || ''} ${model.category || ''}`,
+    })),
+    [modelOptionsByType]
   );
   const assignmentFilterOptions = useMemo(
     () => [
@@ -2053,6 +2091,7 @@ function App() {
                         setSelectedAssetType(e.target.value);
                         setSelectedBrandId('');
                         setSelectedAssetName('');
+                        setSelectedModelId('');
                       }}
                       required
                     >
@@ -2069,6 +2108,7 @@ function App() {
                       onChange={(e) => {
                         setSelectedBrandId(e.target.value);
                         setSelectedAssetName('');
+                        setSelectedModelId('');
                       }}
                     >
                       <option value="">{`Select ${selectedAssetType} brand`}</option>
@@ -2079,26 +2119,25 @@ function App() {
                   </label>
                   <label className="field">
                     <span>Asset Name</span>
-                    <select
-                      name="name"
+                    <SearchableSelect
                       value={selectedAssetName}
-                      onChange={(e) => setSelectedAssetName(e.target.value)}
-                      required
-                    >
-                      <option value="">Select asset name</option>
-                      {assetNameOptions.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
+                      onChange={setSelectedAssetName}
+                      options={assetNameDropdownOptions}
+                      placeholder="Select asset name"
+                      searchPlaceholder="Search asset name..."
+                      emptyMessage="No asset name found"
+                    />
                   </label>
                   <label className="field">
                     <span>Model</span>
-                    <select name="model_id" key={`${selectedAssetType}-${selectedBrandId || 'all'}`}>
-                      <option value="">{`Select ${selectedAssetType} model`}</option>
-                      {modelOptionsByType.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      value={selectedModelId}
+                      onChange={setSelectedModelId}
+                      options={modelDropdownOptions}
+                      placeholder={`Select ${selectedAssetType} model`}
+                      searchPlaceholder={`Search ${selectedAssetType.toLowerCase()} model...`}
+                      emptyMessage="No model found"
+                    />
                   </label>
                   <label className="field">
                     <span>Serial Number</span>
@@ -2666,11 +2705,9 @@ function App() {
           <div className="employee-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="employee-view-title" onClick={() => setSelectedEmployeeId(null)}>
             <section className="employee-modal" onClick={(e) => e.stopPropagation()}>
               <header className="employee-modal-hero">
-                <img
-                  className="employee-modal-photo"
-                  src={selectedEmployee.profile_image_url || `https://i.pravatar.cc/180?img=${(selectedEmployee.id % 70) + 1}`}
-                  alt={`${selectedEmployee.name} profile`}
-                />
+                <div className="employee-modal-photo" aria-hidden="true">
+                  {getNameInitials(selectedEmployee.name)}
+                </div>
                 <div className="employee-modal-headcopy">
                   <div className="employee-modal-title-row">
                     <h3 id="employee-view-title">{selectedEmployee.name}</h3>
