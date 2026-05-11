@@ -104,8 +104,10 @@ html {
 }
 
 .lp-logo-image {
-    width: clamp(160px, 17vw, 260px);
-    height: auto;
+    width: auto;
+    height: clamp(54px, 6vw, 78px);
+    max-width: 220px;
+    object-fit: contain;
     display: block;
 }
 
@@ -1042,6 +1044,7 @@ button {
 
 .f-brand .lp-logo-image {
     width: clamp(180px, 21vw, 300px);
+    height: auto;
 }
 
 .f-links {
@@ -1160,11 +1163,13 @@ button {
     }
 
     .lp-logo-image {
-        width: 160px;
+        height: 54px;
+        max-width: 160px;
     }
 
     .f-brand .lp-logo-image {
         width: 190px;
+        height: auto;
     }
 
     .lp-page-shell,

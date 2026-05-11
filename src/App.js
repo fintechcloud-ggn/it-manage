@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import LandingPage from './components/LandingPage';
-import nextgenLogo from './assets/nextgen-logo.svg';
+import nextgenLogo from './assets/image.png';
 import AssetTrackingPage from './pages/AssetTrackingPage';
 import EnterprisePage from './pages/EnterprisePage';
 import GlobalFleetPage from './pages/GlobalFleetPage';
@@ -1331,16 +1331,18 @@ function App() {
     [employeeDropdownOptions]
   );
   const quickAssignAssetOptions = useMemo(() => {
-    const q = quickAssignForm.assetSearch.trim().toLowerCase();
     return availableAssets
       .filter((asset) => quickAssignForm.assetType === 'all' || (asset.type || '') === quickAssignForm.assetType)
-      .filter((asset) => {
-        if (!q) return true;
-        const haystack = `${asset.name || ''} ${asset.serial || ''} ${asset.type || ''} ${asset.brand_name || ''} ${asset.model_name || ''}`;
-        return haystack.toLowerCase().includes(q);
-      })
       .sort((a, b) => (a.name || '').localeCompare(b.name || '') || (a.serial || '').localeCompare(b.serial || ''));
-  }, [availableAssets, quickAssignForm.assetSearch, quickAssignForm.assetType]);
+  }, [availableAssets, quickAssignForm.assetType]);
+  const quickAssignAssetSelectOptions = useMemo(
+    () => quickAssignAssetOptions.map((asset) => ({
+      value: String(asset.id),
+      label: `${asset.name || 'Asset'} (${asset.serial || '-'})`,
+      searchText: `${asset.name || ''} ${asset.serial || ''} ${asset.type || ''} ${asset.brand_name || ''} ${asset.model_name || ''}`,
+    })),
+    [quickAssignAssetOptions]
+  );
   const managedAdmins = useMemo(
     () => users.filter((u) => (u.role || '').toLowerCase() === 'admin' && !u.is_super_admin),
     [users]
@@ -2259,29 +2261,21 @@ function App() {
                         <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
-                    <input
-                      value={quickAssignForm.assetSearch}
-                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetSearch: e.target.value }))}
-                      placeholder="Search available asset by name, serial, brand..."
-                    />
-                    <select
-                      name="asset"
-                      required
+                    <SearchableSelect
                       value={quickAssignForm.assetId}
-                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetId: e.target.value }))}
-                    >
-                      <option value="">{quickAssignAssetOptions.length ? 'Select available asset' : 'No matching available asset'}</option>
-                      {quickAssignAssetOptions.map((a) => (
-                        <option key={a.id} value={a.id}>{a.name} ({a.serial || '-'})</option>
-                      ))}
-                    </select>
+                      onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
+                      options={quickAssignAssetSelectOptions}
+                      placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
+                      searchPlaceholder="Search asset by name, serial, brand..."
+                      emptyMessage="No asset found"
+                    />
                     <input
                       name="notes"
                       value={quickAssignForm.notes}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
                       placeholder="Reason, team, project, ticket..."
                     />
-                    <button type="submit" disabled={!quickAssignForm.userId}>Assign Asset</button>
+                    <button type="submit" disabled={!quickAssignForm.userId || !quickAssignForm.assetId}>Assign Asset</button>
                   </form>
                   <p className="assignment-inline-meta">
                     {quickAssignAssetOptions.length} matching available assets

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './LandingPage.css';
-import nextgenLogo from '../assets/nextgen-logo.svg';
+import nextgenLogo from '../assets/image.png';
 import {
     HEADER_NAV_ITEMS,
     MARKETING_HOME_PATH,
