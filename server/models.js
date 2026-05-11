@@ -28,6 +28,8 @@ async function init() {
       name VARCHAR(120) NOT NULL,
       email VARCHAR(160) NOT NULL UNIQUE,
       role VARCHAR(30) NOT NULL DEFAULT 'user',
+      domain_name VARCHAR(160) NULL,
+      employee_code_prefix VARCHAR(50) NULL,
       profile_image_url VARCHAR(500) NULL,
       permissions_json TEXT NULL,
       password VARCHAR(255) NOT NULL,
@@ -49,6 +51,7 @@ async function init() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(180) NOT NULL,
       type VARCHAR(100) NOT NULL,
+      domain_name VARCHAR(160) NULL,
       brand_id INT NULL,
       model_id INT NULL,
       serial VARCHAR(180) NOT NULL UNIQUE,
@@ -111,8 +114,16 @@ async function init() {
     await query('ALTER TABLE audit_logs ADD COLUMN event_at_ms BIGINT NULL AFTER event_at');
   }
   const userProfileImageCol = await query("SHOW COLUMNS FROM users LIKE 'profile_image_url'");
+  const userDomainCol = await query("SHOW COLUMNS FROM users LIKE 'domain_name'");
+  if (!userDomainCol.length) {
+    await query('ALTER TABLE users ADD COLUMN domain_name VARCHAR(160) NULL AFTER role');
+  }
+  const userEmployeeCodePrefixCol = await query("SHOW COLUMNS FROM users LIKE 'employee_code_prefix'");
+  if (!userEmployeeCodePrefixCol.length) {
+    await query('ALTER TABLE users ADD COLUMN employee_code_prefix VARCHAR(50) NULL AFTER domain_name');
+  }
   if (!userProfileImageCol.length) {
-    await query('ALTER TABLE users ADD COLUMN profile_image_url VARCHAR(500) NULL AFTER role');
+    await query('ALTER TABLE users ADD COLUMN profile_image_url VARCHAR(500) NULL AFTER employee_code_prefix');
   }
   const userPermissionsCol = await query("SHOW COLUMNS FROM users LIKE 'permissions_json'");
   if (!userPermissionsCol.length) {
@@ -147,6 +158,10 @@ async function init() {
     await query('ALTER TABLE users ADD COLUMN employment_status VARCHAR(100) NULL AFTER employment_type');
   }
   const assetVendorCol = await query("SHOW COLUMNS FROM assets LIKE 'vendor'");
+  const assetDomainCol = await query("SHOW COLUMNS FROM assets LIKE 'domain_name'");
+  if (!assetDomainCol.length) {
+    await query('ALTER TABLE assets ADD COLUMN domain_name VARCHAR(160) NULL AFTER type');
+  }
   if (!assetVendorCol.length) {
     await query('ALTER TABLE assets ADD COLUMN vendor VARCHAR(180) NULL AFTER store_id');
   }
@@ -208,8 +223,8 @@ async function seedSample() {
   if (users.length === 0) {
     const adminPassword = bcrypt.hashSync('admin', 8);
     const userPassword = bcrypt.hashSync('password', 8);
-    await query('INSERT INTO users (name, email, role, password) VALUES (?, ?, ?, ?)', ['Admin', adminEmail, 'admin', adminPassword]);
-    await query('INSERT INTO users (name, email, role, password) VALUES (?, ?, ?, ?)', ['Bob Engineer', defaultUserEmail, 'user', userPassword]);
+    await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Admin', adminEmail, 'admin', 'global', null, adminPassword]);
+    await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Bob Engineer', defaultUserEmail, 'user', 'default', null, userPassword]);
   }
 
   const stores = await query('SELECT id FROM stores LIMIT 1');

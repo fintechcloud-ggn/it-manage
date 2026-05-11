@@ -10,7 +10,7 @@ async function hasColumn(tableName, columnName) {
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    if ((req.user?.role || '').toLowerCase() === 'admin' && !hasPermission(req.user, 'activity.view')) {
+    if ((req.user?.role || '').toLowerCase() !== 'user' && !hasPermission(req.user, 'activity.view')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const limitRaw = Number(req.query.limit || 120);

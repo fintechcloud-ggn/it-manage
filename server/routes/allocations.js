@@ -1,15 +1,68 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const { query } = require('../db');
-const { requireAuth, hasPermission } = require('../middleware/auth');
+const { requireAuth, hasPermission, isSuperAdmin, normalizeDomain, getUserDomain, canAccessDomainRecord } = require('../middleware/auth');
 const { writeAuditLog } = require('../audit');
 
-router.get('/', async (req, res) => {
+async function ensureAssignmentUser({ user_id, employee_code, employee_name, employee_email, domain_name }) {
+  if (Number(user_id)) {
+    const rows = await query('SELECT id, domain_name, employee_code FROM users WHERE id = ? LIMIT 1', [Number(user_id)]);
+    return rows[0] || null;
+  }
+
+  const normalizedCode = String(employee_code || '').trim();
+  const normalizedName = String(employee_name || '').trim();
+  const normalizedEmail = String(employee_email || '').trim();
+  if (!normalizedCode && !normalizedName) return null;
+
+  let existing = null;
+  if (normalizedCode) {
+    const byCode = await query(
+      'SELECT id, domain_name, employee_code FROM users WHERE employee_code = ? LIMIT 1',
+      [normalizedCode]
+    );
+    existing = byCode[0] || null;
+  }
+  if (!existing && normalizedName) {
+    const byName = await query(
+      "SELECT id, domain_name, employee_code FROM users WHERE name = ? AND LOWER(role) = 'user' LIMIT 1",
+      [normalizedName]
+    );
+    existing = byName[0] || null;
+  }
+  if (existing) return existing;
+
+  const safeCode = normalizedCode || `EMP-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  const email = normalizedEmail || `${safeCode.toLowerCase()}@import.local`;
+  const password = bcrypt.hashSync('password', 8);
+  const result = await query(
+    `INSERT INTO users (name, email, role, domain_name, password, employee_code)
+     VALUES (?, ?, 'user', ?, ?, ?)`,
+    [normalizedName || safeCode, email, normalizeDomain(domain_name) || null, password, normalizedCode || safeCode]
+  );
+  const createdRows = await query(
+    'SELECT id, domain_name, employee_code FROM users WHERE id = ? LIMIT 1',
+    [result.insertId]
+  );
+  return createdRows[0] || null;
+}
+
+router.get('/', requireAuth, async (req, res) => {
   try {
-    if ((req.user?.role || '').toLowerCase() === 'admin' && !hasPermission(req.user, 'assignments.view')) {
+    if ((req.user?.role || '').toLowerCase() !== 'user' && !hasPermission(req.user, 'assignments.view')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const rows = await query('SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes FROM allocations ORDER BY id DESC');
+    let rows = await query(`
+      SELECT al.id, al.asset_id, al.user_id, al.allocated_at, al.allocated_at_ms, al.returned_at, al.returned_at_ms, al.notes, a.domain_name
+      FROM allocations al
+      INNER JOIN assets a ON a.id = al.asset_id
+      ORDER BY al.id DESC
+    `);
+    if (!isSuperAdmin(req.user)) {
+      const currentDomain = getUserDomain(req.user);
+      rows = rows.filter((row) => normalizeDomain(row.domain_name) === currentDomain);
+    }
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -18,18 +71,35 @@ router.get('/', async (req, res) => {
 
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { asset_id, user_id, notes } = req.body;
+    const { asset_id, user_id, notes, employee_code, employee_name, employee_email } = req.body;
     const allocatedAtMs = Date.now();
-    const assetRows = await query('SELECT id, status FROM assets WHERE id = ? LIMIT 1', [Number(asset_id)]);
+    const assetRows = await query('SELECT id, status, domain_name FROM assets WHERE id = ? LIMIT 1', [Number(asset_id)]);
     const asset = assetRows[0];
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
     if (asset.status === 'allocated') return res.status(400).json({ error: 'Asset already allocated' });
+    if (!isSuperAdmin(req.user) && normalizeDomain(asset.domain_name) !== getUserDomain(req.user)) {
+      return res.status(403).json({ error: 'Asset domain access denied' });
+    }
 
     const allocator = req.user;
-    if ((allocator.role || '').toLowerCase() === 'admin' && !hasPermission(allocator, 'assignments.manage')) {
+    if ((allocator.role || '').toLowerCase() !== 'user' && !hasPermission(allocator, 'assignments.manage')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const targetUserId = (allocator.role === 'admin' && user_id) ? Number(user_id) : allocator.id;
+    const managedUser = hasPermission(allocator, 'assignments.manage')
+      ? await ensureAssignmentUser({
+        user_id,
+        employee_code,
+        employee_name,
+        employee_email,
+        domain_name: asset.domain_name || getUserDomain(req.user)
+      })
+      : allocator;
+    const targetUser = managedUser;
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+    if (!isSuperAdmin(req.user) && !canAccessDomainRecord(req.user, targetUser)) {
+      return res.status(403).json({ error: 'User domain access denied' });
+    }
+    const targetUserId = Number(targetUser.id);
 
     const result = await query(
       'INSERT INTO allocations (asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes) VALUES (?, ?, NOW(), ?, NULL, NULL, ?)',
@@ -53,16 +123,24 @@ router.post('/', requireAuth, async (req, res) => {
 
 router.put('/:id/return', requireAuth, async (req, res) => {
   try {
-    if ((req.user?.role || '').toLowerCase() === 'admin' && !hasPermission(req.user, 'assignments.manage')) {
+    if ((req.user?.role || '').toLowerCase() !== 'user' && !hasPermission(req.user, 'assignments.manage')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const id = Number(req.params.id);
     const { reason, reason_detail } = req.body || {};
     const returnedAtMs = Date.now();
-    const rows = await query('SELECT id, asset_id, returned_at FROM allocations WHERE id = ? LIMIT 1', [id]);
+    const rows = await query(`
+      SELECT al.id, al.asset_id, al.returned_at, a.domain_name
+      FROM allocations al
+      INNER JOIN assets a ON a.id = al.asset_id
+      WHERE al.id = ? LIMIT 1
+    `, [id]);
     const alloc = rows[0];
     if (!alloc) return res.status(404).json({ error: 'Allocation not found' });
     if (alloc.returned_at) return res.status(400).json({ error: 'Already returned' });
+    if (!isSuperAdmin(req.user) && normalizeDomain(alloc.domain_name) !== getUserDomain(req.user)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     if (reason || reason_detail) {
       const reasonNote = [reason, reason_detail].filter(Boolean).join(' - ');
@@ -89,9 +167,6 @@ router.put('/:id/return', requireAuth, async (req, res) => {
 router.post('/:id/replace', requireAuth, async (req, res) => {
   try {
     const allocator = req.user;
-    if (!allocator || allocator.role !== 'admin') {
-      return res.status(403).json({ error: 'Only admin can replace assets' });
-    }
     if (!hasPermission(allocator, 'assignments.manage')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
@@ -104,18 +179,29 @@ router.post('/:id/replace', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'reason_detail is required for Other reason' });
     }
 
-    const rows = await query('SELECT id, asset_id, user_id, returned_at, notes FROM allocations WHERE id = ? LIMIT 1', [id]);
+    const rows = await query(`
+      SELECT al.id, al.asset_id, al.user_id, al.returned_at, al.notes, a.domain_name
+      FROM allocations al
+      INNER JOIN assets a ON a.id = al.asset_id
+      WHERE al.id = ? LIMIT 1
+    `, [id]);
     const currentAlloc = rows[0];
     if (!currentAlloc) return res.status(404).json({ error: 'Allocation not found' });
     if (currentAlloc.returned_at) return res.status(400).json({ error: 'Current allocation already returned' });
+    if (!isSuperAdmin(req.user) && normalizeDomain(currentAlloc.domain_name) !== getUserDomain(req.user)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     if (Number(currentAlloc.asset_id) === Number(new_asset_id)) {
       return res.status(400).json({ error: 'Replacement asset must be different from current asset' });
     }
 
-    const newAssetRows = await query('SELECT id, status FROM assets WHERE id = ? LIMIT 1', [Number(new_asset_id)]);
+    const newAssetRows = await query('SELECT id, status, domain_name FROM assets WHERE id = ? LIMIT 1', [Number(new_asset_id)]);
     const newAsset = newAssetRows[0];
     if (!newAsset) return res.status(404).json({ error: 'Replacement asset not found' });
     if (newAsset.status === 'allocated') return res.status(400).json({ error: 'Replacement asset is already allocated' });
+    if (normalizeDomain(newAsset.domain_name) !== normalizeDomain(currentAlloc.domain_name)) {
+      return res.status(400).json({ error: 'Replacement asset must belong to the same domain' });
+    }
 
     const fullReason = [reason, reason_detail].filter(Boolean).join(' - ');
     const returnedAtMs = Date.now();

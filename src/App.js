@@ -146,7 +146,10 @@ const ADMIN_PERMISSION_OPTIONS = [
   { key: 'assignments.manage', label: 'Assignments Manage' },
   { key: 'insights.view', label: 'Insights View' },
   { key: 'activity.view', label: 'Recent Activity View' },
-  { key: 'accounts.manage', label: 'Account Management' }
+  { key: 'accounts.manage', label: 'Account Management' },
+  { key: 'accounts.create', label: 'Account Create' },
+  { key: 'accounts.edit', label: 'Account Edit' },
+  { key: 'accounts.delete', label: 'Account Delete' }
 ];
 
 const MARKETING_PAGE_COMPONENTS = {
@@ -267,6 +270,12 @@ function getNameInitials(name) {
   return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
 }
 
+function buildAssignmentSelectionValue(userOption) {
+  if (userOption?.selection_value) return String(userOption.selection_value);
+  if (userOption?.local_user_id) return String(userOption.local_user_id);
+  return `external:${userOption?.external_employee_id || userOption?.employee_code || userOption?.name || 'unknown'}`;
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
@@ -320,15 +329,20 @@ function App() {
     name: '',
     email: '',
     password: '',
+    role: 'admin',
+    domain_name: '',
+    employee_code_prefix: '',
     permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
   });
   const [adminPermissionDrafts, setAdminPermissionDrafts] = useState({});
+  const [adminDetailDrafts, setAdminDetailDrafts] = useState({});
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [employeeEditForm, setEmployeeEditForm] = useState({
     name: '',
     email: '',
     role: 'user',
+    domain_name: '',
     employmentStatus: 'active',
     leavingReason: ''
   });
@@ -342,6 +356,7 @@ function App() {
   const [selectedAssetType, setSelectedAssetType] = useState('Laptop');
   const [selectedAssetName, setSelectedAssetName] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
+  const [assetDomainName, setAssetDomainName] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const isSuperAdmin = useMemo(
@@ -352,13 +367,21 @@ function App() {
     () => new Set(Array.isArray(user?.permissions) ? user.permissions : []),
     [user]
   );
+  const currentUserDomain = useMemo(
+    () => String(user?.domain_name || '').trim().toLowerCase(),
+    [user]
+  );
 
   function hasAdminPermission(permissionKey) {
     if (!user) return false;
     if (isSuperAdmin) return true;
-    if ((user.role || '').toLowerCase() !== 'admin') return false;
-    if (!userPermissions.size) return true;
+    const normalizedRole = (user.role || '').toLowerCase();
+    if (!userPermissions.size) return normalizedRole === 'admin';
     return userPermissions.has(permissionKey);
+  }
+
+  function hasAnyAdminPermission(permissionKeys) {
+    return permissionKeys.some((permissionKey) => hasAdminPermission(permissionKey));
   }
 
   function canAccessSection(sectionKey) {
@@ -370,16 +393,25 @@ function App() {
       activity: 'activity.view',
       accounts: 'accounts.manage'
     };
+    if (sectionKey === 'accounts') {
+      return hasAnyAdminPermission(['accounts.manage', 'accounts.create', 'accounts.edit', 'accounts.delete']);
+    }
     const required = sectionPermissionMap[sectionKey];
     if (!required) return true;
-    if ((user?.role || '').toLowerCase() !== 'admin') return true;
-    return hasAdminPermission(required);
+    if (isSuperAdmin) return true;
+    if (userPermissions.size) return hasAdminPermission(required);
+    return (user?.role || '').toLowerCase() === 'user';
   }
 
   function normalizeAdminPermissions(inputPermissions) {
     const next = new Set((inputPermissions || []).map(String));
     if (next.has('inventory.manage')) next.add('inventory.view');
     if (next.has('assignments.manage')) next.add('assignments.view');
+    if (next.has('accounts.manage')) {
+      next.add('accounts.create');
+      next.add('accounts.edit');
+      next.add('accounts.delete');
+    }
     return Array.from(next);
   }
 
@@ -426,6 +458,14 @@ function App() {
     fetchBrands();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, sessionChecked, authView]);
+
+  useEffect(() => {
+    if (!currentUserDomain) return;
+    setAssetDomainName((prev) => prev || currentUserDomain);
+    setAdminCreateForm((prev) => (
+      prev.domain_name ? prev : { ...prev, domain_name: currentUserDomain }
+    ));
+  }, [currentUserDomain]);
 
   useEffect(() => {
     if (!token || section !== 'activity' || auditLogsLoaded) return;
@@ -491,13 +531,17 @@ function App() {
   }
 
   function fetchAssets() {
-    apiFetch('/api/assets')
+    apiFetch('/api/assets', { headers: authHeaders() })
       .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`assets_${r.status}`);
         return r.json();
       })
       .then(setAssets)
-      .catch(() => setMessage('Unable to load assets. Ensure the backend is running.'));
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setMessage('Unable to load assets. Ensure the backend is running.');
+      });
   }
 
   function fetchUsers() {
@@ -521,7 +565,12 @@ function App() {
         if (!r.ok) throw new Error(`assignment_options_${r.status}`);
         return r.json();
       })
-      .then(setQuickAssignUsers)
+      .then((rows) => {
+        const nextRows = Array.isArray(rows)
+          ? rows.map((row) => ({ ...row, selection_value: buildAssignmentSelectionValue(row) }))
+          : [];
+        setQuickAssignUsers(nextRows);
+      })
       .catch((err) => {
         if (err.message === 'unauthorized') return;
         setQuickAssignUsers([]);
@@ -629,16 +678,24 @@ function App() {
   async function allocate(e) {
     e.preventDefault();
     const asset_id = Number(quickAssignForm.assetId);
-    const user_id = Number(quickAssignForm.userId);
+    const selectedEmployeeOption = quickAssignUsers.find((item) => String(item.selection_value || item.local_user_id || item.id) === String(quickAssignForm.userId));
     const notes = quickAssignForm.notes.trim();
-    if (!asset_id || !user_id) {
+    if (!asset_id || !selectedEmployeeOption) {
       setMessage('Select employee and available asset to assign');
       return;
     }
+    const payload = {
+      asset_id,
+      notes,
+      user_id: selectedEmployeeOption.local_user_id ? Number(selectedEmployeeOption.local_user_id) : null,
+      employee_code: selectedEmployeeOption.employee_code || null,
+      employee_name: selectedEmployeeOption.name || null,
+      employee_email: selectedEmployeeOption.employee_email || null
+    };
     const res = await apiFetch('/api/allocations', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ asset_id, user_id, notes })
+      body: JSON.stringify(payload)
     });
     const body = await res.json().catch(() => ({}));
     setMessage(res.ok ? 'Asset assigned successfully' : body.error || 'Allocation failed');
@@ -714,16 +771,21 @@ function App() {
     const serial = e.target.serial.value;
     const vendor = e.target.vendor.value;
     const notes = e.target.notes.value;
+    const domain_name = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
     const brand_id = selectedBrandId ? Number(selectedBrandId) : null;
     const model_id = selectedModelId ? Number(selectedModelId) : null;
     if (!name) {
       setMessage('Select asset name.');
       return;
     }
+    if (!domain_name) {
+      setMessage('Asset domain is required.');
+      return;
+    }
     const res = await apiFetch('/api/assets', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ name, type, serial, vendor, notes, brand_id, model_id })
+      body: JSON.stringify({ name, type, serial, vendor, notes, brand_id, model_id, domain_name })
     });
     const body = await res.json().catch(() => ({}));
     if (res.status === 401) {
@@ -737,7 +799,7 @@ function App() {
       return;
     }
     if (res.status === 403) {
-      setMessage('Only admin can create assets.');
+      setMessage('You do not have permission to create assets for this domain.');
       return;
     }
     setMessage(res.ok ? 'Asset created' : body.error || 'Create asset failed');
@@ -749,6 +811,7 @@ function App() {
       setSelectedAssetType('Laptop');
       setSelectedAssetName('');
       setSelectedModelId('');
+      setAssetDomainName(currentUserDomain || '');
     }
   }
 
@@ -911,7 +974,8 @@ function App() {
     const payload = {
       name: employeeEditForm.name.trim(),
       email: employeeEditForm.email.trim(),
-      role: (employeeEditForm.role || 'user').trim()
+      role: (employeeEditForm.role || 'user').trim(),
+      domain_name: (employeeEditForm.domain_name || '').trim().toLowerCase()
     };
     if (!payload.name || !payload.email) {
       setMessage('Name and email are required');
@@ -930,6 +994,7 @@ function App() {
         name: body.name ?? payload.name,
         email: body.email ?? payload.email,
         role: body.role ?? payload.role,
+        domain_name: body.domain_name ?? payload.domain_name,
         profile_image_url: body.profile_image_url ?? selectedEmployee.profile_image_url ?? null,
         permissions: Array.isArray(body.permissions) ? body.permissions : (selectedEmployee.permissions || []),
         is_super_admin: !!body.is_super_admin
@@ -966,22 +1031,25 @@ function App() {
   async function createAdminAccount(e) {
     e.preventDefault();
     if (!isSuperAdmin) {
-      setMessage('Only super admin can create admin accounts.');
+      setMessage('Only super admin can create role accounts.');
       return false;
     }
     const normalizedPermissions = normalizeAdminPermissions(adminCreateForm.permissions);
     if (!normalizedPermissions.length) {
-      setMessage('Select at least one permission for admin account.');
+      setMessage('Select at least one permission for this role account.');
       return false;
     }
     const payload = {
       name: adminCreateForm.name.trim(),
       email: adminCreateForm.email.trim(),
       password: adminCreateForm.password.trim() || 'password',
+      role: (adminCreateForm.role || 'admin').trim(),
+      domain_name: adminCreateForm.domain_name.trim().toLowerCase(),
+      employee_code_prefix: adminCreateForm.employee_code_prefix.trim().toLowerCase(),
       permissions: normalizedPermissions
     };
-    if (!payload.name || !payload.email) {
-      setMessage('Admin name and email are required.');
+    if (!payload.name || !payload.email || !payload.domain_name) {
+      setMessage('Role account name, email, and domain are required.');
       return;
     }
     const res = await apiFetch('/api/users/admin', {
@@ -1000,12 +1068,15 @@ function App() {
       setMessage('Session expired. Please login again.');
       return false;
     }
-    setMessage(res.ok ? 'Admin account created successfully.' : body.error || 'Admin creation failed');
+    setMessage(res.ok ? 'Role account created successfully.' : body.error || 'Role account creation failed');
     if (res.ok) {
       setAdminCreateForm({
         name: '',
         email: '',
         password: '',
+        role: 'admin',
+        domain_name: currentUserDomain || '',
+        employee_code_prefix: '',
         permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
       });
       fetchUsers();
@@ -1017,7 +1088,7 @@ function App() {
 
   async function saveAdminPermissions(targetUserId) {
     if (!isSuperAdmin) {
-      setMessage('Only super admin can update permissions.');
+      setMessage('Only super admin can update role permissions.');
       return false;
     }
     const permissions = normalizeAdminPermissions(adminPermissionDrafts[targetUserId] || []);
@@ -1031,10 +1102,60 @@ function App() {
       body: JSON.stringify({ permissions })
     });
     const body = await res.json().catch(() => ({}));
-    setMessage(res.ok ? 'Admin permissions updated.' : body.error || 'Permission update failed');
+    setMessage(res.ok ? 'Role permissions updated.' : body.error || 'Permission update failed');
     if (res.ok) {
       fetchUsers();
       fetchAuditLogs();
+    }
+    return res.ok;
+  }
+
+  async function saveRoleAccountDetails(targetUserId) {
+    if (!isSuperAdmin) {
+      setMessage('Only super admin can update role account details.');
+      return false;
+    }
+    const draft = adminDetailDrafts[targetUserId] || {};
+    const payload = {
+      name: String(draft.name || '').trim(),
+      email: String(draft.email || '').trim(),
+      role: String(draft.role || 'admin').trim(),
+      domain_name: String(draft.domain_name || '').trim().toLowerCase(),
+      employee_code_prefix: String(draft.employee_code_prefix || '').trim().toLowerCase()
+    };
+    if (!payload.name || !payload.email || !payload.role || !payload.domain_name) {
+      setMessage('Name, email, role, and domain are required.');
+      return false;
+    }
+    const res = await apiFetch(`/api/users/${targetUserId}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Role account details updated.' : body.error || 'Role account update failed');
+    if (res.ok) {
+      fetchUsers();
+      fetchAuditLogs();
+    }
+    return res.ok;
+  }
+
+  async function deleteRoleAccount(targetUserId) {
+    if (!isSuperAdmin) {
+      setMessage('Only super admin can delete role accounts.');
+      return false;
+    }
+    const res = await apiFetch(`/api/users/${targetUserId}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Role account deleted.' : body.error || 'Role account delete failed');
+    if (res.ok) {
+      fetchUsers();
+      fetchAuditLogs();
+      if (selectedAdminPermissionId === targetUserId) setSelectedAdminPermissionId(null);
     }
     return res.ok;
   }
@@ -1318,8 +1439,7 @@ function App() {
   }, [modelOptionsByType]);
   const availableAssets = useMemo(() => assets.filter((a) => a.status === 'available'), [assets]);
   const employees = useMemo(() => {
-    const nonAdmins = users.filter((u) => u.role !== 'admin');
-    return nonAdmins.length ? nonAdmins : users;
+    return users.filter((u) => (u.role || '').toLowerCase() === 'user');
   }, [users]);
   const quickAssignTypeOptions = useMemo(
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -1331,11 +1451,10 @@ function App() {
   );
   const quickAssignEmployeeOptions = useMemo(
     () => employeeDropdownOptions
-      .filter((user) => user.local_user_id)
       .map((user) => ({
-        value: String(user.local_user_id),
+        value: buildAssignmentSelectionValue(user),
         label: user.label || user.name,
-        searchText: `${user.name || ''} ${user.employee_code || ''}`,
+        searchText: `${user.name || ''} ${user.employee_code || ''} ${user.employee_email || ''}`,
       })),
     [employeeDropdownOptions]
   );
@@ -1359,11 +1478,10 @@ function App() {
     () => [
       { value: 'all', label: 'All Employees', searchText: 'all employees' },
       ...employeeDropdownOptions
-        .filter((user) => user.local_user_id)
         .map((user) => ({
-          value: String(user.local_user_id),
+          value: buildAssignmentSelectionValue(user),
           label: user.label || user.name,
-          searchText: `${user.name || ''} ${user.employee_code || ''}`,
+          searchText: `${user.name || ''} ${user.employee_code || ''} ${user.employee_email || ''}`,
         })),
     ],
     [employeeDropdownOptions]
@@ -1382,7 +1500,7 @@ function App() {
     [quickAssignAssetOptions]
   );
   const managedAdmins = useMemo(
-    () => users.filter((u) => (u.role || '').toLowerCase() === 'admin' && !u.is_super_admin),
+    () => users.filter((u) => (u.role || '').toLowerCase() !== 'user' && !u.is_super_admin),
     [users]
   );
   const filteredManagedAdmins = useMemo(() => {
@@ -1397,7 +1515,7 @@ function App() {
     [managedAdmins, selectedAdminPermissionId]
   );
   const accountSummary = useMemo(() => {
-    const totalAdmins = users.filter((u) => (u.role || '').toLowerCase() === 'admin').length;
+    const totalAdmins = users.filter((u) => (u.role || '').toLowerCase() !== 'user').length;
     const totalManaged = managedAdmins.length;
     const fullyPrivileged = managedAdmins.filter((u) =>
       ADMIN_PERMISSION_OPTIONS.every((perm) => (u.permissions || []).includes(perm.key))
@@ -1498,6 +1616,7 @@ function App() {
       name: selectedEmployee.name || '',
       email: selectedEmployee.email || '',
       role: selectedEmployee.role || 'user',
+      domain_name: selectedEmployee.domain_name || currentUserDomain || '',
       employmentStatus: 'active',
       leavingReason: ''
     });
@@ -1509,13 +1628,22 @@ function App() {
       reason: 'Damaged',
       reasonDetail: ''
     });
-  }, [selectedEmployee]);
+  }, [selectedEmployee, currentUserDomain]);
   useEffect(() => {
     const drafts = {};
+    const detailDrafts = {};
     managedAdmins.forEach((admin) => {
       drafts[admin.id] = Array.isArray(admin.permissions) ? admin.permissions : [];
+      detailDrafts[admin.id] = {
+        name: admin.name || '',
+        email: admin.email || '',
+        role: admin.role || 'admin',
+        domain_name: admin.domain_name || '',
+        employee_code_prefix: admin.employee_code_prefix || ''
+      };
     });
     setAdminPermissionDrafts(drafts);
+    setAdminDetailDrafts(detailDrafts);
   }, [managedAdmins]);
 
   function hasDraftChanges(adminUser) {
@@ -2148,6 +2276,17 @@ function App() {
                     <input name="vendor" placeholder="e.g. Dell Partner, Amazon, Local Supplier" />
                   </label>
                   <label className="field">
+                    <span>Domain</span>
+                    <input
+                      name="domain_name"
+                      placeholder="e.g. finance"
+                      value={assetDomainName}
+                      onChange={(e) => setAssetDomainName(e.target.value.toLowerCase())}
+                      required
+                      disabled={!isSuperAdmin}
+                    />
+                  </label>
+                  <label className="field">
                     <span>Notes</span>
                     <input name="notes" placeholder="Branch, team, procurement, warranty..." />
                   </label>
@@ -2385,7 +2524,7 @@ function App() {
                 {isSuperAdmin && (
                   <button type="button" className="acct-hero-cta" onClick={() => setCreateAdminPopupOpen(true)}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
-                    Create Admin
+                    Create Role Account
                   </button>
                 )}
               </div>
@@ -2397,7 +2536,7 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Managed Admins</span>
+                    <span>Managed Roles</span>
                     <strong>{accountSummary.totalManaged}</strong>
                   </div>
                 </div>
@@ -2406,7 +2545,7 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Total Admins</span>
+                    <span>Total Role Accounts</span>
                     <strong>{accountSummary.totalAdmins}</strong>
                   </div>
                 </div>
@@ -2448,14 +2587,14 @@ function App() {
                 </div>
                 <div>
                   <h4>Restricted Area</h4>
-                  <p>Only the super admin can create admin accounts and change permissions.</p>
+                  <p>Only the super admin can create role accounts, assign domains, and change permissions.</p>
                 </div>
               </div>
             ) : (
               <section className="acct-table-section">
                 <div className="acct-table-header">
                   <div className="acct-table-title-group">
-                    <h4>Admin Permission Control</h4>
+                    <h4>Role Permission Control</h4>
                     <span className="acct-count-badge">{filteredManagedAdmins.length} accounts</span>
                   </div>
                   <div className="acct-search-wrap">
@@ -2473,7 +2612,7 @@ function App() {
                   <table className="acct-table">
                     <thead>
                       <tr>
-                        <th>Admin</th>
+                        <th>Role Account</th>
                         <th>Permission Access</th>
                         <th>Actions</th>
                       </tr>
@@ -2483,7 +2622,7 @@ function App() {
                         <tr>
                           <td colSpan={3} className="acct-empty-row">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
-                            <span>No managed admin accounts found.</span>
+                            <span>No managed role accounts found.</span>
                           </td>
                         </tr>
                       ) : (
@@ -2498,7 +2637,7 @@ function App() {
                                   <span className="acct-admin-avatar">{(adminUser.name || 'A').slice(0, 1).toUpperCase()}</span>
                                   <div className="acct-admin-info">
                                     <strong>{adminUser.name}</strong>
-                                    <small>{adminUser.email}</small>
+                                    <small>{adminUser.email} | {adminUser.role} | {adminUser.domain_name || '-'} | prefix: {adminUser.employee_code_prefix || '-'}</small>
                                   </div>
                                 </div>
                               </td>
@@ -2536,8 +2675,8 @@ function App() {
             <section className="account-permission-modal" onClick={(e) => e.stopPropagation()}>
               <header className="account-permission-header">
                 <div>
-                  <h3 id="create-admin-title">Create Admin Account</h3>
-                  <p>Create account and allocate permissions in one popup.</p>
+                  <h3 id="create-admin-title">Create Role Account</h3>
+                  <p>Create a role account, assign a domain, and set permissions in one popup.</p>
                 </div>
                 <div className="employee-modal-actions">
                   <button type="button" className="small outline" onClick={() => setCreateAdminPopupOpen(false)}>Close</button>
@@ -2546,14 +2685,14 @@ function App() {
               <form className="form account-create-form" onSubmit={createAdminAccount}>
                 <div className="account-form-row">
                   <input
-                    placeholder="Admin name"
+                    placeholder="Account name"
                     value={adminCreateForm.name}
                     onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, name: e.target.value }))}
                     required
                   />
                   <input
                     type="email"
-                    placeholder="Admin email"
+                    placeholder="Account email"
                     value={adminCreateForm.email}
                     onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, email: e.target.value }))}
                     required
@@ -2564,6 +2703,28 @@ function App() {
                   placeholder="Password (default: password)"
                   value={adminCreateForm.password}
                   onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, password: e.target.value }))}
+                />
+                <div className="account-form-row">
+                  <input
+                    type="text"
+                    placeholder="Role name e.g. admin, manager"
+                    value={adminCreateForm.role}
+                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, role: e.target.value }))}
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Domain e.g. finance"
+                    value={adminCreateForm.domain_name}
+                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
+                    required
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Employee code prefix e.g. fch"
+                  value={adminCreateForm.employee_code_prefix}
+                  onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))}
                 />
                 <div className="permission-actions">
                   <button
@@ -2621,12 +2782,73 @@ function App() {
               <header className="account-permission-header">
                 <div>
                   <h3 id="admin-permission-title">{selectedAdminPermissionUser.name}</h3>
-                  <p>{selectedAdminPermissionUser.email}</p>
+                  <p>{selectedAdminPermissionUser.email} | role: {selectedAdminPermissionUser.role} | domain: {selectedAdminPermissionUser.domain_name || '-'} | prefix: {selectedAdminPermissionUser.employee_code_prefix || '-'}</p>
                 </div>
                 <div className="employee-modal-actions">
                   <button type="button" className="small outline" onClick={() => setSelectedAdminPermissionId(null)}>Close</button>
                 </div>
               </header>
+
+              <div className="account-form-row">
+                <input
+                  placeholder="Account name"
+                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.name || ''}
+                  onChange={(e) => setAdminDetailDrafts((prev) => ({
+                    ...prev,
+                    [selectedAdminPermissionUser.id]: {
+                      ...(prev[selectedAdminPermissionUser.id] || {}),
+                      name: e.target.value
+                    }
+                  }))}
+                />
+                <input
+                  type="email"
+                  placeholder="Account email"
+                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.email || ''}
+                  onChange={(e) => setAdminDetailDrafts((prev) => ({
+                    ...prev,
+                    [selectedAdminPermissionUser.id]: {
+                      ...(prev[selectedAdminPermissionUser.id] || {}),
+                      email: e.target.value
+                    }
+                  }))}
+                />
+              </div>
+              <div className="account-form-row">
+                <input
+                  placeholder="Role"
+                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.role || ''}
+                  onChange={(e) => setAdminDetailDrafts((prev) => ({
+                    ...prev,
+                    [selectedAdminPermissionUser.id]: {
+                      ...(prev[selectedAdminPermissionUser.id] || {}),
+                      role: e.target.value
+                    }
+                  }))}
+                />
+                <input
+                  placeholder="Domain"
+                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || ''}
+                  onChange={(e) => setAdminDetailDrafts((prev) => ({
+                    ...prev,
+                    [selectedAdminPermissionUser.id]: {
+                      ...(prev[selectedAdminPermissionUser.id] || {}),
+                      domain_name: e.target.value.toLowerCase()
+                    }
+                  }))}
+                />
+              </div>
+              <input
+                placeholder="Employee code prefix e.g. fch"
+                value={adminDetailDrafts[selectedAdminPermissionUser.id]?.employee_code_prefix || ''}
+                onChange={(e) => setAdminDetailDrafts((prev) => ({
+                  ...prev,
+                  [selectedAdminPermissionUser.id]: {
+                    ...(prev[selectedAdminPermissionUser.id] || {}),
+                    employee_code_prefix: e.target.value.toLowerCase()
+                  }
+                }))}
+              />
 
               <div className="permission-actions">
                 <button
@@ -2687,6 +2909,13 @@ function App() {
               <div className="employee-edit-actions">
                 <button
                   type="button"
+                  className="small outline"
+                  onClick={() => saveRoleAccountDetails(selectedAdminPermissionUser.id)}
+                >
+                  Save Details
+                </button>
+                <button
+                  type="button"
                   className="small"
                   disabled={!hasDraftChanges(selectedAdminPermissionUser)}
                   onClick={async () => {
@@ -2695,6 +2924,13 @@ function App() {
                   }}
                 >
                   {hasDraftChanges(selectedAdminPermissionUser) ? 'Save Permissions' : 'Saved'}
+                </button>
+                <button
+                  type="button"
+                  className="small outline"
+                  onClick={() => deleteRoleAccount(selectedAdminPermissionUser.id)}
+                >
+                  Delete Account
                 </button>
               </div>
             </section>
@@ -2723,6 +2959,7 @@ function App() {
                   <div className="employee-modal-pill-row">
                     <span className="soft-pill">Status: {selectedEmployee.assignedCount > 0 ? 'Assigned' : 'Available'}</span>
                     <span className="soft-pill">Top Asset: {selectedEmployeeAssetBreakdown[0]?.[0] || '-'}</span>
+                    <span className="soft-pill">Domain: {selectedEmployee.domain_name || '-'}</span>
                     <span className="soft-pill">Joined: {selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString() : '-'}</span>
                   </div>
                 </div>
@@ -2786,13 +3023,23 @@ function App() {
                       </label>
                       <label>
                         <span>Role</span>
-                        <select
+                        <input
+                          type="text"
                           value={employeeEditForm.role}
                           onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, role: e.target.value }))}
-                        >
-                          <option value="user">user</option>
-                          <option value="admin">admin</option>
-                        </select>
+                          placeholder="user / admin / manager"
+                          required
+                        />
+                      </label>
+                      <label>
+                        <span>Domain</span>
+                        <input
+                          type="text"
+                          value={employeeEditForm.domain_name}
+                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
+                          placeholder="finance / hr / sales"
+                          required
+                        />
                       </label>
                       <label>
                         <span>Employment Status</span>
@@ -2826,6 +3073,7 @@ function App() {
                       <div><label>Last Name</label><p>{(selectedEmployee.name || '').split(' ').slice(1).join(' ') || '-'}</p></div>
                       <div><label>Email</label><p>{selectedEmployee.email || '-'}</p></div>
                       <div><label>Role</label><p>{selectedEmployee.role || '-'}</p></div>
+                      <div><label>Domain</label><p>{selectedEmployee.domain_name || '-'}</p></div>
                       <div><label>Company</label><p>NEXTGEN</p></div>
                       <div><label>Last Note</label><p>{selectedEmployeeLatestNote}</p></div>
                     </div>

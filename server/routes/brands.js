@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
-const { requireRole } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/auth');
 
 router.get('/', async (req, res) => {
   try {
@@ -34,7 +34,7 @@ router.get('/models', async (req, res) => {
   }
 });
 
-router.post('/', requireRole('admin'), async (req, res) => {
+router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const { name } = req.body;
     const result = await query('INSERT INTO brands (name) VALUES (?)', [name]);
@@ -45,7 +45,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
   }
 });
 
-router.post('/models', requireRole('admin'), async (req, res) => {
+router.post('/models', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const { brand_id, name, category } = req.body;
     const result = await query('INSERT INTO asset_models (brand_id, name, category) VALUES (?, ?, ?)', [Number(brand_id), name, category || 'Laptop']);

@@ -2,7 +2,17 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query } = require('../db');
-const { requireAuth, requireRole, parsePermissions, isSuperAdmin } = require('../middleware/auth');
+const {
+  requireAuth,
+  requirePermission,
+  requireAnyPermission,
+  parsePermissions,
+  isSuperAdmin,
+  normalizeDomain,
+  getUserDomain,
+  canAccessDomain,
+  canAccessDomainRecord
+} = require('../middleware/auth');
 const { writeAuditLog } = require('../audit');
 
 const PRIMARY_DB_NAME = process.env.DB_NAME || 'IT_admin';
@@ -46,7 +56,7 @@ async function getAssignmentEmployeeRows() {
 
   const selectEmployeeCode = localUserColumns.includes('employee_code') ? 'employee_code' : 'NULL AS employee_code';
   const localUsers = await query(
-    `SELECT id, name, email, role, ${selectEmployeeCode}
+    `SELECT id, name, email, role, domain_name, employee_code_prefix, ${selectEmployeeCode}
      FROM users
      WHERE LOWER(role) = 'user'
      ORDER BY name ASC`
@@ -93,10 +103,6 @@ async function getAssignmentEmployeeRows() {
 async function getAssignmentOptionRows() {
   const { localUsers, employeeRows } = await getAssignmentEmployeeRows();
 
-  if (!employeeRows.length) {
-    return [];
-  }
-
   const byCode = new Map();
   const byName = new Map();
   localUsers.forEach((userRow) => {
@@ -106,7 +112,7 @@ async function getAssignmentOptionRows() {
     if (nameKey && !byName.has(nameKey)) byName.set(nameKey, userRow);
   });
 
-  return employeeRows.map((employeeRow, index) => {
+  const mappedRows = employeeRows.map((employeeRow, index) => {
     const employeeName = normalizeValue(employeeRow.employee_name);
     const employeeCode = normalizeValue(employeeRow.employee_code);
     const codeKey = employeeCode.toLowerCase();
@@ -116,14 +122,42 @@ async function getAssignmentOptionRows() {
     return {
       id: matchedUser?.id || '',
       local_user_id: matchedUser?.id || null,
+      domain_name: matchedUser?.domain_name || null,
+      employee_code_prefix: matchedUser?.employee_code_prefix || null,
       external_employee_id: employeeRow.employee_row_id || index + 1,
       name: employeeName || matchedUser?.name || '',
       employee_code: employeeCode || matchedUser?.employee_code || null,
+      employee_email: normalizeValue(employeeRow.employee_email) || matchedUser?.email || null,
       label: buildEmployeeLabel(employeeName || matchedUser?.name || '', employeeCode || matchedUser?.employee_code),
       is_assignable: !!matchedUser,
       source: 'it_admin.employees',
     };
   });
+
+  const seenLocalUserIds = new Set(
+    mappedRows
+      .map((row) => row.local_user_id)
+      .filter(Boolean)
+      .map((value) => Number(value))
+  );
+
+  const fallbackLocalRows = localUsers
+    .filter((userRow) => userRow.id && !seenLocalUserIds.has(Number(userRow.id)))
+    .map((userRow) => ({
+      id: userRow.id,
+      local_user_id: userRow.id,
+      domain_name: userRow.domain_name || null,
+      employee_code_prefix: userRow.employee_code_prefix || null,
+      external_employee_id: null,
+      name: userRow.name || '',
+      employee_code: userRow.employee_code || null,
+      employee_email: userRow.email || null,
+      label: buildEmployeeLabel(userRow.name || '', userRow.employee_code || null),
+      is_assignable: true,
+      source: 'users',
+    }));
+
+  return [...mappedRows, ...fallbackLocalRows];
 }
 
 function normalizeUserRow(row) {
@@ -133,6 +167,9 @@ function normalizeUserRow(row) {
     name: row.name,
     email: row.email,
     role: row.role,
+    employee_code: row.employee_code || null,
+    domain_name: row.domain_name || null,
+    employee_code_prefix: row.employee_code_prefix || null,
     profile_image_url: row.profile_image_url || null,
     permissions: parsePermissions(row.permissions_json),
     is_super_admin: isSuperAdmin(row),
@@ -152,13 +189,19 @@ function serializePermissions(value) {
 router.get('/', requireAuth, async (req, res) => {
   try {
     if (String(req.query.assignment_options || '') === '1') {
-      const rows = await getAssignmentOptionRows();
+      let rows = await getAssignmentOptionRows();
+      if (!isSuperAdmin(req.user)) {
+        rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
+      }
       return res.json(rows);
     }
 
-    const rows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json FROM users ORDER BY id DESC'
+    let rows = await query(
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users ORDER BY id DESC'
     );
+    if (!isSuperAdmin(req.user)) {
+      rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
+    }
     res.json(rows.map(normalizeUserRow));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -167,7 +210,10 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.get('/assignment-options', requireAuth, async (req, res) => {
   try {
-    const rows = await getAssignmentOptionRows();
+    let rows = await getAssignmentOptionRows();
+    if (!isSuperAdmin(req.user)) {
+      rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
+    }
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -178,31 +224,38 @@ router.get('/:id', requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id);
     const rows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    if (!canAccessDomainRecord(req.user, rows[0])) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     res.json(normalizeUserRow(rows[0]));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/', requireRole('admin'), async (req, res) => {
+router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage']), async (req, res) => {
   try {
-    const { name, email, role, password, profile_image_url, permissions } = req.body;
+    const { name, email, role, password, profile_image_url, permissions, domain_name, employee_code_prefix } = req.body;
     const requestedRole = role || 'user';
-    if (requestedRole === 'admin' && !isSuperAdmin(req.user)) {
-      return res.status(403).json({ error: 'Only super admin can create admin accounts' });
+    const requestedDomain = isSuperAdmin(req.user)
+      ? normalizeDomain(domain_name)
+      : getUserDomain(req.user);
+    if (!requestedDomain) {
+      return res.status(400).json({ error: 'Domain is required' });
     }
+    const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
-    const permissionsJson = requestedRole === 'admin' ? serializePermissions(permissions) : null;
+    const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
     const result = await query(
-      'INSERT INTO users (name, email, role, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, email, requestedRole, profile_image_url || null, permissionsJson, hashed]
+      'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email, requestedRole, requestedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
     );
     const createdRows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
       [result.insertId]
     );
     await writeAuditLog({
@@ -210,7 +263,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
       action: 'CREATE_USER',
       entityType: 'user',
       entityId: result.insertId,
-      details: `name=${name}, email=${email}, role=${requestedRole}`
+      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${requestedDomain}, code_prefix=${normalizedPrefix || ''}`
     });
     res.status(201).json(normalizeUserRow(createdRows[0]));
   } catch (err) {
@@ -218,22 +271,26 @@ router.post('/', requireRole('admin'), async (req, res) => {
   }
 });
 
-router.post('/admin', requireRole('admin'), async (req, res) => {
+router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage']), async (req, res) => {
   try {
     if (!isSuperAdmin(req.user)) {
       return res.status(403).json({ error: 'Only super admin can create admin accounts' });
     }
-    const { name, email, password, profile_image_url, permissions } = req.body;
+    const { name, email, password, profile_image_url, permissions, role, domain_name, employee_code_prefix } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'name and email are required' });
+    const requestedRole = String(role || 'admin').trim() || 'admin';
+    const requestedDomain = normalizeDomain(domain_name);
+    if (!requestedDomain) return res.status(400).json({ error: 'domain is required' });
+    const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
-    const permissionsJson = serializePermissions(permissions);
+    const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
 
     const result = await query(
-      'INSERT INTO users (name, email, role, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, email, 'admin', profile_image_url || null, permissionsJson, hashed]
+      'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email, requestedRole, requestedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
     );
     const createdRows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
       [result.insertId]
     );
     await writeAuditLog({
@@ -241,7 +298,7 @@ router.post('/admin', requireRole('admin'), async (req, res) => {
       action: 'CREATE_ADMIN_ACCOUNT',
       entityType: 'user',
       entityId: result.insertId,
-      details: `name=${name}, email=${email}, permissions_count=${parsePermissions(permissionsJson).length}`
+      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${requestedDomain}, code_prefix=${normalizedPrefix || ''}, permissions_count=${parsePermissions(permissionsJson).length}`
     });
     res.status(201).json(normalizeUserRow(createdRows[0]));
   } catch (err) {
@@ -249,32 +306,36 @@ router.post('/admin', requireRole('admin'), async (req, res) => {
   }
 });
 
-router.put('/:id', requireRole('admin'), async (req, res) => {
+router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { name, email, role, profile_image_url } = req.body;
+    const { name, email, role, profile_image_url, domain_name, employee_code_prefix } = req.body;
     const existingRows = await query(
-      'SELECT id, name, email, role, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, domain_name, employee_code_prefix, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
     );
     const existing = existingRows[0];
     if (!existing) return res.status(404).json({ error: 'User not found' });
+    if (!canAccessDomain(req.user, existing.domain_name)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     if (isSuperAdmin(existing) && !isSuperAdmin(req.user)) {
       return res.status(403).json({ error: 'Super admin account is restricted' });
     }
 
     const requestedRole = role || existing.role || 'user';
-    if (requestedRole === 'admin' && !isSuperAdmin(req.user)) {
-      return res.status(403).json({ error: 'Only super admin can promote to admin' });
-    }
+    const requestedDomain = isSuperAdmin(req.user)
+      ? (normalizeDomain(domain_name) || normalizeDomain(existing.domain_name))
+      : getUserDomain(req.user);
+    const normalizedPrefix = String(employee_code_prefix || existing.employee_code_prefix || '').trim().toLowerCase() || null;
 
-    const nextPermissions = requestedRole === 'admin' ? existing.permissions_json : null;
+    const nextPermissions = requestedRole === 'user' ? null : existing.permissions_json;
     await query(
-      'UPDATE users SET name = ?, email = ?, role = ?, profile_image_url = ?, permissions_json = ? WHERE id = ?',
-      [name, email, requestedRole, profile_image_url || null, nextPermissions, id]
+      'UPDATE users SET name = ?, email = ?, role = ?, domain_name = ?, employee_code_prefix = ?, profile_image_url = ?, permissions_json = ? WHERE id = ?',
+      [name, email, requestedRole, requestedDomain, normalizedPrefix, profile_image_url || null, nextPermissions, id]
     );
     const updatedRows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
     );
     await writeAuditLog({
@@ -282,7 +343,7 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
       action: 'UPDATE_USER',
       entityType: 'user',
       entityId: id,
-      details: `name=${name}, email=${email}, role=${requestedRole}`
+      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${requestedDomain}, code_prefix=${normalizedPrefix || ''}`
     });
     res.json(normalizeUserRow(updatedRows[0]));
   } catch (err) {
@@ -290,27 +351,27 @@ router.put('/:id', requireRole('admin'), async (req, res) => {
   }
 });
 
-router.put('/:id/permissions', requireRole('admin'), async (req, res) => {
+router.put('/:id/permissions', requireAnyPermission(['accounts.edit', 'accounts.manage']), async (req, res) => {
   try {
     if (!isSuperAdmin(req.user)) {
       return res.status(403).json({ error: 'Only super admin can update admin permissions' });
     }
     const id = Number(req.params.id);
     const permissions = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
-    const existingRows = await query('SELECT id, email, role FROM users WHERE id = ? LIMIT 1', [id]);
+    const existingRows = await query('SELECT id, email, role, domain_name FROM users WHERE id = ? LIMIT 1', [id]);
     const existing = existingRows[0];
     if (!existing) return res.status(404).json({ error: 'User not found' });
     if (isSuperAdmin(existing)) {
       return res.status(400).json({ error: 'Super admin permissions cannot be modified here' });
     }
-    if ((existing.role || '').toLowerCase() !== 'admin') {
-      return res.status(400).json({ error: 'Permissions can be set only for admin accounts' });
+    if ((existing.role || '').toLowerCase() === 'user') {
+      return res.status(400).json({ error: 'Permissions can be set only for non-user accounts' });
     }
 
     const permissionsJson = serializePermissions(permissions);
     await query('UPDATE users SET permissions_json = ? WHERE id = ?', [permissionsJson, id]);
     const updatedRows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
     );
     await writeAuditLog({
@@ -318,9 +379,35 @@ router.put('/:id/permissions', requireRole('admin'), async (req, res) => {
       action: 'UPDATE_ADMIN_PERMISSIONS',
       entityType: 'user',
       entityId: id,
-      details: `permissions_count=${permissions.length}`
+      details: `domain=${existing.domain_name || ''}, permissions_count=${permissions.length}`
     });
     res.json(normalizeUserRow(updatedRows[0]));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', requireAnyPermission(['accounts.delete', 'accounts.manage']), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const rows = await query(
+      'SELECT id, name, email, role, domain_name, employee_code_prefix FROM users WHERE id = ? LIMIT 1',
+      [id]
+    );
+    const existing = rows[0];
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+    if (isSuperAdmin(existing)) return res.status(400).json({ error: 'Super admin account cannot be deleted' });
+    if (!canAccessDomain(req.user, existing.domain_name)) return res.status(403).json({ error: 'Forbidden' });
+
+    await query('DELETE FROM users WHERE id = ?', [id]);
+    await writeAuditLog({
+      user: req.user,
+      action: 'DELETE_USER',
+      entityType: 'user',
+      entityId: id,
+      details: `name=${existing.name}, email=${existing.email}, role=${existing.role}, domain=${existing.domain_name || ''}, code_prefix=${existing.employee_code_prefix || ''}`
+    });
+    res.status(204).end();
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
-const { requireRole } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/auth');
 
 router.get('/', async (req, res) => {
   try {
@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', requireRole('admin'), async (req, res) => {
+router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const { name, location } = req.body;
     const result = await query('INSERT INTO stores (name, location) VALUES (?, ?)', [name, location || null]);

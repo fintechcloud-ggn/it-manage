@@ -9,7 +9,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     const rows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json, password FROM users WHERE email = ? LIMIT 1',
+      'SELECT id, name, email, role, profile_image_url, permissions_json, domain_name, employee_code_prefix, password FROM users WHERE email = ? LIMIT 1',
       [email]
     );
     const user = rows[0];
@@ -26,6 +26,8 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        domain_name: user.domain_name || null,
+        employee_code_prefix: user.employee_code_prefix || null,
         profile_image_url: user.profile_image_url || null,
         permissions: parsePermissions(user.permissions_json),
         is_super_admin: isSuperAdmin(user)
@@ -44,6 +46,8 @@ router.get('/session', requireAuth, async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      domain_name: user.domain_name || null,
+      employee_code_prefix: user.employee_code_prefix || null,
       profile_image_url: user.profile_image_url || null,
       permissions: parsePermissions(user.permissions_json),
       is_super_admin: isSuperAdmin(user)
