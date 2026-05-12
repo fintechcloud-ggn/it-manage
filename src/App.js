@@ -138,6 +138,14 @@ const FALLBACK_NAMES_BY_TYPE = {
   'Sim Card': ['Airtel SIM', 'Jio SIM', 'Vi SIM', 'BSNL SIM']
 };
 
+const INVOICE_SUBCATEGORIES_BY_CATEGORY = {
+  'Assets Bill': ['Laptops', 'Phone', 'SIM', 'Printer', 'Camira', 'BIOMATRIX', 'Other'],
+  'Utility Bill': ['Wifi Bill', 'Leased Line Bill', 'Electricity Bill', 'Water Bill', 'Pantry Supplies', 'Cleaning Supplies', 'Marketing', 'Petty Cash', 'Other'],
+  'Maintenance Bill': ['Office Maintenance', 'Cleaning & Maintenance', 'Reparing & Maintenance', 'Other'],
+  'Rental Bill': ['Office Rent', 'Other'],
+  'Other Bill': ['Other----']
+};
+
 const ADMIN_PERMISSION_OPTIONS = [
   { key: 'overview.view', label: 'Dashboard / Overview' },
   { key: 'inventory.view', label: 'Inventory - View Assets' },
@@ -302,7 +310,8 @@ function App() {
   const [invoiceForm, setInvoiceForm] = useState({
     vendor: '',
     billNo: '',
-    category: 'Hardware',
+    category: 'Assets Bill',
+    subcategory: 'Laptops',
     amount: '',
     dueDate: '',
     status: 'unpaid',
@@ -828,6 +837,103 @@ function App() {
       setSelectedModelId('');
       setAssetDomainName(currentUserDomain || '');
     }
+  }
+
+  function parseAssetCsv(text) {
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+      if (char === '"' && inQuotes && nextChar === '"') {
+        cell += '"';
+        i += 1;
+      } else if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        row.push(cell.trim());
+        cell = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && nextChar === '\n') i += 1;
+        row.push(cell.trim());
+        if (row.some(Boolean)) rows.push(row);
+        row = [];
+        cell = '';
+      } else {
+        cell += char;
+      }
+    }
+
+    row.push(cell.trim());
+    if (row.some(Boolean)) rows.push(row);
+    if (rows.length < 2) return [];
+
+    const headers = rows[0].map((header) => header.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    return rows.slice(1).map((values) => {
+      const record = {};
+      headers.forEach((header, index) => {
+        record[header] = values[index] || '';
+      });
+      return record;
+    });
+  }
+
+  async function uploadBulkAssets(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!hasAdminPermission('inventory.manage')) {
+      setMessage('You do not have permission to upload assets.');
+      e.target.value = '';
+      return;
+    }
+
+    const text = await file.text();
+    const rows = parseAssetCsv(text);
+    if (!rows.length) {
+      setMessage('CSV must include a header row and at least one asset row.');
+      e.target.value = '';
+      return;
+    }
+
+    const fallbackDomain = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
+    let created = 0;
+    let failed = 0;
+
+    for (const [index, row] of rows.entries()) {
+      const name = row.asset || row.assetname || row.name || selectedAssetName || `Bulk Asset ${index + 1}`;
+      const type = row.type || selectedAssetType || 'Laptop';
+      const serial = row.serial || row.serialnumber || `BULK-${Date.now()}-${index + 1}`;
+      const domain_name = (row.domain || row.domainname || fallbackDomain || 'global').trim().toLowerCase();
+
+      const res = await apiFetch('/api/assets', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name,
+          type,
+          serial,
+          domain_name,
+          vendor: row.vendor || '',
+          notes: row.notes || '',
+          brand_id: null,
+          model_id: null
+        })
+      });
+
+      if (res.ok) {
+        created += 1;
+      } else {
+        failed += 1;
+      }
+    }
+
+    fetchAssets();
+    fetchAuditLogs();
+    e.target.value = '';
+    setMessage(`Bulk upload complete: ${created} assets added${failed ? `, ${failed} failed` : ''}.`);
   }
 
   function buildAssetQrData(asset) {
@@ -1806,7 +1912,7 @@ function App() {
       .filter((invoice) => invoiceStatusFilter === 'all' || invoice.status === invoiceStatusFilter)
       .filter((invoice) => {
         if (!q) return true;
-        return `${invoice.vendor || ''} ${invoice.billNo || ''} ${invoice.category || ''} ${invoice.notes || ''} ${invoice.status || ''}`
+        return `${invoice.vendor || ''} ${invoice.billNo || ''} ${invoice.category || ''} ${invoice.subcategory || ''} ${invoice.notes || ''} ${invoice.status || ''}`
           .toLowerCase()
           .includes(q);
       })
@@ -1899,6 +2005,7 @@ function App() {
         vendor: invoiceForm.vendor.trim(),
         billNo: invoiceForm.billNo.trim(),
         category: invoiceForm.category,
+        subcategory: invoiceForm.subcategory,
         amount,
         dueDate: invoiceForm.dueDate,
         status: invoiceForm.status,
@@ -1912,7 +2019,8 @@ function App() {
     setInvoiceForm({
       vendor: '',
       billNo: '',
-      category: 'Hardware',
+      category: 'Assets Bill',
+      subcategory: 'Laptops',
       amount: '',
       dueDate: '',
       status: 'unpaid',
@@ -2443,6 +2551,10 @@ function App() {
                   <label className="field">
                     <span>Notes</span>
                     <input name="notes" placeholder="Branch, team, procurement, warranty..." />
+                  </label>
+                  <label className="field asset-bulk-upload">
+                    <span>Bulk Upload Assets</span>
+                    <input type="file" accept=".csv,text/csv" onChange={uploadBulkAssets} />
                   </label>
                   <div className="create-actions">
                     <small>
@@ -3535,13 +3647,29 @@ function App() {
                       <span>Category</span>
                       <select
                         value={invoiceForm.category}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, category: e.target.value }))}
+                        onChange={(e) => {
+                          const nextCategory = e.target.value;
+                          setInvoiceForm((prev) => ({
+                            ...prev,
+                            category: nextCategory,
+                            subcategory: INVOICE_SUBCATEGORIES_BY_CATEGORY[nextCategory][0]
+                          }));
+                        }}
                       >
-                        <option value="Hardware">Hardware</option>
-                        <option value="Software">Software</option>
-                        <option value="Service">Service</option>
-                        <option value="Network">Network</option>
-                        <option value="Other">Other</option>
+                        {Object.keys(INVOICE_SUBCATEGORIES_BY_CATEGORY).map((category) => (
+                          <option key={category} value={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Subcategory</span>
+                      <select
+                        value={invoiceForm.subcategory}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, subcategory: e.target.value }))}
+                      >
+                        {(INVOICE_SUBCATEGORIES_BY_CATEGORY[invoiceForm.category] || []).map((subcategory) => (
+                          <option key={subcategory} value={subcategory}>{subcategory}</option>
+                        ))}
                       </select>
                     </label>
                     <label className="field">
@@ -3606,7 +3734,7 @@ function App() {
                     className="inventory-search"
                     value={invoiceQuery}
                     onChange={(e) => setInvoiceQuery(e.target.value)}
-                    placeholder="Search vendor, bill number, category, notes..."
+                    placeholder="Search vendor, bill number, category, subcategory, notes..."
                   />
                   <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)}>
                     <option value="all">All Status</option>
@@ -3621,6 +3749,7 @@ function App() {
                         <th>Bill No</th>
                         <th>Vendor</th>
                         <th>Category</th>
+                        <th>Subcategory</th>
                         <th>Amount</th>
                         <th>Due Date</th>
                         <th>Status</th>
@@ -3631,13 +3760,14 @@ function App() {
                     </thead>
                     <tbody>
                       {filteredInvoices.length === 0 && (
-                        <tr><td colSpan={9}>No bill details saved yet.</td></tr>
+                        <tr><td colSpan={10}>No bill details saved yet.</td></tr>
                       )}
                       {filteredInvoices.map((invoice) => (
                         <tr key={invoice.id}>
                           <td>{invoice.billNo}</td>
                           <td>{invoice.vendor}</td>
                           <td>{invoice.category}</td>
+                          <td>{invoice.subcategory || '-'}</td>
                           <td>{formatCurrency(invoice.amount)}</td>
                           <td>{invoice.dueDate || '-'}</td>
                           <td><span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span></td>
