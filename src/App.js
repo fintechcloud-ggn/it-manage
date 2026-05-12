@@ -139,18 +139,16 @@ const FALLBACK_NAMES_BY_TYPE = {
 };
 
 const ADMIN_PERMISSION_OPTIONS = [
-  { key: 'overview.view', label: 'Overview' },
-  { key: 'inventory.view', label: 'Inventory View' },
-  { key: 'inventory.manage', label: 'Inventory Manage' },
-  { key: 'assignments.view', label: 'Assignments View' },
-  { key: 'assignments.manage', label: 'Assignments Manage' },
+  { key: 'overview.view', label: 'Dashboard / Overview' },
+  { key: 'inventory.view', label: 'Inventory - View Assets' },
+  { key: 'inventory.manage', label: 'Inventory - Add, Edit, Delete Assets' },
+  { key: 'assignments.view', label: 'Assignments - View Employee Assets' },
+  { key: 'assignments.manage', label: 'Assignments - Assign, Return, Replace Assets' },
   { key: 'insights.view', label: 'Insights View' },
   { key: 'activity.view', label: 'Recent Activity View' },
-  { key: 'accounts.manage', label: 'Account Management' },
-  { key: 'accounts.create', label: 'Account Create' },
-  { key: 'accounts.edit', label: 'Account Edit' },
-  { key: 'accounts.delete', label: 'Account Delete' }
+  { key: 'accounts.manage', label: 'Role Account Management' }
 ];
+const ADMIN_PERMISSION_KEYS = ADMIN_PERMISSION_OPTIONS.map((item) => item.key);
 
 const MARKETING_PAGE_COMPONENTS = {
   '/platform': PlatformPage,
@@ -394,7 +392,7 @@ function App() {
       accounts: 'accounts.manage'
     };
     if (sectionKey === 'accounts') {
-      return hasAnyAdminPermission(['accounts.manage', 'accounts.create', 'accounts.edit', 'accounts.delete']);
+      return hasAdminPermission('accounts.manage');
     }
     const required = sectionPermissionMap[sectionKey];
     if (!required) return true;
@@ -404,14 +402,10 @@ function App() {
   }
 
   function normalizeAdminPermissions(inputPermissions) {
-    const next = new Set((inputPermissions || []).map(String));
+    const allowed = new Set(ADMIN_PERMISSION_KEYS);
+    const next = new Set((inputPermissions || []).map(String).filter((key) => allowed.has(key)));
     if (next.has('inventory.manage')) next.add('inventory.view');
     if (next.has('assignments.manage')) next.add('assignments.view');
-    if (next.has('accounts.manage')) {
-      next.add('accounts.create');
-      next.add('accounts.edit');
-      next.add('accounts.delete');
-    }
     return Array.from(next);
   }
 
@@ -1719,7 +1713,7 @@ function App() {
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
     const filtered = assets.filter((a) => {
-      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.status || ''}`.toLowerCase().includes(q);
+      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.domain_name || ''} ${a.status || ''}`.toLowerCase().includes(q);
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
@@ -2169,12 +2163,13 @@ function App() {
                   type="button"
                   className="outline"
                   onClick={() => {
-                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Vendor', 'Serial', 'Status'];
+                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Domain', 'Vendor', 'Serial', 'Status'];
                     const rows = filteredSortedAssets.map((a) => [
                       a.name || '',
                       a.type || '',
                       a.brand_name || '',
                       a.model_name || '',
+                      a.domain_name || '',
                       a.vendor || '',
                       a.serial || '',
                       a.status || ''
@@ -2305,7 +2300,7 @@ function App() {
             <div className="inventory-filter-grid">
               <input
                 className="inventory-search"
-                placeholder="Search by asset, serial, vendor, brand, model, status..."
+                placeholder="Search by asset, serial, vendor, brand, model, domain, status..."
                 value={inventoryQuery}
                 onChange={(e) => setInventoryQuery(e.target.value)}
               />
@@ -2327,6 +2322,7 @@ function App() {
                 <option value="type">Sort by Type</option>
                 <option value="brand_name">Sort by Brand</option>
                 <option value="model_name">Sort by Model</option>
+                <option value="domain_name">Sort by Domain</option>
                 <option value="serial">Sort by Serial</option>
                 <option value="status">Sort by Status</option>
               </select>
@@ -2346,11 +2342,11 @@ function App() {
             <div className="inventory-table-shell">
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
+                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
                   <tbody>
                     {paginatedAssets.map((a) => (
                       <tr key={a.id}>
-                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
+                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
                         <td><span className={`status ${a.status}`}>{a.status}</span></td>
                         <td>
                           <div className="asset-qr-cell">
