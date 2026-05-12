@@ -145,6 +145,8 @@ const ADMIN_PERMISSION_OPTIONS = [
   { key: 'assignments.view', label: 'Assignments - View Employee Assets' },
   { key: 'assignments.manage', label: 'Assignments - Assign, Return, Replace Assets' },
   { key: 'insights.view', label: 'Insights View' },
+  { key: 'invoices.view', label: 'Invoices - View Bills' },
+  { key: 'invoices.manage', label: 'Invoices - Add Bills' },
   { key: 'activity.view', label: 'Recent Activity View' },
   { key: 'accounts.manage', label: 'Role Account Management' }
 ];
@@ -287,6 +289,27 @@ function App() {
   const [allocations, setAllocations] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLogsLoaded, setAuditLogsLoaded] = useState(false);
+  const [invoices, setInvoices] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('invoices') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('all');
+  const [invoiceQuery, setInvoiceQuery] = useState('');
+  const [invoicePreview, setInvoicePreview] = useState(null);
+  const [invoiceForm, setInvoiceForm] = useState({
+    vendor: '',
+    billNo: '',
+    category: 'Hardware',
+    amount: '',
+    dueDate: '',
+    status: 'unpaid',
+    notes: '',
+    invoiceFileName: '',
+    invoiceFileData: ''
+  });
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
@@ -378,16 +401,13 @@ function App() {
     return userPermissions.has(permissionKey);
   }
 
-  function hasAnyAdminPermission(permissionKeys) {
-    return permissionKeys.some((permissionKey) => hasAdminPermission(permissionKey));
-  }
-
   function canAccessSection(sectionKey) {
     const sectionPermissionMap = {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
       insights: 'insights.view',
+      invoices: 'invoices.view',
       activity: 'activity.view',
       accounts: 'accounts.manage'
     };
@@ -406,6 +426,7 @@ function App() {
     const next = new Set((inputPermissions || []).map(String).filter((key) => allowed.has(key)));
     if (next.has('inventory.manage')) next.add('inventory.view');
     if (next.has('assignments.manage')) next.add('assignments.view');
+    if (next.has('invoices.manage')) next.add('invoices.view');
     return Array.from(next);
   }
 
@@ -1779,6 +1800,49 @@ function App() {
       }
     ];
   }, [stats.total, availableAssets.length, activeAllocations.length, assignedUsersCount, employees.length]);
+  const filteredInvoices = useMemo(() => {
+    const q = invoiceQuery.trim().toLowerCase();
+    return invoices
+      .filter((invoice) => invoiceStatusFilter === 'all' || invoice.status === invoiceStatusFilter)
+      .filter((invoice) => {
+        if (!q) return true;
+        return `${invoice.vendor || ''} ${invoice.billNo || ''} ${invoice.category || ''} ${invoice.notes || ''} ${invoice.status || ''}`
+          .toLowerCase()
+          .includes(q);
+      })
+      .sort((a, b) => {
+        const left = a.dueDate || '';
+        const right = b.dueDate || '';
+        if (left === right) return (b.createdAt || 0) - (a.createdAt || 0);
+        return left.localeCompare(right);
+      });
+  }, [invoices, invoiceQuery, invoiceStatusFilter]);
+  const invoiceStats = useMemo(() => {
+    const totalAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+    const paidAmount = invoices
+      .filter((invoice) => invoice.status === 'paid')
+      .reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+    const unpaidAmount = invoices
+      .filter((invoice) => invoice.status === 'unpaid')
+      .reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
+    const overdueCount = invoices.filter((invoice) => {
+      if (invoice.status === 'paid' || !invoice.dueDate) return false;
+      return new Date(`${invoice.dueDate}T23:59:59`).getTime() < Date.now();
+    }).length;
+    return {
+      total: invoices.length,
+      paid: invoices.filter((invoice) => invoice.status === 'paid').length,
+      unpaid: invoices.filter((invoice) => invoice.status === 'unpaid').length,
+      overdue: overdueCount,
+      totalAmount,
+      paidAmount,
+      unpaidAmount
+    };
+  }, [invoices]);
+
+  useEffect(() => {
+    localStorage.setItem('invoices', JSON.stringify(invoices));
+  }, [invoices]);
 
   useEffect(() => {
     setPage(1);
@@ -1789,6 +1853,7 @@ function App() {
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
+    { key: 'invoices', label: 'Invoices', icon: 'BI' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
     { key: 'accounts', label: 'Account Management', icon: 'AM' }
   ].filter((item) => canAccessSection(item.key));
@@ -1807,6 +1872,100 @@ function App() {
     setFilterType('all');
     setSortBy('name');
     setSortDir('asc');
+  }
+
+  function formatCurrency(value) {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(Number(value || 0));
+  }
+
+  function createInvoice(e) {
+    e.preventDefault();
+    if (!hasAdminPermission('invoices.manage')) {
+      setMessage('You do not have permission to add invoices.');
+      return;
+    }
+    const amount = Number(invoiceForm.amount);
+    if (!invoiceForm.vendor.trim() || !invoiceForm.billNo.trim() || !amount) {
+      setMessage('Vendor, bill number, and amount are required.');
+      return;
+    }
+    setInvoices((prev) => [
+      {
+        id: Date.now(),
+        vendor: invoiceForm.vendor.trim(),
+        billNo: invoiceForm.billNo.trim(),
+        category: invoiceForm.category,
+        amount,
+        dueDate: invoiceForm.dueDate,
+        status: invoiceForm.status,
+        notes: invoiceForm.notes.trim(),
+        invoiceFileName: invoiceForm.invoiceFileName,
+        invoiceFileData: invoiceForm.invoiceFileData,
+        createdAt: Date.now()
+      },
+      ...prev
+    ]);
+    setInvoiceForm({
+      vendor: '',
+      billNo: '',
+      category: 'Hardware',
+      amount: '',
+      dueDate: '',
+      status: 'unpaid',
+      notes: '',
+      invoiceFileName: '',
+      invoiceFileData: ''
+    });
+    setMessage('Invoice saved.');
+  }
+
+  function readInvoiceFile(file, onReady) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onReady({
+      invoiceFileName: file.name,
+      invoiceFileData: String(reader.result || '')
+    });
+    reader.readAsDataURL(file);
+  }
+
+  function toggleInvoiceStatus(invoiceId) {
+    if (!hasAdminPermission('invoices.manage')) {
+      setMessage('You do not have permission to update invoices.');
+      return;
+    }
+    setInvoices((prev) => prev.map((invoice) => (
+      invoice.id === invoiceId
+        ? { ...invoice, status: invoice.status === 'paid' ? 'unpaid' : 'paid' }
+        : invoice
+    )));
+  }
+
+  function updateInvoiceUpload(invoiceId, file) {
+    if (!file) return;
+    if (!hasAdminPermission('invoices.manage')) {
+      setMessage('You do not have permission to update invoices.');
+      return;
+    }
+    readInvoiceFile(file, (filePayload) => {
+      setInvoices((prev) => prev.map((invoice) => (
+        invoice.id === invoiceId
+          ? { ...invoice, ...filePayload }
+          : invoice
+      )));
+    });
+  }
+
+  function showInvoice(invoice) {
+    if (!invoice.invoiceFileData) {
+      setMessage('Upload an invoice before viewing it.');
+      return;
+    }
+    setInvoicePreview(invoice);
   }
 
   if (!user) {
@@ -3323,6 +3482,201 @@ function App() {
           </section>
         )}
 
+        {section === 'invoices' && (
+          <section className="panel wide invoice-page">
+            <section className="inventory-head invoice-head">
+              <div>
+                <h3>Tracker Bill-Invoice Payment Record All</h3>
+                <p className="hint">Store bill details and track paid or unpaid invoice status.</p>
+              </div>
+              <div className="inventory-head-actions">
+                <button type="button" className="outline" onClick={() => setInvoiceStatusFilter('all')}>All Bills</button>
+                <button type="button" className="outline" onClick={() => setInvoiceStatusFilter('unpaid')}>Unpaid</button>
+                <button type="button" className="outline" onClick={() => setInvoiceStatusFilter('paid')}>Paid</button>
+              </div>
+            </section>
+
+            <section className="inventory-mini-stats invoice-stats">
+              <article><span>Total Bills</span><strong>{invoiceStats.total}</strong><small>{formatCurrency(invoiceStats.totalAmount)}</small></article>
+              <article><span>Paid</span><strong>{invoiceStats.paid}</strong><small>{formatCurrency(invoiceStats.paidAmount)}</small></article>
+              <article><span>Unpaid</span><strong>{invoiceStats.unpaid}</strong><small>{formatCurrency(invoiceStats.unpaidAmount)}</small></article>
+              <article><span>Overdue</span><strong>{invoiceStats.overdue}</strong><small>Needs follow-up</small></article>
+            </section>
+
+            <section className="invoice-layout">
+              {hasAdminPermission('invoices.manage') && (
+                <section className="create-box invoice-form-card">
+                  <div className="create-head">
+                    <div>
+                      <h4>Add Bill</h4>
+                      <p className="hint">Record vendor, amount, due date, and payment state.</p>
+                    </div>
+                  </div>
+                  <form className="form invoice-form" onSubmit={createInvoice}>
+                    <label className="field">
+                      <span>Vendor</span>
+                      <input
+                        value={invoiceForm.vendor}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, vendor: e.target.value }))}
+                        placeholder="e.g. Dell Partner"
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Bill Number</span>
+                      <input
+                        value={invoiceForm.billNo}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, billNo: e.target.value }))}
+                        placeholder="e.g. INV-2026-001"
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Category</span>
+                      <select
+                        value={invoiceForm.category}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, category: e.target.value }))}
+                      >
+                        <option value="Hardware">Hardware</option>
+                        <option value="Software">Software</option>
+                        <option value="Service">Service</option>
+                        <option value="Network">Network</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Amount</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={invoiceForm.amount}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
+                        placeholder="50000"
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Due Date</span>
+                      <input
+                        type="date"
+                        value={invoiceForm.dueDate}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Status</span>
+                      <select
+                        value={invoiceForm.status}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, status: e.target.value }))}
+                      >
+                        <option value="unpaid">Unpaid</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                    </label>
+                    <label className="field invoice-notes">
+                      <span>Notes</span>
+                      <input
+                        value={invoiceForm.notes}
+                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
+                        placeholder="PO, branch, renewal, warranty..."
+                      />
+                    </label>
+                    <label className="field invoice-upload-field">
+                      <span>Upload Invoice</span>
+                      <input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,.webp"
+                        onChange={(e) => readInvoiceFile(e.target.files?.[0], (filePayload) => {
+                          setInvoiceForm((prev) => ({ ...prev, ...filePayload }));
+                        })}
+                      />
+                    </label>
+                    <div className="create-actions">
+                      <small>{invoiceStats.unpaid} unpaid bills in tracker</small>
+                      <button type="submit">Save Bill</button>
+                    </div>
+                  </form>
+                </section>
+              )}
+
+              <section className="inventory-table-shell invoice-table-card">
+                <div className="invoice-toolbar">
+                  <input
+                    className="inventory-search"
+                    value={invoiceQuery}
+                    onChange={(e) => setInvoiceQuery(e.target.value)}
+                    placeholder="Search vendor, bill number, category, notes..."
+                  />
+                  <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)}>
+                    <option value="all">All Status</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Bill No</th>
+                        <th>Vendor</th>
+                        <th>Category</th>
+                        <th>Amount</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Upload Invoice</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredInvoices.length === 0 && (
+                        <tr><td colSpan={9}>No bill details saved yet.</td></tr>
+                      )}
+                      {filteredInvoices.map((invoice) => (
+                        <tr key={invoice.id}>
+                          <td>{invoice.billNo}</td>
+                          <td>{invoice.vendor}</td>
+                          <td>{invoice.category}</td>
+                          <td>{formatCurrency(invoice.amount)}</td>
+                          <td>{invoice.dueDate || '-'}</td>
+                          <td><span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span></td>
+                          <td>{invoice.notes || '-'}</td>
+                          <td>
+                            <label className="invoice-table-upload">
+                              <span>{invoice.invoiceFileName || 'Upload'}</span>
+                              <input
+                                type="file"
+                                accept=".pdf,.png,.jpg,.jpeg,.webp"
+                                onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
+                              />
+                            </label>
+                          </td>
+                          <td>
+                            <div className="invoice-actions">
+                              <button type="button" className="small" onClick={() => toggleInvoiceStatus(invoice.id)}>
+                                Mark {invoice.status === 'paid' ? 'Unpaid' : 'Paid'}
+                              </button>
+                              <button
+                                type="button"
+                                className="small invoice-show-btn"
+                                disabled={!invoice.invoiceFileData}
+                                onClick={() => showInvoice(invoice)}
+                              >
+                                Show Invoice
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </section>
+          </section>
+        )}
+
         {section === 'activity' && (
           <section className="activity-page">
             <section className="activity-hero">
@@ -3412,6 +3766,27 @@ function App() {
               </section>
             </section>
           </section>
+        )}
+
+        {invoicePreview && (
+          <div className="invoice-preview-overlay" role="dialog" aria-modal="true" aria-label="Invoice preview">
+            <div className="invoice-preview-modal">
+              <div className="invoice-preview-head">
+                <div>
+                  <h3>{invoicePreview.invoiceFileName || 'Invoice'}</h3>
+                  <p>{invoicePreview.vendor} | {invoicePreview.billNo}</p>
+                </div>
+                <button type="button" className="outline" onClick={() => setInvoicePreview(null)}>Close</button>
+              </div>
+              <div className="invoice-preview-body">
+                {String(invoicePreview.invoiceFileData).startsWith('data:image/') ? (
+                  <img src={invoicePreview.invoiceFileData} alt={invoicePreview.invoiceFileName || 'Invoice'} />
+                ) : (
+                  <iframe src={invoicePreview.invoiceFileData} title={invoicePreview.invoiceFileName || 'Invoice'} />
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {message && <div className="toast">{message}</div>}
