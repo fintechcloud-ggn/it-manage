@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import LandingPage from './components/LandingPage';
 import nextgenLogo from './assets/image.png';
+import nextgenLogoSvg from './assets/nextgen-logo.svg';
 import AssetTrackingPage from './pages/AssetTrackingPage';
 import EnterprisePage from './pages/EnterprisePage';
 import GlobalFleetPage from './pages/GlobalFleetPage';
@@ -67,6 +68,14 @@ async function resolveApiBase(forceRefresh = false) {
         const response = await fetch(`${base}/api/health`);
         if (!response.ok) {
           lastError = new Error(`health_${response.status}`);
+          continue;
+        }
+        const health = await response.json().catch(() => ({}));
+        if (
+          process.env.NODE_ENV === 'development' &&
+          !health?.capabilities?.assignedByPersistence
+        ) {
+          lastError = new Error('health_missing_assigned_by_persistence');
           continue;
         }
         resolvedApiBase = base;
@@ -145,6 +154,114 @@ const INVOICE_SUBCATEGORIES_BY_CATEGORY = {
   'Rental Bill': ['Office Rent', 'Other'],
   'Other Bill': ['Other----']
 };
+
+const INVOICE_APPROVAL_STAGES = [
+  { key: 'domain', label: 'Bill Raised', helper: 'Domain' },
+  { key: 'head', label: 'Admin Approval', helper: 'Stage 2' },
+  { key: 'accounts', label: 'Accounts Approval', helper: 'Final approval' },
+  { key: 'payment', label: 'Payment', helper: 'Mark paid' }
+];
+
+const INVOICE_APPROVAL_STATUS_LABELS = {
+  pending_domain: 'Raised',
+  pending_head: 'Pending Admin',
+  pending_accounts: 'Pending Accounts',
+  payment_pending: 'Payment Pending',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  correction: 'Correction Required'
+};
+const INVOICE_APPROVAL_SORT_ORDER = {
+  pending_domain: 0,
+  pending_head: 0,
+  pending_accounts: 0,
+  payment_pending: 0,
+  rejected: 1,
+  correction: 1,
+  completed: 2
+};
+const INVOICE_STORAGE_VERSION = 'head_accounts_approval_v1';
+const INVOICE_ACCOUNTANT_NAMES = ['hansi kunwar', 'umesh', 'umesh ji', 'jeetiesh', 'jeetiesh ji'];
+
+function stripInvoiceAttachmentData(invoice) {
+  return {
+    ...invoice,
+    invoiceFileData: '',
+    paidBillScreenshotData: ''
+  };
+}
+
+function persistInvoicesSafely(nextInvoices) {
+  const serializedInvoices = JSON.stringify(nextInvoices);
+  try {
+    localStorage.setItem('invoices', serializedInvoices);
+    return 'full';
+  } catch (_error) {
+    const lightweightInvoices = nextInvoices.map(stripInvoiceAttachmentData);
+    const serializedLightweightInvoices = JSON.stringify(lightweightInvoices);
+    try {
+      localStorage.setItem('invoices', serializedLightweightInvoices);
+      return 'lightweight';
+    } catch (_retryError) {
+      localStorage.removeItem('invoices');
+      localStorage.setItem('invoices', serializedLightweightInvoices);
+      return 'lightweight';
+    }
+  }
+}
+
+const INVOICE_ATTACHMENT_DB = 'itmanage_invoice_attachments';
+const INVOICE_ATTACHMENT_STORE = 'attachments';
+
+function openInvoiceAttachmentDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error('IndexedDB is not available'));
+      return;
+    }
+    const request = window.indexedDB.open(INVOICE_ATTACHMENT_DB, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(INVOICE_ATTACHMENT_STORE);
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveInvoiceAttachment(key, value) {
+  const db = await openInvoiceAttachmentDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(INVOICE_ATTACHMENT_STORE, 'readwrite');
+    transaction.objectStore(INVOICE_ATTACHMENT_STORE).put(value, key);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function getInvoiceAttachment(key) {
+  const db = await openInvoiceAttachmentDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(INVOICE_ATTACHMENT_STORE, 'readonly');
+    const request = transaction.objectStore(INVOICE_ATTACHMENT_STORE).get(key);
+    request.onsuccess = () => resolve(request.result || '');
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => db.close();
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+function getInvoiceAttachmentKey(invoiceId, type) {
+  return `invoice:${invoiceId}:${type}`;
+}
 
 const ADMIN_PERMISSION_OPTIONS = [
   { key: 'overview.view', label: 'Dashboard / Overview' },
@@ -278,6 +395,21 @@ function getNameInitials(name) {
   return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
 }
 
+function formatAssignedByName(value) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) return '-';
+  if (rawValue.includes('@')) return rawValue.split('@')[0] || rawValue;
+  return rawValue;
+}
+
+function getAllocationAssignmentActor(allocation, assignmentAuditLog = null) {
+  return {
+    name: allocation?.assigned_by_name || assignmentAuditLog?.actor_name || '',
+    userId: allocation?.assigned_by_user_id || assignmentAuditLog?.actor_user_id || null,
+    role: allocation?.assigned_by_role || assignmentAuditLog?.actor_role || null
+  };
+}
+
 function buildAssignmentSelectionValue(userOption) {
   if (userOption?.selection_value) return String(userOption.selection_value);
   if (userOption?.local_user_id) return String(userOption.local_user_id);
@@ -299,6 +431,12 @@ function App() {
   const [auditLogsLoaded, setAuditLogsLoaded] = useState(false);
   const [invoices, setInvoices] = useState(() => {
     try {
+      const savedVersion = localStorage.getItem('invoice_storage_version');
+      if (savedVersion !== INVOICE_STORAGE_VERSION) {
+        localStorage.setItem('invoice_storage_version', INVOICE_STORAGE_VERSION);
+        localStorage.setItem('invoices', '[]');
+        return [];
+      }
       return JSON.parse(localStorage.getItem('invoices') || '[]');
     } catch {
       return [];
@@ -306,6 +444,10 @@ function App() {
   });
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('all');
   const [invoiceQuery, setInvoiceQuery] = useState('');
+  const [invoiceVendorFilter, setInvoiceVendorFilter] = useState('all');
+  const [invoiceCategoryFilter, setInvoiceCategoryFilter] = useState('all');
+  const [invoiceSubcategoryFilter, setInvoiceSubcategoryFilter] = useState('all');
+  const [invoiceDateFilter, setInvoiceDateFilter] = useState('all');
   const [invoicePreview, setInvoicePreview] = useState(null);
   const [invoiceForm, setInvoiceForm] = useState({
     vendor: '',
@@ -319,6 +461,7 @@ function App() {
     invoiceFileName: '',
     invoiceFileData: ''
   });
+  const invoiceAttachmentsLoadedRef = useRef(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
@@ -410,6 +553,19 @@ function App() {
     return userPermissions.has(permissionKey);
   }
 
+  function hasInvoiceHeadApprovalAccess() {
+    if (isSuperAdmin) return true;
+    const normalizedRole = String(user?.role || '').toLowerCase();
+    return normalizedRole.includes('head');
+  }
+
+  function hasInvoiceAccountsApprovalAccess() {
+    if (isSuperAdmin) return true;
+    const normalizedRole = String(user?.role || '').toLowerCase();
+    const normalizedName = String(user?.name || '').trim().toLowerCase();
+    return normalizedRole.includes('account') || INVOICE_ACCOUNTANT_NAMES.includes(normalizedName);
+  }
+
   function canAccessSection(sectionKey) {
     const sectionPermissionMap = {
       overview: 'overview.view',
@@ -496,6 +652,12 @@ function App() {
     fetchAuditLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, section, auditLogsLoaded]);
+
+  useEffect(() => {
+    if (!token || !selectedEmployeeId || auditLogsLoaded) return;
+    fetchAuditLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, selectedEmployeeId, auditLogsLoaded]);
 
   useEffect(() => {
     if (authView !== 'landing' || user) return undefined;
@@ -946,6 +1108,7 @@ function App() {
   }
 
   function buildAssignedAssetQrData(asset, employee, assignmentAuditLog = null) {
+    const assignmentActor = getAllocationAssignmentActor(asset, assignmentAuditLog);
     return JSON.stringify({
       allocationId: asset.id,
       employeeName: employee?.name || '-',
@@ -954,9 +1117,9 @@ function App() {
       assetType: asset.type,
       serialNumber: asset.serial,
       assignedAt: asset.allocatedAt ? new Date(asset.allocatedAt).toISOString() : null,
-      assignedByAdmin: assignmentAuditLog?.actor_name || 'Unknown',
-      assignedByAdminId: assignmentAuditLog?.actor_user_id || null,
-      assignedByRole: assignmentAuditLog?.actor_role || null
+      assignedByAdmin: assignmentActor.name || 'Unknown',
+      assignedByAdminId: assignmentActor.userId,
+      assignedByRole: assignmentActor.role
     });
   }
 
@@ -1000,7 +1163,7 @@ function App() {
     const qrData = buildAssignedAssetQrData(asset, employee, assignmentAuditLog);
     const qrUrl = getQrImageUrl(qrData);
     const assignedAtText = asset.allocatedAt ? new Date(asset.allocatedAt).toLocaleString() : '-';
-    const assignedBy = assignmentAuditLog?.actor_name || 'Unknown';
+    const assignedBy = getAllocationAssignmentActor(asset, assignmentAuditLog).name || 'Unknown';
     const popup = window.open('', '_blank', 'width=780,height=360');
     if (!popup) return;
     popup.document.write(`
@@ -1352,7 +1515,11 @@ function App() {
   const allocationAssignAuditById = useMemo(() => {
     const byAllocation = {};
     auditLogs.forEach((log) => {
-      if (log.entity_type !== 'allocation' || log.action !== 'ALLOCATE_ASSET' || !log.entity_id) return;
+      if (
+        log.entity_type !== 'allocation' ||
+        !['ALLOCATE_ASSET', 'REPLACE_ASSET'].includes(log.action) ||
+        !log.entity_id
+      ) return;
       if (!byAllocation[log.entity_id]) byAllocation[log.entity_id] = log;
     });
     return byAllocation;
@@ -1664,6 +1831,10 @@ function App() {
             id: a.id,
             assetId: a.asset_id,
             allocatedAt: a.allocated_at,
+            assigned_by_name: a.assigned_by_name,
+            assigned_by_user_id: a.assigned_by_user_id,
+            assigned_by_role: a.assigned_by_role,
+            assignedBy: formatAssignedByName(a.assigned_by_name),
             notes: a.notes || '',
             assetName: assetById[a.asset_id]?.name || `Asset ${a.asset_id}`,
             serial: assetById[a.asset_id]?.serial || '-',
@@ -1699,15 +1870,20 @@ function App() {
     if (!selectedEmployee) return [];
     return allocations
       .filter((a) => a.user_id === selectedEmployee.id)
-      .map((a) => ({
-        ...a,
-        assetName: assetById[a.asset_id]?.name || `Asset ${a.asset_id}`,
-        serial: assetById[a.asset_id]?.serial || '-',
-        type: assetById[a.asset_id]?.type || '-',
-        status: a.returned_at ? 'Returned' : 'Allocated'
-      }))
+      .map((a) => {
+        const assignmentAuditLog = allocationAssignAuditById[a.id];
+        const assignmentActor = getAllocationAssignmentActor(a, assignmentAuditLog);
+        return {
+          ...a,
+          assetName: assetById[a.asset_id]?.name || `Asset ${a.asset_id}`,
+          serial: assetById[a.asset_id]?.serial || '-',
+          type: assetById[a.asset_id]?.type || '-',
+          status: a.returned_at ? 'Returned' : 'Allocated',
+          assignedBy: formatAssignedByName(assignmentActor.name)
+        };
+      })
       .sort((a, b) => new Date(b.allocated_at || 0) - new Date(a.allocated_at || 0));
-  }, [selectedEmployee, allocations, assetById]);
+  }, [selectedEmployee, allocations, assetById, allocationAssignAuditById]);
   const replacementAssetOptions = useMemo(() => {
     if (replacementForm.replacementType === 'all') return availableAssets;
     return availableAssets.filter((asset) => (asset.type || '') === replacementForm.replacementType);
@@ -1908,21 +2084,69 @@ function App() {
   }, [stats.total, availableAssets.length, activeAllocations.length, assignedUsersCount, employees.length]);
   const filteredInvoices = useMemo(() => {
     const q = invoiceQuery.trim().toLowerCase();
+    const now = Date.now();
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
     return invoices
       .filter((invoice) => invoiceStatusFilter === 'all' || invoice.status === invoiceStatusFilter)
+      .filter((invoice) => invoiceVendorFilter === 'all' || (invoice.vendor || '') === invoiceVendorFilter)
+      .filter((invoice) => invoiceCategoryFilter === 'all' || (invoice.category || '') === invoiceCategoryFilter)
+      .filter((invoice) => invoiceSubcategoryFilter === 'all' || (invoice.subcategory || '') === invoiceSubcategoryFilter)
+      .filter((invoice) => {
+        if (invoiceDateFilter === 'all') return true;
+        const rawDate = invoice.dueDate || invoice.createdAt;
+        if (!rawDate) return false;
+        const invoiceDate = typeof rawDate === 'number' ? new Date(rawDate) : new Date(`${rawDate}T00:00:00`);
+        if (Number.isNaN(invoiceDate.getTime())) return false;
+        if (invoiceDateFilter === 'overdue') {
+          return invoice.status !== 'paid' && invoiceDate.getTime() < now;
+        }
+        if (invoiceDateFilter === 'this_month') {
+          return invoiceDate.getMonth() === currentMonth && invoiceDate.getFullYear() === currentYear;
+        }
+        if (invoiceDateFilter === 'last_30') {
+          return now - invoiceDate.getTime() <= 30 * 24 * 60 * 60 * 1000;
+        }
+        return true;
+      })
       .filter((invoice) => {
         if (!q) return true;
-        return `${invoice.vendor || ''} ${invoice.billNo || ''} ${invoice.category || ''} ${invoice.subcategory || ''} ${invoice.notes || ''} ${invoice.status || ''}`
+        const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
+        const approvalStage = invoice.approvalStage || (invoice.status === 'paid' ? 'payment' : 'domain');
+        return `${invoice.vendor || ''} ${invoice.billNo || ''} ${invoice.category || ''} ${invoice.subcategory || ''} ${invoice.notes || ''} ${invoice.status || ''} ${approvalStatus} ${approvalStage}`
           .toLowerCase()
           .includes(q);
       })
       .sort((a, b) => {
+        const aApprovalStatus = a.approvalStatus || (a.status === 'paid' ? 'completed' : 'pending_domain');
+        const bApprovalStatus = b.approvalStatus || (b.status === 'paid' ? 'completed' : 'pending_domain');
+        const aPriority = INVOICE_APPROVAL_SORT_ORDER[aApprovalStatus] ?? 3;
+        const bPriority = INVOICE_APPROVAL_SORT_ORDER[bApprovalStatus] ?? 3;
+        if (aPriority !== bPriority) return aPriority - bPriority;
         const left = a.dueDate || '';
         const right = b.dueDate || '';
         if (left === right) return (b.createdAt || 0) - (a.createdAt || 0);
         return left.localeCompare(right);
       });
-  }, [invoices, invoiceQuery, invoiceStatusFilter]);
+  }, [invoices, invoiceQuery, invoiceStatusFilter, invoiceVendorFilter, invoiceCategoryFilter, invoiceSubcategoryFilter, invoiceDateFilter]);
+  const invoiceVendors = useMemo(() => {
+    return Array.from(new Set(invoices.map((invoice) => invoice.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [invoices]);
+  const invoiceSubcategoryOptions = useMemo(() => {
+    if (invoiceCategoryFilter === 'all') {
+      return Array.from(new Set(Object.values(INVOICE_SUBCATEGORIES_BY_CATEGORY).flat())).sort((a, b) => a.localeCompare(b));
+    }
+    return INVOICE_SUBCATEGORIES_BY_CATEGORY[invoiceCategoryFilter] || [];
+  }, [invoiceCategoryFilter]);
+  const filteredInvoiceStats = useMemo(() => {
+    return {
+      totalAmount: filteredInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0),
+      count: filteredInvoices.length,
+      paid: filteredInvoices.filter((invoice) => invoice.status === 'paid').length,
+      withBills: filteredInvoices.filter((invoice) => invoice.invoiceFileData || invoice.invoiceFileName).length
+    };
+  }, [filteredInvoices]);
   const invoiceStats = useMemo(() => {
     const totalAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
     const paidAmount = invoices
@@ -1935,11 +2159,18 @@ function App() {
       if (invoice.status === 'paid' || !invoice.dueDate) return false;
       return new Date(`${invoice.dueDate}T23:59:59`).getTime() < Date.now();
     }).length;
+    const pendingApproval = invoices.filter((invoice) => {
+      const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
+      return ['pending_domain', 'pending_head', 'pending_accounts', 'payment_pending'].includes(approvalStatus);
+    }).length;
+    const rejected = invoices.filter((invoice) => invoice.approvalStatus === 'rejected').length;
     return {
       total: invoices.length,
       paid: invoices.filter((invoice) => invoice.status === 'paid').length,
       unpaid: invoices.filter((invoice) => invoice.status === 'unpaid').length,
       overdue: overdueCount,
+      pendingApproval,
+      rejected,
       totalAmount,
       paidAmount,
       unpaidAmount
@@ -1947,7 +2178,51 @@ function App() {
   }, [invoices]);
 
   useEffect(() => {
-    localStorage.setItem('invoices', JSON.stringify(invoices));
+    if (!invoices.length) {
+      localStorage.setItem('invoices', '[]');
+      return;
+    }
+    try {
+      const persistenceMode = persistInvoicesSafely(invoices);
+      if (persistenceMode === 'lightweight') {
+        setMessage('Browser storage is full, so bill details were saved without heavy file data.');
+      }
+    } catch (_error) {
+      setMessage('Browser storage is full. Remove large invoice files or clear old bill records.');
+    }
+  }, [invoices]);
+
+  useEffect(() => {
+    if (invoiceAttachmentsLoadedRef.current || !invoices.length) return;
+    invoiceAttachmentsLoadedRef.current = true;
+
+    let cancelled = false;
+    Promise.all(invoices.map(async (invoice) => {
+      const [invoiceFileData, paidBillScreenshotData] = await Promise.all([
+        invoice.invoiceFileData ? Promise.resolve(invoice.invoiceFileData) : getInvoiceAttachment(getInvoiceAttachmentKey(invoice.id, 'invoice')),
+        invoice.paidBillScreenshotData ? Promise.resolve(invoice.paidBillScreenshotData) : getInvoiceAttachment(getInvoiceAttachmentKey(invoice.id, 'paidProof'))
+      ]);
+      return {
+        ...invoice,
+        invoiceFileData: invoiceFileData || invoice.invoiceFileData || '',
+        paidBillScreenshotData: paidBillScreenshotData || invoice.paidBillScreenshotData || ''
+      };
+    }))
+      .then((hydratedInvoices) => {
+        if (cancelled) return;
+        const hasRestoredData = hydratedInvoices.some((invoice, index) => (
+          invoice.invoiceFileData !== invoices[index]?.invoiceFileData ||
+          invoice.paidBillScreenshotData !== invoices[index]?.paidBillScreenshotData
+        ));
+        if (hasRestoredData) setInvoices(hydratedInvoices);
+      })
+      .catch(() => {
+        if (!cancelled) setMessage('Could not load saved invoice attachments from this browser.');
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [invoices]);
 
   useEffect(() => {
@@ -1999,9 +2274,14 @@ function App() {
       setMessage('Vendor, bill number, and amount are required.');
       return;
     }
+    const invoiceId = Date.now();
+    if (invoiceForm.invoiceFileData) {
+      saveInvoiceAttachment(getInvoiceAttachmentKey(invoiceId, 'invoice'), invoiceForm.invoiceFileData)
+        .catch(() => setMessage('Bill saved, but invoice file could not be stored in this browser.'));
+    }
     setInvoices((prev) => [
       {
-        id: Date.now(),
+        id: invoiceId,
         vendor: invoiceForm.vendor.trim(),
         billNo: invoiceForm.billNo.trim(),
         category: invoiceForm.category,
@@ -2012,6 +2292,11 @@ function App() {
         notes: invoiceForm.notes.trim(),
         invoiceFileName: invoiceForm.invoiceFileName,
         invoiceFileData: invoiceForm.invoiceFileData,
+        paidBillScreenshotName: '',
+        paidBillScreenshotData: '',
+        approvalStage: 'head',
+        approvalStatus: 'pending_head',
+        approvalHistory: [{ action: 'Invoice Raised', stage: 'Domain', at: new Date().toISOString() }],
         createdAt: Date.now()
       },
       ...prev
@@ -2028,7 +2313,7 @@ function App() {
       invoiceFileName: '',
       invoiceFileData: ''
     });
-    setMessage('Invoice saved.');
+    setMessage('Invoice raised and sent to admin approval.');
   }
 
   function readInvoiceFile(file, onReady) {
@@ -2041,14 +2326,137 @@ function App() {
     reader.readAsDataURL(file);
   }
 
-  function toggleInvoiceStatus(invoiceId) {
-    if (!hasAdminPermission('invoices.manage')) {
-      setMessage('You do not have permission to update invoices.');
+  function getInvoiceApproval(invoice) {
+    const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
+    const approvalStage = invoice.approvalStage || (invoice.status === 'paid' ? 'payment' : 'domain');
+    const stage = INVOICE_APPROVAL_STAGES.find((item) => item.key === approvalStage);
+    const fallbackStageLabel = approvalStage === 'archived'
+      ? 'Archived'
+      : approvalStage === 'correction'
+        ? 'Correction'
+        : 'Domain Approval';
+    return {
+      stageKey: approvalStage,
+      statusKey: approvalStatus,
+      stageLabel: stage?.label || fallbackStageLabel,
+      statusLabel: INVOICE_APPROVAL_STATUS_LABELS[approvalStatus] || approvalStatus
+    };
+  }
+
+  function updateInvoiceApproval(invoiceId, action) {
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    if (!targetInvoice) return;
+    const targetApproval = getInvoiceApproval(targetInvoice);
+    const canActOnHeadStage = targetApproval.stageKey === 'head' && hasInvoiceHeadApprovalAccess();
+    const canActOnAccountsStage = targetApproval.stageKey === 'accounts' && hasInvoiceAccountsApprovalAccess();
+    const canResubmitBill = action === 'Resubmit' && hasAdminPermission('invoices.manage');
+    if (!canActOnHeadStage && !canActOnAccountsStage && !canResubmitBill) {
+      setMessage('You do not have permission for this approval stage.');
+      return;
+    }
+
+    let reason = '';
+    if (action === 'Reject') {
+      reason = window.prompt('Enter rejection reason');
+      if (!reason || !reason.trim()) {
+        setMessage('Rejection reason is required.');
+        return;
+      }
+      reason = reason.trim();
+    }
+
+    setInvoices((prev) => prev.map((invoice) => {
+      if (invoice.id !== invoiceId) return invoice;
+
+      const current = getInvoiceApproval(invoice);
+      const history = Array.isArray(invoice.approvalHistory) ? invoice.approvalHistory : [];
+      const entry = { action, stage: current.stageLabel, reason, at: new Date().toISOString() };
+
+      if (action === 'Reject') {
+        return {
+          ...invoice,
+          status: 'unpaid',
+          approvalStage: 'archived',
+          approvalStatus: 'rejected',
+          rejectionReason: reason,
+          approvalHistory: [...history, entry]
+        };
+      }
+
+      if (action === 'Correction') {
+        return {
+          ...invoice,
+          status: 'unpaid',
+          approvalStage: 'correction',
+          approvalStatus: 'correction',
+          approvalHistory: [...history, entry]
+        };
+      }
+
+      if (action === 'Resubmit') {
+        return {
+          ...invoice,
+          status: 'unpaid',
+          approvalStage: 'head',
+          approvalStatus: 'pending_head',
+          rejectionReason: '',
+          approvalHistory: [...history, entry]
+        };
+      }
+
+      if (current.stageKey === 'domain') {
+        return {
+          ...invoice,
+          approvalStage: 'head',
+          approvalStatus: 'pending_head',
+          approvalHistory: [...history, entry]
+        };
+      }
+
+      if (current.stageKey === 'head') {
+        return {
+          ...invoice,
+          approvalStage: 'accounts',
+          approvalStatus: 'pending_accounts',
+          approvalHistory: [...history, entry]
+        };
+      }
+
+      if (current.stageKey === 'accounts') {
+        return {
+          ...invoice,
+          approvalStage: 'payment',
+          approvalStatus: 'payment_pending',
+          approvalHistory: [...history, entry]
+        };
+      }
+
+      return invoice;
+    }));
+  }
+
+  function markInvoicePaid(invoiceId) {
+    if (!hasInvoiceAccountsApprovalAccess()) {
+      setMessage('You do not have permission to update invoice payment.');
+      return;
+    }
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    if (!targetInvoice?.paidBillScreenshotData) {
+      setMessage('Upload paid bill screenshot before marking the bill paid.');
       return;
     }
     setInvoices((prev) => prev.map((invoice) => (
       invoice.id === invoiceId
-        ? { ...invoice, status: invoice.status === 'paid' ? 'unpaid' : 'paid' }
+        ? {
+          ...invoice,
+          status: 'paid',
+          approvalStage: 'payment',
+          approvalStatus: 'completed',
+          approvalHistory: [
+            ...(Array.isArray(invoice.approvalHistory) ? invoice.approvalHistory : []),
+            { action: 'Marked Paid', stage: 'Payment', at: new Date().toISOString() }
+          ]
+        }
         : invoice
     )));
   }
@@ -2060,11 +2468,51 @@ function App() {
       return;
     }
     readInvoiceFile(file, (filePayload) => {
+      saveInvoiceAttachment(getInvoiceAttachmentKey(invoiceId, 'invoice'), filePayload.invoiceFileData)
+        .catch(() => setMessage('Invoice file could not be stored in this browser.'));
       setInvoices((prev) => prev.map((invoice) => (
         invoice.id === invoiceId
           ? { ...invoice, ...filePayload }
           : invoice
       )));
+    });
+  }
+
+  function updatePaidBillScreenshot(invoiceId, file) {
+    if (!file) return;
+    if (!hasInvoiceAccountsApprovalAccess()) {
+      setMessage('You do not have permission to attach paid bill screenshots.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const proofData = String(reader.result || '');
+      saveInvoiceAttachment(getInvoiceAttachmentKey(invoiceId, 'paidProof'), proofData)
+        .catch(() => setMessage('Paid proof could not be stored in this browser.'));
+      setInvoices((prev) => prev.map((invoice) => (
+        invoice.id === invoiceId
+          ? {
+            ...invoice,
+            paidBillScreenshotName: file.name,
+            paidBillScreenshotData: proofData
+          }
+          : invoice
+      )));
+      setMessage('Paid bill screenshot attached.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function showPaidBillScreenshot(invoice) {
+    const proofData = invoice.paidBillScreenshotData || await getInvoiceAttachment(getInvoiceAttachmentKey(invoice.id, 'paidProof'));
+    if (!proofData) {
+      setMessage('Upload a paid bill screenshot before viewing it.');
+      return;
+    }
+    setInvoicePreview({
+      ...invoice,
+      invoiceFileName: invoice.paidBillScreenshotName || 'Paid bill screenshot',
+      invoiceFileData: proofData
     });
   }
 
@@ -2189,15 +2637,13 @@ function App() {
     );
   }
 
-
   return (
     <div className="app-layout dashboard-shell">
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-top">
           {!sidebarCollapsed && (
             <div className="sidebar-brand">
-              <p className="label">IT Inventory</p>
-              <h3>Dashboard</h3>
+              <img src={nextgenLogoSvg} alt="NEXTGEN" className="sidebar-brand-logo" />
             </div>
           )}
           <button
@@ -2951,48 +3397,66 @@ function App() {
               </header>
               <form className="form account-create-form" onSubmit={createAdminAccount}>
                 <div className="account-form-row">
-                  <input
-                    placeholder="Account name"
-                    value={adminCreateForm.name}
-                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                    required
-                  />
-                  <input
-                    type="email"
-                    placeholder="Account email"
-                    value={adminCreateForm.email}
-                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, email: e.target.value }))}
-                    required
-                  />
+                  <label className="account-field">
+                    <span>Account Name</span>
+                    <input
+                      placeholder="e.g. Zapto Admin"
+                      value={adminCreateForm.name}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Email / Login ID</span>
+                    <input
+                      type="email"
+                      placeholder="e.g. zapto@gmail.com"
+                      value={adminCreateForm.email}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                      required
+                    />
+                  </label>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Password (default: password)"
-                  value={adminCreateForm.password}
-                  onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, password: e.target.value }))}
-                />
+                <label className="account-field">
+                  <span>Password</span>
+                  <input
+                    type="text"
+                    placeholder="Default: password"
+                    value={adminCreateForm.password}
+                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, password: e.target.value }))}
+                  />
+                </label>
                 <div className="account-form-row">
-                  <input
-                    type="text"
-                    placeholder="Role name e.g. admin, manager"
-                    value={adminCreateForm.role}
-                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, role: e.target.value }))}
-                    required
-                  />
-                  <input
-                    type="text"
-                    placeholder="Domain e.g. finance"
-                    value={adminCreateForm.domain_name}
-                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
-                    required
-                  />
+                  <label className="account-field">
+                    <span>Role</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. admin, manager"
+                      value={adminCreateForm.role}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, role: e.target.value }))}
+                      required
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Domain</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. finance"
+                      value={adminCreateForm.domain_name}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
+                      required
+                    />
+                  </label>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Employee code prefix e.g. fch"
-                  value={adminCreateForm.employee_code_prefix}
-                  onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))}
-                />
+                <label className="account-field">
+                  <span>Employee Code Prefix</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. fch"
+                    value={adminCreateForm.employee_code_prefix}
+                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))}
+                  />
+                </label>
                 <div className="permission-actions">
                   <button
                     type="button"
@@ -3057,65 +3521,80 @@ function App() {
               </header>
 
               <div className="account-form-row">
-                <input
-                  placeholder="Account name"
-                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.name || ''}
-                  onChange={(e) => setAdminDetailDrafts((prev) => ({
-                    ...prev,
-                    [selectedAdminPermissionUser.id]: {
-                      ...(prev[selectedAdminPermissionUser.id] || {}),
-                      name: e.target.value
-                    }
-                  }))}
-                />
-                <input
-                  type="email"
-                  placeholder="Account email"
-                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.email || ''}
-                  onChange={(e) => setAdminDetailDrafts((prev) => ({
-                    ...prev,
-                    [selectedAdminPermissionUser.id]: {
-                      ...(prev[selectedAdminPermissionUser.id] || {}),
-                      email: e.target.value
-                    }
-                  }))}
-                />
+                <label className="account-field">
+                  <span>Account Name</span>
+                  <input
+                    placeholder="Account name"
+                    value={adminDetailDrafts[selectedAdminPermissionUser.id]?.name || ''}
+                    onChange={(e) => setAdminDetailDrafts((prev) => ({
+                      ...prev,
+                      [selectedAdminPermissionUser.id]: {
+                        ...(prev[selectedAdminPermissionUser.id] || {}),
+                        name: e.target.value
+                      }
+                    }))}
+                  />
+                </label>
+                <label className="account-field">
+                  <span>Email / Login ID</span>
+                  <input
+                    type="email"
+                    placeholder="Account email"
+                    value={adminDetailDrafts[selectedAdminPermissionUser.id]?.email || ''}
+                    onChange={(e) => setAdminDetailDrafts((prev) => ({
+                      ...prev,
+                      [selectedAdminPermissionUser.id]: {
+                        ...(prev[selectedAdminPermissionUser.id] || {}),
+                        email: e.target.value
+                      }
+                    }))}
+                  />
+                </label>
               </div>
               <div className="account-form-row">
-                <input
-                  placeholder="Role"
-                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.role || ''}
-                  onChange={(e) => setAdminDetailDrafts((prev) => ({
-                    ...prev,
-                    [selectedAdminPermissionUser.id]: {
-                      ...(prev[selectedAdminPermissionUser.id] || {}),
-                      role: e.target.value
-                    }
-                  }))}
-                />
-                <input
-                  placeholder="Domain"
-                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || ''}
-                  onChange={(e) => setAdminDetailDrafts((prev) => ({
-                    ...prev,
-                    [selectedAdminPermissionUser.id]: {
-                      ...(prev[selectedAdminPermissionUser.id] || {}),
-                      domain_name: e.target.value.toLowerCase()
-                    }
-                  }))}
-                />
+                <label className="account-field">
+                  <span>Role</span>
+                  <input
+                    placeholder="Role"
+                    value={adminDetailDrafts[selectedAdminPermissionUser.id]?.role || ''}
+                    onChange={(e) => setAdminDetailDrafts((prev) => ({
+                      ...prev,
+                      [selectedAdminPermissionUser.id]: {
+                        ...(prev[selectedAdminPermissionUser.id] || {}),
+                        role: e.target.value
+                      }
+                    }))}
+                  />
+                </label>
+                <label className="account-field">
+                  <span>Domain</span>
+                  <input
+                    placeholder="Domain"
+                    value={adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || ''}
+                    onChange={(e) => setAdminDetailDrafts((prev) => ({
+                      ...prev,
+                      [selectedAdminPermissionUser.id]: {
+                        ...(prev[selectedAdminPermissionUser.id] || {}),
+                        domain_name: e.target.value.toLowerCase()
+                      }
+                    }))}
+                  />
+                </label>
               </div>
-              <input
-                placeholder="Employee code prefix e.g. fch"
-                value={adminDetailDrafts[selectedAdminPermissionUser.id]?.employee_code_prefix || ''}
-                onChange={(e) => setAdminDetailDrafts((prev) => ({
-                  ...prev,
-                  [selectedAdminPermissionUser.id]: {
-                    ...(prev[selectedAdminPermissionUser.id] || {}),
-                    employee_code_prefix: e.target.value.toLowerCase()
-                  }
-                }))}
-              />
+              <label className="account-field">
+                <span>Employee Code Prefix</span>
+                <input
+                  placeholder="e.g. fch"
+                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.employee_code_prefix || ''}
+                  onChange={(e) => setAdminDetailDrafts((prev) => ({
+                    ...prev,
+                    [selectedAdminPermissionUser.id]: {
+                      ...(prev[selectedAdminPermissionUser.id] || {}),
+                      employee_code_prefix: e.target.value.toLowerCase()
+                    }
+                  }))}
+                />
+              </label>
 
               <div className="permission-actions">
                 <button
@@ -3374,10 +3853,10 @@ function App() {
                 <h4>Assigned Assets</h4>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Assigned At</th><th>Notes</th><th>QR</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Assigned At</th><th>Assigned By</th><th>Notes</th><th>QR</th><th>Action</th></tr></thead>
                     <tbody>
                       {selectedEmployee.assignedAssets.length === 0 ? (
-                        <tr><td colSpan={7}>No active assets assigned.</td></tr>
+                        <tr><td colSpan={8}>No active assets assigned.</td></tr>
                       ) : (
                         selectedEmployee.assignedAssets.map((asset) => (
                           <tr key={asset.id}>
@@ -3385,6 +3864,7 @@ function App() {
                             <td>{asset.type}</td>
                             <td>{asset.serial}</td>
                             <td>{asset.allocatedAt ? new Date(asset.allocatedAt).toLocaleString() : '-'}</td>
+                            <td>{asset.assignedBy || '-'}</td>
                             <td>{asset.notes ? <span className="note-pill">{asset.notes}</span> : '-'}</td>
                             <td>
                               <div className="inline-asset-qr-cell">
@@ -3492,10 +3972,10 @@ function App() {
                 <h4>Allocation History</h4>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Allocated At</th><th>Returned At</th><th>Status</th><th>Reason/Notes</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Allocated At</th><th>Returned At</th><th>Status</th><th>Reason/Notes</th><th>Assigned By</th></tr></thead>
                     <tbody>
                       {selectedEmployeeHistory.length === 0 ? (
-                        <tr><td colSpan={7}>No history found.</td></tr>
+                        <tr><td colSpan={8}>No history found.</td></tr>
                       ) : (
                         selectedEmployeeHistory.map((item) => (
                           <tr key={item.id}>
@@ -3506,6 +3986,7 @@ function App() {
                             <td>{item.returned_at ? new Date(item.returned_at).toLocaleString() : '-'}</td>
                             <td><span className={`status-pill ${item.returned_at ? 'returned' : 'allocated'}`}>{item.status}</span></td>
                             <td>{item.notes || '-'}</td>
+                            <td>{item.assignedBy || '-'}</td>
                           </tr>
                         ))
                       )}
@@ -3596,23 +4077,115 @@ function App() {
 
         {section === 'invoices' && (
           <section className="panel wide invoice-page">
-            <section className="inventory-head invoice-head">
-              <div>
-                <h3>Tracker Bill-Invoice Payment Record All</h3>
-                <p className="hint">Store bill details and track paid or unpaid invoice status.</p>
+            <section className="expense-hero">
+              <div className="expense-nav-pills" aria-label="Invoice tools">
+                <button type="button" className="active">View All Bills</button>
+                <button type="button" onClick={() => document.querySelector('.invoice-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Add Bill</button>
+                <button type="button" onClick={() => setInvoiceStatusFilter('unpaid')}>Approval Stage 1</button>
               </div>
-              <div className="inventory-head-actions">
-                <button type="button" className="outline" onClick={() => setInvoiceStatusFilter('all')}>All Bills</button>
-                <button type="button" className="outline" onClick={() => setInvoiceStatusFilter('unpaid')}>Unpaid</button>
-                <button type="button" className="outline" onClick={() => setInvoiceStatusFilter('paid')}>Paid</button>
+              <div>
+                <p className="expense-eyebrow">Tracker Bill-Invoice Payment Record All</p>
+                <h3>My Bills</h3>
               </div>
             </section>
 
-            <section className="inventory-mini-stats invoice-stats">
-              <article><span>Total Bills</span><strong>{invoiceStats.total}</strong><small>{formatCurrency(invoiceStats.totalAmount)}</small></article>
-              <article><span>Paid</span><strong>{invoiceStats.paid}</strong><small>{formatCurrency(invoiceStats.paidAmount)}</small></article>
-              <article><span>Unpaid</span><strong>{invoiceStats.unpaid}</strong><small>{formatCurrency(invoiceStats.unpaidAmount)}</small></article>
-              <article><span>Overdue</span><strong>{invoiceStats.overdue}</strong><small>Needs follow-up</small></article>
+            <section className="expense-filter-card">
+              <div className="panel-head">
+                <h3>Filters</h3>
+                <button
+                  type="button"
+                  className="outline"
+                  onClick={() => {
+                    setInvoiceVendorFilter('all');
+                    setInvoiceStatusFilter('all');
+                    setInvoiceCategoryFilter('all');
+                    setInvoiceSubcategoryFilter('all');
+                    setInvoiceDateFilter('all');
+                    setInvoiceQuery('');
+                  }}
+                >
+                  Reset Filters
+                </button>
+              </div>
+              <div className="expense-filter-grid">
+                <label>
+                  <span>Brand / Vendor</span>
+                  <select value={invoiceVendorFilter} onChange={(e) => setInvoiceVendorFilter(e.target.value)}>
+                    <option value="all">All</option>
+                    {invoiceVendors.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Status</span>
+                  <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)}>
+                    <option value="all">All</option>
+                    <option value="unpaid">Unpaid</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Category</span>
+                  <select
+                    value={invoiceCategoryFilter}
+                    onChange={(e) => {
+                      setInvoiceCategoryFilter(e.target.value);
+                      setInvoiceSubcategoryFilter('all');
+                    }}
+                  >
+                    <option value="all">All</option>
+                    {Object.keys(INVOICE_SUBCATEGORIES_BY_CATEGORY).map((category) => (
+                      <option key={category} value={category}>{category}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Subcategory</span>
+                  <select value={invoiceSubcategoryFilter} onChange={(e) => setInvoiceSubcategoryFilter(e.target.value)}>
+                    <option value="all">All</option>
+                    {invoiceSubcategoryOptions.map((subcategory) => (
+                      <option key={subcategory} value={subcategory}>{subcategory}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Date Range</span>
+                  <select value={invoiceDateFilter} onChange={(e) => setInvoiceDateFilter(e.target.value)}>
+                    <option value="all">All Time</option>
+                    <option value="this_month">This Month</option>
+                    <option value="last_30">Last 30 Days</option>
+                    <option value="overdue">Overdue</option>
+                  </select>
+                </label>
+              </div>
+              <input
+                className="expense-wide-search"
+                value={invoiceQuery}
+                onChange={(e) => setInvoiceQuery(e.target.value)}
+                placeholder="Search vendor, bill number, category, subcategory, approval..."
+              />
+            </section>
+
+            <section className="expense-summary-row">
+              <article><span>Total</span><strong>{formatCurrency(filteredInvoiceStats.totalAmount)}</strong></article>
+              <article><span>Count</span><strong>{filteredInvoiceStats.count}</strong></article>
+              <article><span>Paid</span><strong>{filteredInvoiceStats.paid}</strong></article>
+              <article><span>With Bills</span><strong>{filteredInvoiceStats.withBills}</strong></article>
+            </section>
+
+            <section className="invoice-workflow-card">
+              <div className="panel-head">
+                <h3>Bill Approval Workflow</h3>
+                <span>{invoiceStats.pendingApproval} pending approval | {invoiceStats.rejected} rejected</span>
+              </div>
+              <div className="invoice-workflow-steps">
+                {INVOICE_APPROVAL_STAGES.map((stage, index) => (
+                  <article key={stage.key}>
+                    <small>{stage.helper}</small>
+                    <strong>{stage.label}</strong>
+                    {index < INVOICE_APPROVAL_STAGES.length - 1 && <span className="workflow-arrow">-&gt;</span>}
+                  </article>
+                ))}
+              </div>
             </section>
 
             <section className="invoice-layout">
@@ -3729,18 +4302,12 @@ function App() {
               )}
 
               <section className="inventory-table-shell invoice-table-card">
-                <div className="invoice-toolbar">
-                  <input
-                    className="inventory-search"
-                    value={invoiceQuery}
-                    onChange={(e) => setInvoiceQuery(e.target.value)}
-                    placeholder="Search vendor, bill number, category, subcategory, notes..."
-                  />
-                  <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)}>
-                    <option value="all">All Status</option>
-                    <option value="unpaid">Unpaid</option>
-                    <option value="paid">Paid</option>
-                  </select>
+                <div className="expense-record-head">
+                  <div>
+                    <h3>Detailed Bill Records</h3>
+                    <p>{filteredInvoices.length} records matched</p>
+                  </div>
+                  <span>{formatCurrency(filteredInvoiceStats.totalAmount)}</span>
                 </div>
                 <div className="table-wrap">
                   <table>
@@ -3753,6 +4320,8 @@ function App() {
                         <th>Amount</th>
                         <th>Due Date</th>
                         <th>Status</th>
+                        <th>Approval Stage</th>
+                        <th>Approval Status</th>
                         <th>Notes</th>
                         <th>Upload Invoice</th>
                         <th>Action</th>
@@ -3760,44 +4329,105 @@ function App() {
                     </thead>
                     <tbody>
                       {filteredInvoices.length === 0 && (
-                        <tr><td colSpan={10}>No bill details saved yet.</td></tr>
+                        <tr><td colSpan={12}>No bill details saved yet.</td></tr>
                       )}
                       {filteredInvoices.map((invoice) => (
-                        <tr key={invoice.id}>
-                          <td>{invoice.billNo}</td>
-                          <td>{invoice.vendor}</td>
-                          <td>{invoice.category}</td>
-                          <td>{invoice.subcategory || '-'}</td>
-                          <td>{formatCurrency(invoice.amount)}</td>
-                          <td>{invoice.dueDate || '-'}</td>
-                          <td><span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span></td>
-                          <td>{invoice.notes || '-'}</td>
-                          <td>
-                            <label className="invoice-table-upload">
-                              <span>{invoice.invoiceFileName || 'Upload'}</span>
-                              <input
-                                type="file"
-                                accept=".pdf,.png,.jpg,.jpeg,.webp"
-                                onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
-                              />
-                            </label>
-                          </td>
-                          <td>
-                            <div className="invoice-actions">
-                              <button type="button" className="small" onClick={() => toggleInvoiceStatus(invoice.id)}>
-                                Mark {invoice.status === 'paid' ? 'Unpaid' : 'Paid'}
-                              </button>
-                              <button
-                                type="button"
-                                className="small invoice-show-btn"
-                                disabled={!invoice.invoiceFileData}
-                                onClick={() => showInvoice(invoice)}
-                              >
-                                Show Invoice
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
+                        (() => {
+                          const approval = getInvoiceApproval(invoice);
+                          const canApproveHead = approval.statusKey === 'pending_head' && hasInvoiceHeadApprovalAccess();
+                          const canApproveAccounts = approval.statusKey === 'pending_accounts' && hasInvoiceAccountsApprovalAccess();
+                          const canApprove = canApproveHead || canApproveAccounts;
+                          const needsResubmit = ['rejected', 'correction'].includes(approval.statusKey);
+                          const canPay = approval.statusKey === 'payment_pending' && invoice.status !== 'paid' && hasInvoiceAccountsApprovalAccess();
+                          const isDomainRaiserView = hasAdminPermission('invoices.manage') && !hasInvoiceHeadApprovalAccess() && !hasInvoiceAccountsApprovalAccess();
+                          const showInvoiceRaised = isDomainRaiserView && ['pending_head', 'pending_accounts', 'payment_pending'].includes(approval.statusKey);
+                          const hasPaidProof = !!(invoice.paidBillScreenshotData || invoice.paidBillScreenshotName);
+                          return (
+                            <tr key={invoice.id}>
+                              <td>{invoice.billNo}</td>
+                              <td>{invoice.vendor}</td>
+                              <td>{invoice.category}</td>
+                              <td>{invoice.subcategory || '-'}</td>
+                              <td>{formatCurrency(invoice.amount)}</td>
+                              <td>{invoice.dueDate || '-'}</td>
+                              <td><span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span></td>
+                              <td>{approval.stageLabel}</td>
+                              <td>
+                                <span className={`invoice-approval-badge approval-${approval.statusKey}`}>{approval.statusLabel}</span>
+                                {invoice.rejectionReason && (
+                                  <small className="invoice-rejection-reason">Reason: {invoice.rejectionReason}</small>
+                                )}
+                              </td>
+                              <td>{invoice.notes || '-'}</td>
+                              <td>
+                                <label className="invoice-table-upload">
+                                  <span>{invoice.invoiceFileName || 'Upload'}</span>
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg,.webp"
+                                    onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
+                                  />
+                                </label>
+                              </td>
+                              <td>
+                                <div className="invoice-actions">
+                                  {canApprove && (
+                                    <>
+                                      <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Approve')}>Approve</button>
+                                      <button type="button" className="small outline" onClick={() => updateInvoiceApproval(invoice.id, 'Reject')}>Reject</button>
+                                    </>
+                                  )}
+                                  {canPay && (
+                                    <button
+                                      type="button"
+                                      className="small"
+                                      disabled={!invoice.paidBillScreenshotData}
+                                      onClick={() => markInvoicePaid(invoice.id)}
+                                      title={invoice.paidBillScreenshotData ? 'Mark this bill as paid' : 'Upload paid bill proof first'}
+                                    >
+                                      {invoice.paidBillScreenshotData ? 'Mark Paid' : 'Upload Proof First'}
+                                    </button>
+                                  )}
+                                  {showInvoiceRaised && (
+                                    <span className="invoice-raised-text">Invoice Raised</span>
+                                  )}
+                                  {needsResubmit && (
+                                    <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Resubmit')}>Resubmit</button>
+                                  )}
+                                  {approval.statusKey === 'completed' && (
+                                    <span className="invoice-done-text">Done</span>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="small invoice-show-btn"
+                                    disabled={!invoice.invoiceFileData}
+                                    onClick={() => showInvoice(invoice)}
+                                  >
+                                    Show Invoice
+                                  </button>
+                                  {hasInvoiceAccountsApprovalAccess() && ['pending_accounts', 'payment_pending'].includes(approval.statusKey) && (
+                                    <label className="small invoice-action-upload">
+                                      <span>{invoice.paidBillScreenshotName ? 'Change Proof' : 'Upload Screenshot'}</span>
+                                      <input
+                                        type="file"
+                                        accept=".png,.jpg,.jpeg,.webp"
+                                        onChange={(e) => updatePaidBillScreenshot(invoice.id, e.target.files?.[0])}
+                                      />
+                                    </label>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="small outline"
+                                    disabled={!hasPaidProof}
+                                    onClick={() => showPaidBillScreenshot(invoice)}
+                                  >
+                                    View Proof
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })()
                       ))}
                     </tbody>
                   </table>

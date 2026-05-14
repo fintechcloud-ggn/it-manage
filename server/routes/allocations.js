@@ -54,7 +54,43 @@ router.get('/', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
     let rows = await query(`
-      SELECT al.id, al.asset_id, al.user_id, al.allocated_at, al.allocated_at_ms, al.returned_at, al.returned_at_ms, al.notes, a.domain_name
+      SELECT
+        al.id,
+        al.asset_id,
+        al.user_id,
+        al.allocated_at,
+        al.allocated_at_ms,
+        al.returned_at,
+        al.returned_at_ms,
+        al.notes,
+        a.domain_name,
+        COALESCE(al.assigned_by_user_id, (
+          SELECT log.actor_user_id
+          FROM audit_logs log
+          WHERE log.entity_type = 'allocation'
+            AND log.entity_id = al.id
+            AND log.action IN ('ALLOCATE_ASSET', 'REPLACE_ASSET')
+          ORDER BY log.id ASC
+          LIMIT 1
+        )) AS assigned_by_user_id,
+        COALESCE(NULLIF(al.assigned_by_name, ''), (
+          SELECT log.actor_name
+          FROM audit_logs log
+          WHERE log.entity_type = 'allocation'
+            AND log.entity_id = al.id
+            AND log.action IN ('ALLOCATE_ASSET', 'REPLACE_ASSET')
+          ORDER BY log.id ASC
+          LIMIT 1
+        )) AS assigned_by_name,
+        COALESCE(NULLIF(al.assigned_by_role, ''), (
+          SELECT log.actor_role
+          FROM audit_logs log
+          WHERE log.entity_type = 'allocation'
+            AND log.entity_id = al.id
+            AND log.action IN ('ALLOCATE_ASSET', 'REPLACE_ASSET')
+          ORDER BY log.id ASC
+          LIMIT 1
+        )) AS assigned_by_role
       FROM allocations al
       INNER JOIN assets a ON a.id = al.asset_id
       ORDER BY al.id DESC
@@ -102,8 +138,18 @@ router.post('/', requireAuth, async (req, res) => {
     const targetUserId = Number(targetUser.id);
 
     const result = await query(
-      'INSERT INTO allocations (asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes) VALUES (?, ?, NOW(), ?, NULL, NULL, ?)',
-      [Number(asset_id), Number(targetUserId), allocatedAtMs, notes || null],
+      `INSERT INTO allocations
+       (asset_id, user_id, allocated_at, allocated_at_ms, assigned_by_user_id, assigned_by_name, assigned_by_role, returned_at, returned_at_ms, notes)
+       VALUES (?, ?, NOW(), ?, ?, ?, ?, NULL, NULL, ?)`,
+      [
+        Number(asset_id),
+        Number(targetUserId),
+        allocatedAtMs,
+        allocator.id ? Number(allocator.id) : null,
+        allocator.name || null,
+        allocator.role || null,
+        notes || null
+      ],
     );
     await query("UPDATE assets SET status = 'allocated' WHERE id = ?", [Number(asset_id)]);
     await writeAuditLog({
@@ -114,7 +160,7 @@ router.post('/', requireAuth, async (req, res) => {
       details: `asset_id=${Number(asset_id)}, user_id=${Number(targetUserId)}${notes ? `, notes=${notes}` : ''}`
     });
 
-    const created = await query('SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1', [result.insertId]);
+    const created = await query('SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, assigned_by_user_id, assigned_by_name, assigned_by_role, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1', [result.insertId]);
     res.status(201).json(created[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -157,7 +203,7 @@ router.put('/:id/return', requireAuth, async (req, res) => {
       details: `asset_id=${Number(alloc.asset_id)}${reason ? `, reason=${reason}` : ''}${reason_detail ? `, reason_detail=${reason_detail}` : ''}`
     });
 
-    const updated = await query('SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1', [id]);
+    const updated = await query('SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, assigned_by_user_id, assigned_by_name, assigned_by_role, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1', [id]);
     res.json(updated[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -222,8 +268,18 @@ router.post('/:id/replace', requireAuth, async (req, res) => {
 
     const replacementNote = `Replacement for allocation #${id}. Reason: ${fullReason}`;
     const created = await query(
-      'INSERT INTO allocations (asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes) VALUES (?, ?, NOW(), ?, NULL, NULL, ?)',
-      [Number(new_asset_id), Number(currentAlloc.user_id), replacementAllocatedAtMs, replacementNote]
+      `INSERT INTO allocations
+       (asset_id, user_id, allocated_at, allocated_at_ms, assigned_by_user_id, assigned_by_name, assigned_by_role, returned_at, returned_at_ms, notes)
+       VALUES (?, ?, NOW(), ?, ?, ?, ?, NULL, NULL, ?)`,
+      [
+        Number(new_asset_id),
+        Number(currentAlloc.user_id),
+        replacementAllocatedAtMs,
+        allocator.id ? Number(allocator.id) : null,
+        allocator.name || null,
+        allocator.role || null,
+        replacementNote
+      ]
     );
     await query("UPDATE assets SET status = 'allocated' WHERE id = ?", [Number(new_asset_id)]);
     await writeAuditLog({
@@ -235,11 +291,11 @@ router.post('/:id/replace', requireAuth, async (req, res) => {
     });
 
     const returnedAlloc = await query(
-      'SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1',
+      'SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, assigned_by_user_id, assigned_by_name, assigned_by_role, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1',
       [id]
     );
     const newAlloc = await query(
-      'SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1',
+      'SELECT id, asset_id, user_id, allocated_at, allocated_at_ms, assigned_by_user_id, assigned_by_name, assigned_by_role, returned_at, returned_at_ms, notes FROM allocations WHERE id = ? LIMIT 1',
       [created.insertId]
     );
 

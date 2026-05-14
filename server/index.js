@@ -32,7 +32,12 @@ app.use('/api/auth', authRoute);
 app.get('/api/health', async (req, res) => {
   try {
     await query('SELECT 1');
-    res.json({ status: 'ok' });
+    res.json({
+      status: 'ok',
+      capabilities: {
+        assignedByPersistence: true
+      }
+    });
   } catch (err) {
     res.status(503).json({ status: 'error', error: 'Database unavailable' });
   }

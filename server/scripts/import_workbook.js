@@ -117,7 +117,11 @@ async function upsertAssetAndAssign({ type, modelText, serial, employeeCode, emp
 
   const active = await query('SELECT id FROM allocations WHERE asset_id = ? AND returned_at IS NULL LIMIT 1', [asset.id]);
   if (!active[0]) {
-    await query('INSERT INTO allocations (asset_id, user_id, allocated_at, notes) VALUES (?, ?, NOW(), ?)', [asset.id, user.id, normalize(notes) || null]);
+    await query(
+      `INSERT INTO allocations (asset_id, user_id, allocated_at, assigned_by_name, assigned_by_role, notes)
+       VALUES (?, ?, NOW(), ?, ?, ?)`,
+      [asset.id, user.id, 'Workbook Import', 'system', normalize(notes) || null]
+    );
     await query("UPDATE assets SET status = 'allocated' WHERE id = ?", [asset.id]);
     return { imported: true, assigned: true };
   }

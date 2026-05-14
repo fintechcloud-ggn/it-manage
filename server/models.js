@@ -73,6 +73,9 @@ async function init() {
       user_id INT NOT NULL,
       allocated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       allocated_at_ms BIGINT NULL,
+      assigned_by_user_id INT NULL,
+      assigned_by_name VARCHAR(120) NULL,
+      assigned_by_role VARCHAR(30) NULL,
       returned_at DATETIME NULL,
       returned_at_ms BIGINT NULL,
       notes TEXT NULL,
@@ -104,6 +107,18 @@ async function init() {
   if (!allocMsCol.length) {
     await query('ALTER TABLE allocations ADD COLUMN allocated_at_ms BIGINT NULL AFTER allocated_at');
   }
+  const allocAssignedByUserIdCol = await query("SHOW COLUMNS FROM allocations LIKE 'assigned_by_user_id'");
+  if (!allocAssignedByUserIdCol.length) {
+    await query('ALTER TABLE allocations ADD COLUMN assigned_by_user_id INT NULL AFTER allocated_at_ms');
+  }
+  const allocAssignedByNameCol = await query("SHOW COLUMNS FROM allocations LIKE 'assigned_by_name'");
+  if (!allocAssignedByNameCol.length) {
+    await query('ALTER TABLE allocations ADD COLUMN assigned_by_name VARCHAR(120) NULL AFTER assigned_by_user_id');
+  }
+  const allocAssignedByRoleCol = await query("SHOW COLUMNS FROM allocations LIKE 'assigned_by_role'");
+  if (!allocAssignedByRoleCol.length) {
+    await query('ALTER TABLE allocations ADD COLUMN assigned_by_role VARCHAR(30) NULL AFTER assigned_by_name');
+  }
   const returnMsCol = await query("SHOW COLUMNS FROM allocations LIKE 'returned_at_ms'");
   if (!returnMsCol.length) {
     await query('ALTER TABLE allocations ADD COLUMN returned_at_ms BIGINT NULL AFTER returned_at');
@@ -113,6 +128,38 @@ async function init() {
   if (!auditMsCol.length) {
     await query('ALTER TABLE audit_logs ADD COLUMN event_at_ms BIGINT NULL AFTER event_at');
   }
+  await query(`
+    UPDATE allocations al
+    INNER JOIN audit_logs log
+      ON log.id = (
+        SELECT first_log.id
+        FROM audit_logs first_log
+        WHERE first_log.entity_type = 'allocation'
+          AND first_log.entity_id = al.id
+          AND first_log.action IN ('ALLOCATE_ASSET', 'REPLACE_ASSET')
+        ORDER BY first_log.id ASC
+        LIMIT 1
+      )
+    SET
+      al.assigned_by_user_id = COALESCE(al.assigned_by_user_id, log.actor_user_id),
+      al.assigned_by_name = COALESCE(NULLIF(al.assigned_by_name, ''), log.actor_name),
+      al.assigned_by_role = COALESCE(NULLIF(al.assigned_by_role, ''), log.actor_role)
+    WHERE al.assigned_by_name IS NULL OR al.assigned_by_name = ''
+  `);
+  await query(`
+    UPDATE allocations al
+    CROSS JOIN (
+      SELECT MIN(id) AS admin_id, MIN(name) AS admin_name, MIN(role) AS admin_role, COUNT(*) AS admin_count
+      FROM users
+      WHERE LOWER(role) <> 'user'
+    ) admin_user
+    SET
+      al.assigned_by_user_id = COALESCE(al.assigned_by_user_id, admin_user.admin_id),
+      al.assigned_by_name = admin_user.admin_name,
+      al.assigned_by_role = COALESCE(al.assigned_by_role, admin_user.admin_role)
+    WHERE (al.assigned_by_name IS NULL OR al.assigned_by_name = '')
+      AND admin_user.admin_count = 1
+  `);
   const userProfileImageCol = await query("SHOW COLUMNS FROM users LIKE 'profile_image_url'");
   const userDomainCol = await query("SHOW COLUMNS FROM users LIKE 'domain_name'");
   if (!userDomainCol.length) {
