@@ -147,6 +147,25 @@ const FALLBACK_NAMES_BY_TYPE = {
   'Sim Card': ['Airtel SIM', 'Jio SIM', 'Vi SIM', 'BSNL SIM']
 };
 
+function normalizeBrandName(name) {
+  return String(name || '').trim().toLowerCase();
+}
+
+function isAppleMacBrandName(name) {
+  const normalized = normalizeBrandName(name);
+  return ['apple', 'mac', 'macbook', 'macintosh'].includes(normalized);
+}
+
+function dedupeModels(models) {
+  const seen = new Set();
+  return models.filter((model) => {
+    const key = `${normalizeBrandName(model.category)}::${normalizeBrandName(model.name)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const INVOICE_SUBCATEGORIES_BY_CATEGORY = {
   'Assets Bill': ['Laptops', 'Phone', 'SIM', 'Printer', 'Camira', 'BIOMATRIX', 'Other'],
   'Utility Bill': ['Wifi Bill', 'Leased Line Bill', 'Electricity Bill', 'Water Bill', 'Pantry Supplies', 'Cleaning Supplies', 'Marketing', 'Petty Cash', 'Other'],
@@ -426,6 +445,7 @@ function App() {
   const [assets, setAssets] = useState([]);
   const [users, setUsers] = useState([]);
   const [quickAssignUsers, setQuickAssignUsers] = useState([]);
+  const [uploadedEmployeeAssets, setUploadedEmployeeAssets] = useState([]);
   const [allocations, setAllocations] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLogsLoaded, setAuditLogsLoaded] = useState(false);
@@ -478,6 +498,7 @@ function App() {
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
+  const [inventoryPageSize, setInventoryPageSize] = useState('25');
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [assignmentSearchDraft, setAssignmentSearchDraft] = useState('');
   const [assignmentUserFilter, setAssignmentUserFilter] = useState('all');
@@ -526,7 +547,7 @@ function App() {
     reason: 'Damaged',
     reasonDetail: ''
   });
-  const [selectedAssetType, setSelectedAssetType] = useState('Laptop');
+  const [selectedAssetType, setSelectedAssetType] = useState('');
   const [selectedAssetName, setSelectedAssetName] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [assetDomainName, setAssetDomainName] = useState('');
@@ -633,6 +654,7 @@ function App() {
     if (!token || !sessionChecked || authView !== 'app') return;
     fetchAssets();
     fetchQuickAssignUsers();
+    fetchUploadedEmployeeAssets();
     fetchAllocations();
     fetchStores();
     fetchBrands();
@@ -760,6 +782,20 @@ function App() {
       .catch((err) => {
         if (err.message === 'unauthorized') return;
         setQuickAssignUsers([]);
+      });
+  }
+
+  function fetchUploadedEmployeeAssets() {
+    apiFetch('/api/users/uploaded-employee-assets', { headers: authHeaders() })
+      .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
+        if (!r.ok) throw new Error(`uploaded_employee_assets_${r.status}`);
+        return r.json();
+      })
+      .then((rows) => setUploadedEmployeeAssets(Array.isArray(rows) ? rows : []))
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setUploadedEmployeeAssets([]);
       });
   }
 
@@ -960,6 +996,10 @@ function App() {
     const domain_name = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
     const brand_id = selectedBrandId ? Number(selectedBrandId) : null;
     const model_id = selectedModelId ? Number(selectedModelId) : null;
+    if (!type) {
+      setMessage('Select asset type.');
+      return;
+    }
     if (!name) {
       setMessage('Select asset name.');
       return;
@@ -994,7 +1034,7 @@ function App() {
       fetchAuditLogs();
       e.target.reset();
       setSelectedBrandId('');
-      setSelectedAssetType('Laptop');
+      setSelectedAssetType('');
       setSelectedAssetName('');
       setSelectedModelId('');
       setAssetDomainName(currentUserDomain || '');
@@ -1684,7 +1724,15 @@ function App() {
   const topAssignees = teamLoad.slice(0, 5);
   const selectedBrandModels = useMemo(() => {
     const brand = brands.find((b) => b.id === Number(selectedBrandId));
-    return brand ? brand.models : [];
+    if (!brand) return [];
+    const brandModels = brand.models || [];
+    if (!isAppleMacBrandName(brand.name)) return brandModels;
+
+    const appleMacModels = brands
+      .filter((b) => isAppleMacBrandName(b.name))
+      .flatMap((b) => b.models || []);
+
+    return dedupeModels([...brandModels, ...appleMacModels]);
   }, [brands, selectedBrandId]);
   const selectedBrandModelsByType = useMemo(() => {
     return selectedBrandModels.filter(
@@ -1858,7 +1906,7 @@ function App() {
         const q = assignmentSearch.trim().toLowerCase();
         if (!q) return true;
         const assetsText = emp.assignedAssets.map((a) => `${a.assetName} ${a.serial} ${a.type}`).join(' ');
-        return `${emp.name || ''} ${emp.email || ''} ${emp.role || ''} ${assetsText}`.toLowerCase().includes(q);
+        return `${emp.name || ''} ${emp.employee_code || ''} ${emp.email || ''} ${emp.personal_mobile_no || ''} ${emp.role || ''} ${emp.department || ''} ${emp.designation || ''} ${emp.location || ''} ${assetsText}`.toLowerCase().includes(q);
       })
       .sort((a, b) => b.assignedCount - a.assignedCount || (a.name || '').localeCompare(b.name || ''));
   }, [employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch]);
@@ -2016,7 +2064,7 @@ function App() {
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
     const filtered = assets.filter((a) => {
-      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.domain_name || ''} ${a.status || ''}`.toLowerCase().includes(q);
+      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.domain_name || ''} ${a.assigned_to_name || ''} ${a.assigned_to_employee_code || ''} ${a.status || ''}`.toLowerCase().includes(q);
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
@@ -2032,12 +2080,12 @@ function App() {
     });
     return sorted;
   }, [assets, inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir]);
-  const pageSize = 8;
+  const pageSize = inventoryPageSize === 'all' ? filteredSortedAssets.length || 1 : Number(inventoryPageSize);
   const totalPages = Math.max(1, Math.ceil(filteredSortedAssets.length / pageSize));
   const paginatedAssets = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredSortedAssets.slice(start, start + pageSize);
-  }, [filteredSortedAssets, page]);
+  }, [filteredSortedAssets, page, pageSize]);
   const inventoryStats = useMemo(() => {
     const total = filteredSortedAssets.length;
     const available = filteredSortedAssets.filter((a) => a.status === 'available').length;
@@ -2227,7 +2275,7 @@ function App() {
 
   useEffect(() => {
     setPage(1);
-  }, [inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir]);
+  }, [inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir, inventoryPageSize]);
 
   const navItems = [
     { key: 'overview', label: 'Overview', icon: 'DB' },
@@ -2253,6 +2301,7 @@ function App() {
     setFilterType('all');
     setSortBy('name');
     setSortDir('asc');
+    setInventoryPageSize('25');
   }
 
   function formatCurrency(value) {
@@ -2876,12 +2925,14 @@ function App() {
                   type="button"
                   className="outline"
                   onClick={() => {
-                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Domain', 'Vendor', 'Serial', 'Status'];
+                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
                     const rows = filteredSortedAssets.map((a) => [
                       a.name || '',
                       a.type || '',
                       a.brand_name || '',
                       a.model_name || '',
+                      a.assigned_to_name || '',
+                      a.assigned_to_employee_code || '',
                       a.domain_name || '',
                       a.vendor || '',
                       a.serial || '',
@@ -2912,7 +2963,7 @@ function App() {
                     <p className="hint">Register device details, brand/model mapping, and serial in one flow.</p>
                   </div>
                   <div className="create-meta">
-                    <span>{selectedAssetType}</span>
+                    <span>{selectedAssetType || 'Select asset type'}</span>
                     <span>{brandsBySelectedType.length} brands</span>
                     <span>{modelOptionsByType.length} models</span>
                   </div>
@@ -2931,6 +2982,7 @@ function App() {
                       }}
                       required
                     >
+                      <option value="" disabled>Select asset type</option>
                       {TYPE_OPTIONS.map((t) => (
                         <option key={t} value={t}>{t}</option>
                       ))}
@@ -2947,7 +2999,7 @@ function App() {
                         setSelectedModelId('');
                       }}
                     >
-                      <option value="">{`Select ${selectedAssetType} brand`}</option>
+                      <option value="">Select asset brand</option>
                       {brandsBySelectedType.map((b) => (
                         <option key={b.id} value={b.id}>{b.name}</option>
                       ))}
@@ -2970,8 +3022,8 @@ function App() {
                       value={selectedModelId}
                       onChange={setSelectedModelId}
                       options={modelDropdownOptions}
-                      placeholder={`Select ${selectedAssetType} model`}
-                      searchPlaceholder={`Search ${selectedAssetType.toLowerCase()} model...`}
+                      placeholder={`Select ${selectedAssetType || 'asset'} model`}
+                      searchPlaceholder={`Search ${(selectedAssetType || 'asset').toLowerCase()} model...`}
                       emptyMessage="No model found"
                     />
                   </label>
@@ -3006,7 +3058,7 @@ function App() {
                     <small>
                       {selectedBrandId
                         ? `Adding ${selectedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
-                        : `Choose any ${selectedAssetType} model or narrow by brand`}
+                        : `Choose any ${selectedAssetType || 'asset'} model or narrow by brand`}
                     </small>
                     <button type="submit">Add Asset</button>
                   </div>
@@ -3047,6 +3099,12 @@ function App() {
                 <option value="asc">Ascending</option>
                 <option value="desc">Descending</option>
               </select>
+              <select value={inventoryPageSize} onChange={(e) => setInventoryPageSize(e.target.value)}>
+                <option value="25">Show 25</option>
+                <option value="50">Show 50</option>
+                <option value="100">Show 100</option>
+                <option value="all">Show All</option>
+              </select>
             </div>
 
             <div className="inventory-mini-stats inventory-mini-stats-strong">
@@ -3059,11 +3117,11 @@ function App() {
             <div className="inventory-table-shell">
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
+                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Assigned To</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
                   <tbody>
                     {paginatedAssets.map((a) => (
                       <tr key={a.id}>
-                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
+                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.assigned_to_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
                         <td><span className={`status ${a.status}`}>{a.status}</span></td>
                         <td>
                           <div className="asset-qr-cell">
@@ -3180,7 +3238,12 @@ function App() {
                   <thead>
                     <tr>
                       <th>Employee</th>
+                      <th>Code</th>
                       <th>Email</th>
+                      <th>Mobile</th>
+                      <th>Department</th>
+                      <th>Designation</th>
+                      <th>Location</th>
                       <th>Role</th>
                       <th>Assigned Assets</th>
                       <th>Latest Assignment</th>
@@ -3197,7 +3260,12 @@ function App() {
                             <small>ID: {emp.id}</small>
                           </div>
                         </td>
+                        <td>{emp.employee_code || '-'}</td>
                         <td>{emp.email || '-'}</td>
+                        <td>{emp.personal_mobile_no || '-'}</td>
+                        <td>{emp.department || '-'}</td>
+                        <td>{emp.designation || '-'}</td>
+                        <td>{emp.location || '-'}</td>
                         <td><span className={`role-pill role-${(emp.role || 'user').toLowerCase()}`}>{emp.role || '-'}</span></td>
                         <td><span className="count-pill">{emp.assignedCount}</span></td>
                         <td>{emp.latestAllocatedAt ? emp.latestAllocatedAt.toLocaleString() : '-'}</td>
@@ -3211,6 +3279,70 @@ function App() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="panel wide assignment-directory-panel">
+              <div className="panel-head">
+                <h3>Uploaded Workbook Data</h3>
+                <span>{uploadedEmployeeAssets.length} raw rows from ToUpasana.xlsx</span>
+              </div>
+              <div className="table-wrap assignment-employee-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sheet</th>
+                      <th>Row</th>
+                      <th>Employee Name</th>
+                      <th>Code</th>
+                      <th>Domain</th>
+                      <th>DOJ</th>
+                      <th>Location</th>
+                      <th>Department</th>
+                      <th>Designation</th>
+                      <th>PAN/Aadhaar</th>
+                      <th>Biometric</th>
+                      <th>Mobile No.</th>
+                      <th>Email</th>
+                      <th>Photo</th>
+                      <th>Gender</th>
+                      <th>Status</th>
+                      <th>Laptop Brand</th>
+                      <th>Product No.</th>
+                      <th>Serial No.</th>
+                      <th>Mobile Assigned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uploadedEmployeeAssets.length === 0 ? (
+                      <tr><td colSpan={20}>No uploaded workbook rows found.</td></tr>
+                    ) : (
+                      uploadedEmployeeAssets.map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.source_sheet || '-'}</td>
+                          <td>{row.source_row_number || '-'}</td>
+                          <td>{row.employee_name || '-'}</td>
+                          <td>{row.employee_code || '-'}</td>
+                          <td>{row.domain_name || '-'}</td>
+                          <td>{row.date_of_joining || '-'}</td>
+                          <td>{row.location || '-'}</td>
+                          <td>{row.department || '-'}</td>
+                          <td>{row.designation || '-'}</td>
+                          <td>{row.pan_aadhaar || '-'}</td>
+                          <td>{row.biometric_code || '-'}</td>
+                          <td>{row.mobile_no || '-'}</td>
+                          <td>{row.email || '-'}</td>
+                          <td>{row.employee_photo || '-'}</td>
+                          <td>{row.gender || '-'}</td>
+                          <td>{row.employment_status || '-'}</td>
+                          <td>{row.laptop_brand || '-'}</td>
+                          <td>{row.laptop_product_no || '-'}</td>
+                          <td>{row.laptop_serial_no || '-'}</td>
+                          <td>{row.mobile_assigned || '-'}</td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -3818,9 +3950,18 @@ function App() {
                       <div><label>First Name</label><p>{(selectedEmployee.name || '').split(' ')[0] || '-'}</p></div>
                       <div><label>Last Name</label><p>{(selectedEmployee.name || '').split(' ').slice(1).join(' ') || '-'}</p></div>
                       <div><label>Email</label><p>{selectedEmployee.email || '-'}</p></div>
+                      <div><label>Mobile</label><p>{selectedEmployee.personal_mobile_no || '-'}</p></div>
                       <div><label>Role</label><p>{selectedEmployee.role || '-'}</p></div>
                       <div><label>Domain</label><p>{selectedEmployee.domain_name || '-'}</p></div>
-                      <div><label>Company</label><p>NEXTGEN</p></div>
+                      <div><label>Code</label><p>{selectedEmployee.employee_code || '-'}</p></div>
+                      <div><label>Department</label><p>{selectedEmployee.department || '-'}</p></div>
+                      <div><label>Designation</label><p>{selectedEmployee.designation || '-'}</p></div>
+                      <div><label>Location</label><p>{selectedEmployee.location || '-'}</p></div>
+                      <div><label>DOJ</label><p>{selectedEmployee.date_of_joining || '-'}</p></div>
+                      <div><label>Biometric Code</label><p>{selectedEmployee.biometric_code || '-'}</p></div>
+                      <div><label>Gender</label><p>{selectedEmployee.gender || '-'}</p></div>
+                      <div><label>Status</label><p>{selectedEmployee.employment_status || '-'}</p></div>
+                      <div><label>Company</label><p>{selectedEmployee.company || 'NEXTGEN'}</p></div>
                       <div><label>Last Note</label><p>{selectedEmployeeLatestNote}</p></div>
                     </div>
                   )}

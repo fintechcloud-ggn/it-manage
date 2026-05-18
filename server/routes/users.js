@@ -6,6 +6,7 @@ const {
   requireAuth,
   requirePermission,
   requireAnyPermission,
+  hasPermission,
   parsePermissions,
   isSuperAdmin,
   normalizeDomain,
@@ -170,6 +171,17 @@ function normalizeUserRow(row) {
     employee_code: row.employee_code || null,
     domain_name: row.domain_name || null,
     employee_code_prefix: row.employee_code_prefix || null,
+    company: row.company || null,
+    department: row.department || null,
+    designation: row.designation || null,
+    location: row.location || null,
+    employment_type: row.employment_type || null,
+    employment_status: row.employment_status || null,
+    date_of_joining: row.date_of_joining || null,
+    personal_mobile_no: row.personal_mobile_no || null,
+    pan_aadhaar: row.pan_aadhaar || null,
+    biometric_code: row.biometric_code || null,
+    gender: row.gender || null,
     profile_image_url: row.profile_image_url || null,
     permissions: parsePermissions(row.permissions_json),
     is_super_admin: isSuperAdmin(row),
@@ -197,7 +209,7 @@ router.get('/', requireAuth, async (req, res) => {
     }
 
     let rows = await query(
-      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users ORDER BY id DESC'
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json, company, department, designation, location, employment_type, employment_status, date_of_joining, personal_mobile_no, pan_aadhaar, biometric_code, gender FROM users ORDER BY id DESC'
     );
     if (!isSuperAdmin(req.user)) {
       rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
@@ -211,6 +223,53 @@ router.get('/', requireAuth, async (req, res) => {
 router.get('/assignment-options', requireAuth, async (req, res) => {
   try {
     let rows = await getAssignmentOptionRows();
+    if (!isSuperAdmin(req.user)) {
+      rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
+    }
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/uploaded-employee-assets', requireAuth, async (req, res) => {
+  try {
+    if ((req.user?.role || '').toLowerCase() !== 'user' && !hasPermission(req.user, 'assignments.view')) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const tableRows = await query(`
+      SELECT COUNT(*) AS table_exists
+      FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'uploaded_employee_asset_rows'
+    `, [PRIMARY_DB_NAME]);
+    if (!Number(tableRows[0]?.table_exists || 0)) return res.json([]);
+
+    let rows = await query(`
+      SELECT
+        id,
+        source_sheet,
+        source_row_number,
+        employee_name,
+        employee_code,
+        domain_name,
+        date_of_joining,
+        location,
+        department,
+        designation,
+        pan_aadhaar,
+        biometric_code,
+        mobile_no,
+        email,
+        employee_photo,
+        gender,
+        employment_status,
+        laptop_brand,
+        laptop_product_no,
+        laptop_serial_no,
+        mobile_assigned
+      FROM uploaded_employee_asset_rows
+      ORDER BY source_sheet ASC, source_row_number ASC
+    `);
     if (!isSuperAdmin(req.user)) {
       rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
     }

@@ -204,6 +204,26 @@ async function init() {
   if (!userEmploymentStatusCol.length) {
     await query('ALTER TABLE users ADD COLUMN employment_status VARCHAR(100) NULL AFTER employment_type');
   }
+  const userDojCol = await query("SHOW COLUMNS FROM users LIKE 'date_of_joining'");
+  if (!userDojCol.length) {
+    await query('ALTER TABLE users ADD COLUMN date_of_joining VARCHAR(40) NULL AFTER employment_status');
+  }
+  const userMobileCol = await query("SHOW COLUMNS FROM users LIKE 'personal_mobile_no'");
+  if (!userMobileCol.length) {
+    await query('ALTER TABLE users ADD COLUMN personal_mobile_no VARCHAR(40) NULL AFTER date_of_joining');
+  }
+  const userPanAadhaarCol = await query("SHOW COLUMNS FROM users LIKE 'pan_aadhaar'");
+  if (!userPanAadhaarCol.length) {
+    await query('ALTER TABLE users ADD COLUMN pan_aadhaar VARCHAR(120) NULL AFTER personal_mobile_no');
+  }
+  const userBiometricCodeCol = await query("SHOW COLUMNS FROM users LIKE 'biometric_code'");
+  if (!userBiometricCodeCol.length) {
+    await query('ALTER TABLE users ADD COLUMN biometric_code VARCHAR(120) NULL AFTER pan_aadhaar');
+  }
+  const userGenderCol = await query("SHOW COLUMNS FROM users LIKE 'gender'");
+  if (!userGenderCol.length) {
+    await query('ALTER TABLE users ADD COLUMN gender VARCHAR(40) NULL AFTER biometric_code');
+  }
   const assetVendorCol = await query("SHOW COLUMNS FROM assets LIKE 'vendor'");
   const assetDomainCol = await query("SHOW COLUMNS FROM assets LIKE 'domain_name'");
   if (!assetDomainCol.length) {

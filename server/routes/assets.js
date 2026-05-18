@@ -8,10 +8,21 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     let rows = await query(`
       SELECT a.id, a.name, a.type, a.domain_name, a.serial, a.status, a.store_id, a.vendor, a.notes, a.brand_id, a.model_id,
-             b.name AS brand_name, m.name AS model_name
+             b.name AS brand_name, m.name AS model_name,
+             assigned_user.name AS assigned_to_name,
+             assigned_user.employee_code AS assigned_to_employee_code,
+             assigned_user.email AS assigned_to_email
       FROM assets a
       LEFT JOIN brands b ON b.id = a.brand_id
       LEFT JOIN asset_models m ON m.id = a.model_id
+      LEFT JOIN (
+        SELECT asset_id, MAX(id) AS allocation_id
+        FROM allocations
+        WHERE returned_at IS NULL
+        GROUP BY asset_id
+      ) current_allocation ON current_allocation.asset_id = a.id
+      LEFT JOIN allocations active_allocation ON active_allocation.id = current_allocation.allocation_id
+      LEFT JOIN users assigned_user ON assigned_user.id = active_allocation.user_id
       ORDER BY a.id DESC
     `);
     if (!isSuperAdmin(req.user)) {
@@ -29,10 +40,21 @@ router.get('/:id', requireAuth, async (req, res) => {
     const id = Number(req.params.id);
     const rows = await query(`
       SELECT a.id, a.name, a.type, a.domain_name, a.serial, a.status, a.store_id, a.vendor, a.notes, a.brand_id, a.model_id,
-             b.name AS brand_name, m.name AS model_name
+             b.name AS brand_name, m.name AS model_name,
+             assigned_user.name AS assigned_to_name,
+             assigned_user.employee_code AS assigned_to_employee_code,
+             assigned_user.email AS assigned_to_email
       FROM assets a
       LEFT JOIN brands b ON b.id = a.brand_id
       LEFT JOIN asset_models m ON m.id = a.model_id
+      LEFT JOIN (
+        SELECT asset_id, MAX(id) AS allocation_id
+        FROM allocations
+        WHERE returned_at IS NULL
+        GROUP BY asset_id
+      ) current_allocation ON current_allocation.asset_id = a.id
+      LEFT JOIN allocations active_allocation ON active_allocation.id = current_allocation.allocation_id
+      LEFT JOIN users assigned_user ON assigned_user.id = active_allocation.user_id
       WHERE a.id = ? LIMIT 1
     `, [id]);
     if (!rows[0]) return res.status(404).json({ error: 'Asset not found' });
