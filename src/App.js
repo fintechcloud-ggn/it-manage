@@ -134,18 +134,6 @@ async function apiFetch(path, options = {}) {
   }
 }
 const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
-const FALLBACK_NAMES_BY_TYPE = {
-  Laptop: ['Business Laptop', 'Developer Laptop', 'Ultrabook', 'High config'],
-  Desktop: ['Workstation', 'Office Desktop',],
-  Monitor: ['24-inch Monitor', '27-inch Monitor', '32-inch Monitor', '40-inch Monitor', '49-inch Monitor', '55-inch Monitor', '65-inch Monitor'],
-  Peripheral: ['Mouse', 'Keyboard', 'Headset', 'Docking Station', 'External hard drive', 'USB drive', 'Webcam', 'USB hub', 'USB cable'],
-  Tablet: ['Business Tablet', 'Tablet'],
-  Mobile: ['Corporate Mobile'],
-  Network: ['Router', 'Switch', 'Access Point'],
-  Printer: ['Laser Printer', 'Ink Tank Printer', 'Thermal Printer'],
-  Scanner: ['Document Scanner', 'Flatbed Scanner'],
-  'Sim Card': ['Airtel SIM', 'Jio SIM', 'Vi SIM', 'BSNL SIM']
-};
 
 function normalizeBrandName(name) {
   return String(name || '').trim().toLowerCase();
@@ -173,6 +161,77 @@ const INVOICE_SUBCATEGORIES_BY_CATEGORY = {
   'Rental Bill': ['Office Rent', 'Other'],
   'Other Bill': ['Other----']
 };
+
+const BILL_DESCRIPTION_VENDOR_OPTIONS = [
+  'AbCom',
+  'ACT Bill, SANT NAGAR',
+  'ACT Bill, Tajes',
+  'AirTel CREDWISE Leas Line A 62 2nd floor Sector 2 noida',
+  'AirTel CREDWISE Mobile Bill',
+  'Airtel FINTECH CLOUD Leas Line Sector -63 Noida 3rd & 4th floor',
+  'AirTel FINTECH CLOUD Mobile Bill',
+  'AirTel FINTECH CLOUD Wifi Bill',
+  'AirTel Fintech F1Speed Loan Mobile Bill',
+  'AirTel Jan Bill Naman Finlease',
+  'AirTel Leas Line A 62 2nd floor Sector 2 noida',
+  'Airtel Leas Line Devika tower',
+  'Airtel Leas Line SEC 63 ,NOIDA',
+  'Airtel Leas Line UDYOG VIHAR',
+  'AirTel Mobile Bill Credwise',
+  'AirTel Mobile Bill F1 Speed Loan',
+  'AirTel Mobile Bill Naman',
+  'AirTel Mobile Bill Pawansut',
+  'AirTel Mobile Bill, south extension',
+  'AirTel Mobile Naman',
+  'AirTel Naman Leas Line Salary Setu, Devika Tower',
+  'AirTel wifi Bill',
+  'AirTel wifi Bill Accounts',
+  'AirTel wifi Bill Dhanrishi',
+  'AirTel wifi Bill FUNDOBABA',
+  'AirTel wifi Bill NavNirmman',
+  'AirTel wifi Bill NPA Birpal',
+  'AirTel wifi Bill panchsheel park',
+  'AirTel wifi Bill S4S',
+  'AirTel wifi Bill Sec -63',
+  'AirTel wifi Bill Udyog vihar',
+  'AirTel wifi Bill, Badarpur,',
+  'AirTel wifi Bill, Udyog Vihar,',
+  'AirTel wifi Mumbai, Bill',
+  'AirTel Wifi, (Disconnected) A-62, Sector 2, Noida',
+  'DAKSH COPIER SYSTEM',
+  'Daksh Copier, DWRKA',
+  'Daksh Copier, SEC 63 ,NOIDA',
+  'Daksh Copier, SEC 63 ,NOIDA + Deposit',
+  'Daksh Copier, UDYOG VIHAR',
+  'Jordan IT',
+  'Jordan IT -19 Laptop Rental',
+  'Jordan IT -2 Laptop Rental',
+  'Jordan IT -3 Laptop Rental',
+  'Jordan IT -41 Laptop Rental',
+  'Jordan IT Repair DISPLAY',
+  'Jordan IT Repair PANEL',
+  'KTCS Computer, 1 Laptop Rental',
+  'KTCS Computer, 4 Laptop Rental',
+  'KTCS Computer, 6 Laptop Rental',
+  'KTCS Computer, Rental',
+  'NEW VISION ENTERPRISES',
+  'Point Blank',
+  'Point Blank, Bio-Metric',
+  'Point Blank, CAMERA',
+  'Point Blank, Installation Sant Nagar,',
+  'Point Blank, Service',
+  'Siddiki Emgineers Devika Tower',
+  'Siddiki Engineers',
+  'Tata FINTECH CLOUD Leas Line Sector -63 Noida 3rd & 4th floor',
+  'Tata NXG Leas Line A 62 4th floor Sector 2 noida',
+  'Timbl Leas Line Bill',
+  'U.M.COMPUTER SOLUTION',
+  'UM Computer, Router for SalarySatu Devika Tower',
+  'UM Computer, UPS & Router for Sec-2, 4th floor Noida',
+  'VI Bill',
+  'VI Bill FINTECH',
+  'VI Bill NAMAN'
+];
 
 const INVOICE_APPROVAL_STAGES = [
   { key: 'domain', label: 'Bill Raised', helper: 'Domain' },
@@ -429,6 +488,22 @@ function getAllocationAssignmentActor(allocation, assignmentAuditLog = null) {
   };
 }
 
+function buildEmployeeLookupKeys(employee) {
+  return [
+    employee?.employee_code,
+    employee?.email,
+    employee?.name
+  ]
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getGeolocationMapUrl(geolocation) {
+  const value = String(geolocation || '').trim();
+  if (!value) return '';
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`;
+}
+
 function buildAssignmentSelectionValue(userOption) {
   if (userOption?.selection_value) return String(userOption.selection_value);
   if (userOption?.local_user_id) return String(userOption.local_user_id);
@@ -492,6 +567,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
+  const [filterDomain, setFilterDomain] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterType, setFilterType] = useState('all');
@@ -548,7 +624,6 @@ function App() {
     reasonDetail: ''
   });
   const [selectedAssetType, setSelectedAssetType] = useState('');
-  const [selectedAssetName, setSelectedAssetName] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [assetDomainName, setAssetDomainName] = useState('');
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -988,8 +1063,9 @@ function App() {
 
   async function createAsset(e) {
     e.preventDefault();
-    const name = selectedAssetName.trim();
     const type = selectedAssetType;
+    const selectedModel = modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
+    const name = (selectedModel?.name || selectedBrandName || type || 'Asset').trim();
     const serial = e.target.serial.value;
     const vendor = e.target.vendor.value;
     const notes = e.target.notes.value;
@@ -998,10 +1074,6 @@ function App() {
     const model_id = selectedModelId ? Number(selectedModelId) : null;
     if (!type) {
       setMessage('Select asset type.');
-      return;
-    }
-    if (!name) {
-      setMessage('Select asset name.');
       return;
     }
     if (!domain_name) {
@@ -1035,7 +1107,6 @@ function App() {
       e.target.reset();
       setSelectedBrandId('');
       setSelectedAssetType('');
-      setSelectedAssetName('');
       setSelectedModelId('');
       setAssetDomainName(currentUserDomain || '');
     }
@@ -1101,11 +1172,13 @@ function App() {
     }
 
     const fallbackDomain = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
+    const selectedModel = modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
+    const fallbackName = selectedModel?.name || selectedBrandName || selectedAssetType;
     let created = 0;
     let failed = 0;
 
     for (const [index, row] of rows.entries()) {
-      const name = row.asset || row.assetname || row.name || selectedAssetName || `Bulk Asset ${index + 1}`;
+      const name = row.asset || row.assetname || row.name || fallbackName || `Bulk Asset ${index + 1}`;
       const type = row.type || selectedAssetType || 'Laptop';
       const serial = row.serial || row.serialnumber || `BULK-${Date.now()}-${index + 1}`;
       const domain_name = (row.domain || row.domainname || fallbackDomain || 'global').trim().toLowerCase();
@@ -1754,17 +1827,11 @@ function App() {
       (b.models || []).some((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase()),
     );
   }, [brands, selectedAssetType]);
-  const assetNameOptions = useMemo(() => {
-    const modelNames = modelOptionsByType.map((m) => m.name);
-    if (modelNames.length > 0) return modelNames;
-    return FALLBACK_NAMES_BY_TYPE[selectedAssetType] || ['Generic Asset'];
-  }, [modelOptionsByType, selectedAssetType]);
   useEffect(() => {
     if (!selectedBrandId) return;
     const existsForType = brandsBySelectedType.some((b) => String(b.id) === String(selectedBrandId));
     if (!existsForType) {
       setSelectedBrandId('');
-      setSelectedAssetName('');
       setSelectedModelId('');
     }
   }, [brandsBySelectedType, selectedBrandId]);
@@ -1793,14 +1860,6 @@ function App() {
         searchText: `${user.name || ''} ${user.employee_code || ''} ${user.employee_email || ''}`,
       })),
     [employeeDropdownOptions]
-  );
-  const assetNameDropdownOptions = useMemo(
-    () => assetNameOptions.map((name) => ({
-      value: name,
-      label: name,
-      searchText: name,
-    })),
-    [assetNameOptions]
   );
   const modelDropdownOptions = useMemo(
     () => modelOptionsByType.map((model) => ({
@@ -1870,9 +1929,25 @@ function App() {
     },
     [activeAllocations, employees],
   );
+  const uploadedEmployeeLookup = useMemo(() => {
+    const lookup = {};
+    uploadedEmployeeAssets.forEach((row) => {
+      buildEmployeeLookupKeys({
+        employee_code: row.employee_code,
+        email: row.email,
+        name: row.employee_name
+      }).forEach((key) => {
+        if (!lookup[key]) lookup[key] = row;
+      });
+    });
+    return lookup;
+  }, [uploadedEmployeeAssets]);
   const employeeDirectory = useMemo(() => {
     return employees
       .map((emp) => {
+        const uploadedEmployee = buildEmployeeLookupKeys(emp)
+          .map((key) => uploadedEmployeeLookup[key])
+          .find(Boolean);
         const assignedAssets = activeAllocations
           .filter((a) => a.user_id === emp.id)
           .map((a) => ({
@@ -1896,6 +1971,8 @@ function App() {
           : null;
         return {
           ...emp,
+          profile_image_url: emp.profile_image_url || uploadedEmployee?.employee_photo || '',
+          geolocation: emp.location || uploadedEmployee?.location || '',
           assignedAssets,
           assignedCount: assignedAssets.length,
           latestAllocatedAt: latestAllocatedAt ? new Date(latestAllocatedAt) : null
@@ -1906,10 +1983,10 @@ function App() {
         const q = assignmentSearch.trim().toLowerCase();
         if (!q) return true;
         const assetsText = emp.assignedAssets.map((a) => `${a.assetName} ${a.serial} ${a.type}`).join(' ');
-        return `${emp.name || ''} ${emp.employee_code || ''} ${emp.email || ''} ${emp.personal_mobile_no || ''} ${emp.role || ''} ${emp.department || ''} ${emp.designation || ''} ${emp.location || ''} ${assetsText}`.toLowerCase().includes(q);
+        return `${emp.name || ''} ${emp.employee_code || ''} ${emp.email || ''} ${emp.personal_mobile_no || ''} ${emp.role || ''} ${emp.department || ''} ${emp.designation || ''} ${emp.geolocation || emp.location || ''} ${assetsText}`.toLowerCase().includes(q);
       })
       .sort((a, b) => b.assignedCount - a.assignedCount || (a.name || '').localeCompare(b.name || ''));
-  }, [employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch]);
+  }, [employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch, uploadedEmployeeLookup]);
   const selectedEmployee = useMemo(
     () => employeeDirectory.find((emp) => emp.id === selectedEmployeeId) || null,
     [employeeDirectory, selectedEmployeeId]
@@ -2061,14 +2138,24 @@ function App() {
   const inventoryBrands = useMemo(() => {
     return Array.from(new Set(assets.map((a) => a.brand_name).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [assets]);
+  const inventoryDomains = useMemo(() => {
+    const domains = [
+      ...assets.map((a) => a.domain_name),
+      ...users.map((u) => u.domain_name)
+    ]
+      .map((domain) => String(domain || '').trim().toLowerCase())
+      .filter(Boolean);
+    return Array.from(new Set(domains)).sort((a, b) => a.localeCompare(b));
+  }, [assets, users]);
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
     const filtered = assets.filter((a) => {
       const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.domain_name || ''} ${a.assigned_to_name || ''} ${a.assigned_to_employee_code || ''} ${a.status || ''}`.toLowerCase().includes(q);
+      const matchDomain = filterDomain === 'all' || String(a.domain_name || '').trim().toLowerCase() === filterDomain;
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
-      return matchQuery && matchStatus && matchBrand && matchType;
+      return matchQuery && matchDomain && matchStatus && matchBrand && matchType;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -2079,7 +2166,7 @@ function App() {
       return 0;
     });
     return sorted;
-  }, [assets, inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir]);
+  }, [assets, inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir]);
   const pageSize = inventoryPageSize === 'all' ? filteredSortedAssets.length || 1 : Number(inventoryPageSize);
   const totalPages = Math.max(1, Math.ceil(filteredSortedAssets.length / pageSize));
   const paginatedAssets = useMemo(() => {
@@ -2181,6 +2268,9 @@ function App() {
   const invoiceVendors = useMemo(() => {
     return Array.from(new Set(invoices.map((invoice) => invoice.vendor).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [invoices]);
+  const invoiceVendorOptions = useMemo(() => {
+    return Array.from(new Set([...BILL_DESCRIPTION_VENDOR_OPTIONS, ...invoiceVendors])).sort((a, b) => a.localeCompare(b));
+  }, [invoiceVendors]);
   const invoiceSubcategoryOptions = useMemo(() => {
     if (invoiceCategoryFilter === 'all') {
       return Array.from(new Set(Object.values(INVOICE_SUBCATEGORIES_BY_CATEGORY).flat())).sort((a, b) => a.localeCompare(b));
@@ -2275,7 +2365,7 @@ function App() {
 
   useEffect(() => {
     setPage(1);
-  }, [inventoryQuery, filterStatus, filterBrand, filterType, sortBy, sortDir, inventoryPageSize]);
+  }, [inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir, inventoryPageSize]);
 
   const navItems = [
     { key: 'overview', label: 'Overview', icon: 'DB' },
@@ -2977,7 +3067,6 @@ function App() {
                       onChange={(e) => {
                         setSelectedAssetType(e.target.value);
                         setSelectedBrandId('');
-                        setSelectedAssetName('');
                         setSelectedModelId('');
                       }}
                       required
@@ -2995,7 +3084,6 @@ function App() {
                       value={selectedBrandId}
                       onChange={(e) => {
                         setSelectedBrandId(e.target.value);
-                        setSelectedAssetName('');
                         setSelectedModelId('');
                       }}
                     >
@@ -3004,17 +3092,6 @@ function App() {
                         <option key={b.id} value={b.id}>{b.name}</option>
                       ))}
                     </select>
-                  </label>
-                  <label className="field">
-                    <span>Asset Name</span>
-                    <SearchableSelect
-                      value={selectedAssetName}
-                      onChange={setSelectedAssetName}
-                      options={assetNameDropdownOptions}
-                      placeholder="Select asset name"
-                      searchPlaceholder="Search asset name..."
-                      emptyMessage="No asset name found"
-                    />
                   </label>
                   <label className="field">
                     <span>Model</span>
@@ -3073,6 +3150,10 @@ function App() {
                 value={inventoryQuery}
                 onChange={(e) => setInventoryQuery(e.target.value)}
               />
+              <select value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
+                <option value="all">All Domains</option>
+                {inventoryDomains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
+              </select>
               <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                 <option value="all">All Status</option>
                 <option value="available">Available</option>
@@ -3237,13 +3318,14 @@ function App() {
                 <table>
                   <thead>
                     <tr>
+                      <th>Photo</th>
                       <th>Employee</th>
                       <th>Code</th>
                       <th>Email</th>
                       <th>Mobile</th>
                       <th>Department</th>
                       <th>Designation</th>
-                      <th>Location</th>
+                      <th>Geolocation</th>
                       <th>Role</th>
                       <th>Assigned Assets</th>
                       <th>Latest Assignment</th>
@@ -3253,6 +3335,18 @@ function App() {
                   <tbody>
                     {employeeDirectory.map((emp) => (
                       <tr key={emp.id}>
+                        <td>
+                          <div className="employee-photo-cell">
+                            {emp.profile_image_url ? (
+                              <img
+                                src={emp.profile_image_url}
+                                alt={emp.name || 'Employee'}
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            ) : null}
+                            <span className="employee-photo-fallback">{getNameInitials(emp.name)}</span>
+                          </div>
+                        </td>
                         <td className="employee-cell">
                           <span className="employee-avatar">{(emp.name || 'U').slice(0, 1).toUpperCase()}</span>
                           <div>
@@ -3265,7 +3359,13 @@ function App() {
                         <td>{emp.personal_mobile_no || '-'}</td>
                         <td>{emp.department || '-'}</td>
                         <td>{emp.designation || '-'}</td>
-                        <td>{emp.location || '-'}</td>
+                        <td>
+                          {emp.geolocation ? (
+                            <a className="geolocation-link" href={getGeolocationMapUrl(emp.geolocation)} target="_blank" rel="noreferrer">
+                              {emp.geolocation}
+                            </a>
+                          ) : '-'}
+                        </td>
                         <td><span className={`role-pill role-${(emp.role || 'user').toLowerCase()}`}>{emp.role || '-'}</span></td>
                         <td><span className="count-pill">{emp.assignedCount}</span></td>
                         <td>{emp.latestAllocatedAt ? emp.latestAllocatedAt.toLocaleString() : '-'}</td>
@@ -4253,7 +4353,7 @@ function App() {
                   <span>Brand / Vendor</span>
                   <select value={invoiceVendorFilter} onChange={(e) => setInvoiceVendorFilter(e.target.value)}>
                     <option value="all">All</option>
-                    {invoiceVendors.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
+                    {invoiceVendorOptions.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
                   </select>
                 </label>
                 <label>
@@ -4341,12 +4441,16 @@ function App() {
                   <form className="form invoice-form" onSubmit={createInvoice}>
                     <label className="field">
                       <span>Vendor</span>
-                      <input
+                      <select
                         value={invoiceForm.vendor}
                         onChange={(e) => setInvoiceForm((prev) => ({ ...prev, vendor: e.target.value }))}
-                        placeholder="e.g. Dell Partner"
                         required
-                      />
+                      >
+                        <option value="" disabled>Select bill description</option>
+                        {invoiceVendorOptions.map((vendor) => (
+                          <option key={vendor} value={vendor}>{vendor}</option>
+                        ))}
+                      </select>
                     </label>
                     <label className="field">
                       <span>Bill Number</span>
