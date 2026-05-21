@@ -4289,6 +4289,10 @@ body {
   flex-wrap: wrap;
 }
 
+.permission-actions button.small.outline {
+  color: #fff;
+}
+
 .permission-actions small {
   margin-left: auto;
   color: #556b80;
