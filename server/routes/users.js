@@ -306,6 +306,7 @@ router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage']), a
     if (!requestedDomain) {
       return res.status(400).json({ error: 'Domain is required' });
     }
+    await query('INSERT IGNORE INTO domains (name) VALUES (?)', [requestedDomain]);
     const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
     const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
@@ -340,6 +341,7 @@ router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage'
     const requestedRole = String(role || 'admin').trim() || 'admin';
     const requestedDomain = normalizeDomain(domain_name);
     if (!requestedDomain) return res.status(400).json({ error: 'domain is required' });
+    await query('INSERT IGNORE INTO domains (name) VALUES (?)', [requestedDomain]);
     const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
     const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
@@ -386,6 +388,9 @@ router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), a
     const requestedDomain = isSuperAdmin(req.user)
       ? (normalizeDomain(domain_name) || normalizeDomain(existing.domain_name))
       : getUserDomain(req.user);
+    if (requestedDomain) {
+      await query('INSERT IGNORE INTO domains (name) VALUES (?)', [requestedDomain]);
+    }
     const normalizedPrefix = String(employee_code_prefix || existing.employee_code_prefix || '').trim().toLowerCase() || null;
 
     const nextPermissions = requestedRole === 'user' ? null : existing.permissions_json;

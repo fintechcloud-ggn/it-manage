@@ -260,6 +260,7 @@ const INVOICE_APPROVAL_SORT_ORDER = {
 };
 const INVOICE_STORAGE_VERSION = 'head_accounts_approval_v1';
 const INVOICE_ACCOUNTANT_NAMES = ['hansi kunwar', 'umesh', 'umesh ji', 'jeetiesh', 'jeetiesh ji'];
+const ROLE_ACCOUNT_PASSWORDS_KEY = 'itmanage_role_account_passwords';
 
 function stripInvoiceAttachmentData(invoice) {
   return {
@@ -488,6 +489,22 @@ function getAllocationAssignmentActor(allocation, assignmentAuditLog = null) {
   };
 }
 
+function readRoleAccountPasswords() {
+  try {
+    return JSON.parse(localStorage.getItem(ROLE_ACCOUNT_PASSWORDS_KEY) || '{}') || {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function persistRoleAccountPasswords(nextPasswords) {
+  try {
+    localStorage.setItem(ROLE_ACCOUNT_PASSWORDS_KEY, JSON.stringify(nextPasswords));
+  } catch (_error) {
+    // Ignore local browser storage failures.
+  }
+}
+
 function buildEmployeeLookupKeys(employee) {
   return [
     employee?.employee_code,
@@ -559,6 +576,7 @@ function App() {
   const invoiceAttachmentsLoadedRef = useRef(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
+  const [domains, setDomains] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -580,6 +598,7 @@ function App() {
   const [assignmentUserFilter, setAssignmentUserFilter] = useState('all');
   const [quickAssignForm, setQuickAssignForm] = useState({
     userId: '',
+    domainName: '',
     assetId: '',
     assetType: 'all',
     assetSearch: '',
@@ -606,6 +625,7 @@ function App() {
   });
   const [adminPermissionDrafts, setAdminPermissionDrafts] = useState({});
   const [adminDetailDrafts, setAdminDetailDrafts] = useState({});
+  const [roleAccountPasswords, setRoleAccountPasswords] = useState(() => readRoleAccountPasswords());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [employeeEditForm, setEmployeeEditForm] = useState({
@@ -733,6 +753,7 @@ function App() {
     fetchAllocations();
     fetchStores();
     fetchBrands();
+    fetchDomains();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, sessionChecked, authView]);
 
@@ -838,6 +859,25 @@ function App() {
       .catch((err) => {
         if (err.message === 'unauthorized') return;
         setMessage('Unable to load users from server.');
+      });
+  }
+
+  function fetchDomains() {
+    apiFetch('/api/domains', { headers: authHeaders() })
+      .then((r) => {
+        if (handleUnauthorized(r.status)) throw new Error('unauthorized');
+        if (!r.ok) throw new Error(`domains_${r.status}`);
+        return r.json();
+      })
+      .then((rows) => {
+        const nextDomains = Array.isArray(rows)
+          ? rows.map((row) => String(row.name || row.domain_name || '').trim().toLowerCase()).filter(Boolean)
+          : [];
+        setDomains(Array.from(new Set(nextDomains)).sort((a, b) => a.localeCompare(b)));
+      })
+      .catch((err) => {
+        if (err.message === 'unauthorized') return;
+        setDomains([]);
       });
   }
 
@@ -975,8 +1015,50 @@ function App() {
   async function allocate(e) {
     e.preventDefault();
     const asset_id = Number(quickAssignForm.assetId);
-    const selectedEmployeeOption = quickAssignUsers.find((item) => String(item.selection_value || item.local_user_id || item.id) === String(quickAssignForm.userId));
     const notes = quickAssignForm.notes.trim();
+    if (isSuperAdmin) {
+      const domainName = String(quickAssignForm.domainName || '').trim().toLowerCase();
+      const selectedAsset = assetById[asset_id];
+      if (!asset_id || !selectedAsset || !domainName) {
+        setMessage('Select domain and available asset to send.');
+        return;
+      }
+      const nextNotes = notes
+        ? `${selectedAsset.notes ? `${selectedAsset.notes} | ` : ''}Domain transfer: ${notes}`
+        : (selectedAsset.notes || '');
+      const res = await apiFetch(`/api/assets/${asset_id}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name: selectedAsset.name,
+          type: selectedAsset.type,
+          serial: selectedAsset.serial,
+          status: selectedAsset.status || 'available',
+          store_id: selectedAsset.store_id || null,
+          vendor: selectedAsset.vendor || '',
+          notes: nextNotes,
+          brand_id: selectedAsset.brand_id || null,
+          model_id: selectedAsset.model_id || null,
+          domain_name: domainName
+        })
+      });
+      const body = await res.json().catch(() => ({}));
+      setMessage(res.ok ? 'Asset sent to domain successfully.' : body.error || 'Domain assignment failed');
+      if (res.ok) {
+        fetchAssets();
+        fetchAuditLogs();
+        setQuickAssignForm((prev) => ({
+          ...prev,
+          assetId: '',
+          assetType: 'all',
+          assetSearch: '',
+          notes: ''
+        }));
+      }
+      return;
+    }
+
+    const selectedEmployeeOption = quickAssignUsers.find((item) => String(item.selection_value || item.local_user_id || item.id) === String(quickAssignForm.userId));
     if (!asset_id || !selectedEmployeeOption) {
       setMessage('Select employee and available asset to assign');
       return;
@@ -1467,6 +1549,13 @@ function App() {
     }
     setMessage(res.ok ? 'Role account created successfully.' : body.error || 'Role account creation failed');
     if (res.ok) {
+      if (body.id) {
+        setRoleAccountPasswords((prev) => {
+          const next = { ...prev, [body.id]: payload.password };
+          persistRoleAccountPasswords(next);
+          return next;
+        });
+      }
       setAdminCreateForm({
         name: '',
         email: '',
@@ -1477,6 +1566,7 @@ function App() {
         permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
       });
       fetchUsers();
+      fetchDomains();
       fetchAuditLogs();
       setCreateAdminPopupOpen(false);
     }
@@ -1502,6 +1592,7 @@ function App() {
     setMessage(res.ok ? 'Role permissions updated.' : body.error || 'Permission update failed');
     if (res.ok) {
       fetchUsers();
+      fetchDomains();
       fetchAuditLogs();
     }
     return res.ok;
@@ -1553,8 +1644,38 @@ function App() {
       fetchUsers();
       fetchAuditLogs();
       if (selectedAdminPermissionId === targetUserId) setSelectedAdminPermissionId(null);
+      setRoleAccountPasswords((prev) => {
+        const next = { ...prev };
+        delete next[targetUserId];
+        persistRoleAccountPasswords(next);
+        return next;
+      });
     }
     return res.ok;
+  }
+
+  async function deleteDomain(domainName) {
+    if (!isSuperAdmin) {
+      setMessage('Only super admin can delete domains.');
+      return;
+    }
+    const normalizedDomain = String(domainName || '').trim().toLowerCase();
+    if (!normalizedDomain) return;
+    const confirmed = window.confirm(`Delete domain "${normalizedDomain}"? This will remove it from users and assets too.`);
+    if (!confirmed) return;
+    const res = await apiFetch(`/api/domains/${encodeURIComponent(normalizedDomain)}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Domain deleted.' : body.error || 'Domain delete failed');
+    if (res.ok) {
+      fetchDomains();
+      fetchUsers();
+      fetchAssets();
+      fetchAuditLogs();
+      setAssetDomainName((prev) => (String(prev || '').trim().toLowerCase() === normalizedDomain ? currentUserDomain || '' : prev));
+    }
   }
 
   const activeAllocations = useMemo(() => allocations.filter((a) => !a.returned_at), [allocations]);
@@ -1624,6 +1745,39 @@ function App() {
     });
     return events.sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 12);
   }, [allocations, assetById, userById]);
+  const domainAssignmentTotals = useMemo(() => {
+    const getAssetTypeBucket = (type) => {
+      const normalized = String(type || '').trim().toLowerCase();
+      if (normalized.includes('sim')) return 'sim';
+      if (normalized.includes('mobile') || normalized.includes('phone')) return 'mobile';
+      if (normalized.includes('laptop')) return 'laptop';
+      return 'other';
+    };
+    const totals = {};
+    activeAllocations.forEach((allocation) => {
+      const asset = assetById[allocation.asset_id] || {};
+      const domain = String(allocation.domain_name || asset.domain_name || 'unassigned').trim().toLowerCase() || 'unassigned';
+      if (!totals[domain]) {
+        totals[domain] = {
+          domain,
+          count: 0,
+          laptop: 0,
+          mobile: 0,
+          sim: 0,
+          other: 0
+        };
+      }
+      totals[domain].count += 1;
+      totals[domain][getAssetTypeBucket(asset.type)] += 1;
+    });
+    const totalAssigned = Math.max(activeAllocations.length, 1);
+    return Object.values(totals)
+      .map((item) => ({
+        ...item,
+        pct: Math.round((item.count / totalAssigned) * 100)
+      }))
+      .sort((a, b) => b.count - a.count || a.domain.localeCompare(b.domain));
+  }, [activeAllocations, assetById]);
   const recentAuditLogs = useMemo(() => auditLogs.slice(0, 50), [auditLogs]);
   const allocationAssignAuditById = useMemo(() => {
     const byAllocation = {};
@@ -2139,14 +2293,15 @@ function App() {
     return Array.from(new Set(assets.map((a) => a.brand_name).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [assets]);
   const inventoryDomains = useMemo(() => {
-    const domains = [
+    const domainValues = [
+      ...domains.map((domain) => domain),
       ...assets.map((a) => a.domain_name),
       ...users.map((u) => u.domain_name)
     ]
       .map((domain) => String(domain || '').trim().toLowerCase())
       .filter(Boolean);
-    return Array.from(new Set(domains)).sort((a, b) => a.localeCompare(b));
-  }, [assets, users]);
+    return Array.from(new Set(domainValues)).sort((a, b) => a.localeCompare(b));
+  }, [domains, assets, users]);
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
     const filtered = assets.filter((a) => {
@@ -2924,17 +3079,29 @@ function App() {
               </section>
 
               <section className="panel">
-                <div className="panel-head"><h3>Recent assignment activity</h3><span>Latest 6 actions</span></div>
+                <div className="panel-head"><h3>Assigned assets by domain</h3><span>{activeAllocations.length} active assignments</span></div>
                 <ul className="list plain overview-activity-list">
-                  {recentActivity.slice(0, 6).map((a) => (
-                    <li key={a.id}>
+                  {domainAssignmentTotals.length === 0 && (
+                    <li>
                       <div>
-                        <strong>{a.assetName}</strong>
-                        <small>{a.userName}</small>
+                        <strong>No assigned assets</strong>
+                        <small>Domains will appear here after assignment</small>
+                      </div>
+                    </li>
+                  )}
+                  {domainAssignmentTotals.slice(0, 6).map((item) => (
+                    <li key={item.domain}>
+                      <div>
+                        <strong>{item.domain}</strong>
+                        <small className="domain-asset-breakdown">
+                          <span>Laptop {item.laptop}</span>
+                          <span>Mobile {item.mobile}</span>
+                          <span>SIM {item.sim}</span>
+                        </small>
                       </div>
                       <div className="activity-meta">
-                        <span>{a.action}</span>
-                        <small>{new Date(a.timestampMs).toLocaleString()}</small>
+                        <span>{item.count}</span>
+                        <small>{item.pct}% assigned</small>
                       </div>
                     </li>
                   ))}
@@ -3114,14 +3281,20 @@ function App() {
                   </label>
                   <label className="field">
                     <span>Domain</span>
-                    <input
+                    <select
                       name="domain_name"
-                      placeholder="e.g. finance"
                       value={assetDomainName}
-                      onChange={(e) => setAssetDomainName(e.target.value.toLowerCase())}
+                      onChange={(e) => setAssetDomainName(e.target.value)}
                       required
                       disabled={!isSuperAdmin}
-                    />
+                    >
+                      <option value="" disabled>Select domain</option>
+                      {Array.from(new Set([assetDomainName, currentUserDomain, ...inventoryDomains].filter(Boolean)))
+                        .sort((a, b) => a.localeCompare(b))
+                        .map((domain) => (
+                          <option key={domain} value={domain}>{domain}</option>
+                        ))}
+                    </select>
                   </label>
                   <label className="field">
                     <span>Notes</span>
@@ -3163,10 +3336,6 @@ function App() {
                 <option value="all">All Brands</option>
                 {inventoryBrands.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
-              <select value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                <option value="all">All Types</option>
-                {inventoryTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                 <option value="name">Sort by Name</option>
                 <option value="type">Sort by Type</option>
@@ -3186,6 +3355,26 @@ function App() {
                 <option value="100">Show 100</option>
                 <option value="all">Show All</option>
               </select>
+            </div>
+
+            <div className="inventory-type-buttons" aria-label="Asset type filters">
+              <button
+                type="button"
+                className={filterType === 'all' ? 'active' : ''}
+                onClick={() => setFilterType('all')}
+              >
+                All Types
+              </button>
+              {inventoryTypes.map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={filterType === type ? 'active' : ''}
+                  onClick={() => setFilterType(type)}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
 
             <div className="inventory-mini-stats inventory-mini-stats-strong">
@@ -3272,16 +3461,28 @@ function App() {
 
               {hasAdminPermission('assignments.manage') && (
                 <div className="create-box assignment-quick-assign">
-                  <h4>Quick Assign Asset</h4>
+                  <h4>{isSuperAdmin ? 'Send Asset To Domain' : 'Quick Assign Asset'}</h4>
                   <form id="assignment-quick-form" onSubmit={allocate} className="form assignment-inline-form">
-                    <SearchableSelect
-                      value={quickAssignForm.userId}
-                      onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, userId: nextValue }))}
-                      options={quickAssignEmployeeOptions}
-                      placeholder={quickAssignEmployeeOptions.length ? 'Select employee' : 'No employees available'}
-                      searchPlaceholder="Search employee..."
-                      emptyMessage="No employee found"
-                    />
+                    {isSuperAdmin ? (
+                      <select
+                        value={quickAssignForm.domainName}
+                        onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, domainName: e.target.value }))}
+                      >
+                        <option value="">Select domain</option>
+                        {inventoryDomains.map((domain) => (
+                          <option key={domain} value={domain}>{domain}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <SearchableSelect
+                        value={quickAssignForm.userId}
+                        onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, userId: nextValue }))}
+                        options={quickAssignEmployeeOptions}
+                        placeholder={quickAssignEmployeeOptions.length ? 'Select employee' : 'No employees available'}
+                        searchPlaceholder="Search employee..."
+                        emptyMessage="No employee found"
+                      />
+                    )}
                     <select
                       value={quickAssignForm.assetType}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
@@ -3303,13 +3504,19 @@ function App() {
                       name="notes"
                       value={quickAssignForm.notes}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      placeholder="Reason, team, project, ticket..."
+                      placeholder={isSuperAdmin ? 'Transfer note...' : 'Reason, team, project, ticket...'}
                     />
-                    <button type="submit" disabled={!quickAssignForm.userId || !quickAssignForm.assetId}>Assign Asset</button>
+                    <button
+                      type="submit"
+                      disabled={isSuperAdmin ? (!quickAssignForm.domainName || !quickAssignForm.assetId) : (!quickAssignForm.userId || !quickAssignForm.assetId)}
+                    >
+                      {isSuperAdmin ? 'Send To Domain' : 'Assign Asset'}
+                    </button>
                   </form>
                   <p className="assignment-inline-meta">
                     {quickAssignAssetOptions.length} matching available assets
                     {quickAssignForm.assetType !== 'all' ? ` in ${quickAssignForm.assetType}` : ''}
+                    {isSuperAdmin ? ' | domains can assign these assets to employees after transfer' : ''}
                   </p>
                 </div>
               )}
@@ -3610,6 +3817,31 @@ function App() {
                     </tbody>
                   </table>
                 </div>
+                <div className="domain-management-card">
+                  <div>
+                    <h4>Domain Management</h4>
+                    <p>Domains created from role accounts appear in asset and dashboard dropdowns.</p>
+                  </div>
+                  <div className="domain-chip-list">
+                    {domains.length === 0 ? (
+                      <span className="domain-empty">No domains found.</span>
+                    ) : (
+                      domains.map((domain) => (
+                        <span key={domain} className="domain-delete-chip">
+                          {domain}
+                          <button
+                            type="button"
+                            disabled={domain === 'global'}
+                            onClick={() => deleteDomain(domain)}
+                            title={domain === 'global' ? 'Global domain cannot be deleted' : `Delete ${domain}`}
+                          >
+                            Delete
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
               </section>
             )}
           </section>
@@ -3825,6 +4057,14 @@ function App() {
                       employee_code_prefix: e.target.value.toLowerCase()
                     }
                   }))}
+                />
+              </label>
+              <label className="account-field">
+                <span>Password</span>
+                <input
+                  type="text"
+                  readOnly
+                  value={roleAccountPasswords[selectedAdminPermissionUser.id] || 'Not available for older accounts'}
                 />
               </label>
 

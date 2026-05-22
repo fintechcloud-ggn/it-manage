@@ -11,6 +11,7 @@ const storesRoute = require('./routes/stores');
 const allocationsRoute = require('./routes/allocations');
 const brandsRoute = require('./routes/brands');
 const auditLogsRoute = require('./routes/audit-logs');
+const domainsRoute = require('./routes/domains');
 const { attachUser } = require('./middleware/auth');
 const { query } = require('./db');
 
@@ -26,6 +27,7 @@ app.use('/api/stores', storesRoute);
 app.use('/api/allocations', allocationsRoute);
 app.use('/api/brands', brandsRoute);
 app.use('/api/audit-logs', auditLogsRoute);
+app.use('/api/domains', domainsRoute);
 const authRoute = require('./routes/auth');
 app.use('/api/auth', authRoute);
 

@@ -118,6 +118,9 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     const allocator = req.user;
+    if (isSuperAdmin(allocator)) {
+      return res.status(403).json({ error: 'Super admin can send assets to domains only. Domain users can assign assets to employees.' });
+    }
     if ((allocator.role || '').toLowerCase() !== 'user' && !hasPermission(allocator, 'assignments.manage')) {
       return res.status(403).json({ error: 'Forbidden' });
     }

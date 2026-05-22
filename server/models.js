@@ -11,6 +11,14 @@ async function init() {
   `);
 
   await query(`
+    CREATE TABLE IF NOT EXISTS domains (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(160) NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS asset_models (
       id INT AUTO_INCREMENT PRIMARY KEY,
       brand_id INT NOT NULL,
@@ -234,6 +242,19 @@ async function init() {
   }
 
   await query(`
+    INSERT IGNORE INTO domains (name)
+    SELECT DISTINCT LOWER(TRIM(domain_name))
+    FROM users
+    WHERE TRIM(COALESCE(domain_name, '')) <> ''
+  `);
+  await query(`
+    INSERT IGNORE INTO domains (name)
+    SELECT DISTINCT LOWER(TRIM(domain_name))
+    FROM assets
+    WHERE TRIM(COALESCE(domain_name, '')) <> ''
+  `);
+
+  await query(`
     CREATE TABLE IF NOT EXISTS employee_device_inventory (
       id INT AUTO_INCREMENT PRIMARY KEY,
       employee_id INT NULL,
@@ -293,6 +314,7 @@ async function seedSample() {
     await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Admin', adminEmail, 'admin', 'global', null, adminPassword]);
     await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Bob Engineer', defaultUserEmail, 'user', 'default', null, userPassword]);
   }
+  await query('INSERT IGNORE INTO domains (name) VALUES (?), (?)', ['global', 'default']);
 
   const stores = await query('SELECT id FROM stores LIMIT 1');
   if (stores.length === 0) {

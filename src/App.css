@@ -1135,6 +1135,23 @@ p {
   font-size: 13px;
 }
 
+.domain-asset-breakdown {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
+.domain-asset-breakdown span {
+  border: 1px solid #dce7ef;
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: #f8fbfd;
+  color: #5d7080;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .activity-meta {
   text-align: right;
 }
@@ -2364,6 +2381,30 @@ p {
 
 .inventory-search {
   min-width: 220px;
+}
+
+.inventory-type-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.inventory-type-buttons button {
+  border: 1px solid #cfdde8;
+  border-radius: 10px;
+  background: #fff;
+  color: #26384a;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 8px 18px rgba(20, 42, 63, 0.04);
+}
+
+.inventory-type-buttons button.active {
+  border-color: #1f7a8c;
+  background: #1f7a8c;
+  color: #fff;
 }
 
 .inventory-mini-stats {
@@ -4455,6 +4496,66 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.domain-management-card {
+  margin-top: 16px;
+  border: 1px solid #dce7ef;
+  border-radius: 14px;
+  background: #fbfdff;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.domain-management-card h4 {
+  margin: 0 0 4px;
+  color: #17354d;
+}
+
+.domain-management-card p {
+  margin: 0;
+  color: #60788d;
+  font-size: 13px;
+}
+
+.domain-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.domain-delete-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfdde8;
+  border-radius: 999px;
+  background: #fff;
+  padding: 6px 7px 6px 12px;
+  color: #21374b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.domain-delete-chip button {
+  border: 0;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.domain-delete-chip button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.domain-empty {
+  color: #60788d;
+  font-size: 13px;
 }
 
 .account-permission-overlay {
