@@ -391,6 +391,7 @@ const LandingPage = ({ onLogin, navigate, currentPath }) => {
                         <div className="f-col">
                             <strong>Company</strong>
                             <a href="/enterprise" onClick={(event) => handleNavigate(event, '/enterprise')}>Enterprise</a>
+                            <a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact Us</a>
                             <a href="/" onClick={(event) => handleNavigate(event, MARKETING_HOME_PATH)}>Home</a>
                         </div>
                     </div>
@@ -400,6 +401,7 @@ const LandingPage = ({ onLogin, navigate, currentPath }) => {
                     <div className="f-social">
                         <a href="/resources" onClick={(event) => handleNavigate(event, '/resources')}>Resources</a>
                         <a href="/pricing" onClick={(event) => handleNavigate(event, '/pricing')}>Pricing</a>
+                        <a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact</a>
                     </div>
                 </div>
             </footer>

@@ -4,6 +4,7 @@ import LandingPage from './components/LandingPage';
 import nextgenLogo from './assets/image.png';
 import nextgenLogoSvg from './assets/nextgen-logo.svg';
 import AssetTrackingPage from './pages/AssetTrackingPage';
+import ContactPage from './pages/ContactPage';
 import EnterprisePage from './pages/EnterprisePage';
 import GlobalFleetPage from './pages/GlobalFleetPage';
 import PlatformPage from './pages/PlatformPage';
@@ -364,7 +365,8 @@ const MARKETING_PAGE_COMPONENTS = {
   '/solutions': SolutionsPage,
   '/enterprise': EnterprisePage,
   '/resources': ResourcesPage,
-  '/pricing': PricingPage
+  '/pricing': PricingPage,
+  '/contact': ContactPage
 };
 
 function SearchableSelect({

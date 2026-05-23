@@ -5,7 +5,8 @@ export const HEADER_NAV_ITEMS = [
   { label: 'Solutions', path: '/solutions' },
   { label: 'Enterprise', path: '/enterprise' },
   { label: 'Resources', path: '/resources' },
-  { label: 'Pricing', path: '/pricing' }
+  { label: 'Pricing', path: '/pricing' },
+  { label: 'Contact Us', path: '/contact' }
 ];
 
 export const PLATFORM_DROPDOWN_ITEMS = [
@@ -22,7 +23,8 @@ export const MARKETING_PATHS = [
   '/solutions',
   '/enterprise',
   '/resources',
-  '/pricing'
+  '/pricing',
+  '/contact'
 ];
 
 export function normalizeMarketingPath(pathname) {

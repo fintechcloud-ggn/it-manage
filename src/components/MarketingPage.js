@@ -121,10 +121,12 @@ const MarketingPage = ({ page, currentPath, navigate, onLogin }) => {
           )}
         </section>
 
+        {page.customPanel}
+
         <section className="lp-page-section">
           <div className="section-header">
-            <label>What you get</label>
-            <h2>Dedicated page for {page.eyebrow.toLowerCase()}</h2>
+            <label>{page.sectionEyebrow || 'What you get'}</label>
+            <h2>{page.sectionTitle || `Dedicated page for ${page.eyebrow.toLowerCase()}`}</h2>
           </div>
           <div className="lp-page-grid">
             {page.sections.map((section) => (
@@ -163,6 +165,7 @@ const MarketingPage = ({ page, currentPath, navigate, onLogin }) => {
             <div className="f-col">
               <strong>Company</strong>
               <a href="/enterprise" onClick={(event) => handleNavigate(event, '/enterprise')}>Enterprise</a>
+              <a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact Us</a>
               <a href="/" onClick={(event) => handleNavigate(event, MARKETING_HOME_PATH)}>Home</a>
             </div>
           </div>
@@ -172,6 +175,7 @@ const MarketingPage = ({ page, currentPath, navigate, onLogin }) => {
           <div className="f-social">
             <a href="/resources" onClick={(event) => handleNavigate(event, '/resources')}>Resources</a>
             <a href="/pricing" onClick={(event) => handleNavigate(event, '/pricing')}>Pricing</a>
+            <a href="/contact" onClick={(event) => handleNavigate(event, '/contact')}>Contact</a>
           </div>
         </div>
       </footer>
