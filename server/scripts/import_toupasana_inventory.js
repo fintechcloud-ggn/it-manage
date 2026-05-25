@@ -8,7 +8,7 @@ const { loadWorkbookRows } = require('./import_employee_device_inventory');
 
 function normalize(value) {
   const text = String(value ?? '').trim();
-  if (!text || ['na', 'n/a', 'nil', 'none', '-'].includes(text.toLowerCase())) return '';
+  if (!text || ['na', 'n/a', '#n/a', 'nil', 'none', '-'].includes(text.toLowerCase())) return '';
   return text;
 }
 

@@ -46,7 +46,7 @@ const API_CANDIDATES = (() => {
   }
 
   const hostname = window.location.hostname || 'localhost';
-  const candidates = [storedApi, `http://${hostname}:4000`, configuredApi].filter(Boolean);
+  const candidates = [`http://${hostname}:4000`, storedApi, configuredApi].filter(Boolean);
   DEV_API_PORTS.forEach((port) => {
     const candidate = `http://${hostname}:${port}`;
     if (!candidates.includes(candidate)) candidates.push(candidate);
@@ -587,6 +587,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
+  const [toUpasanaQuery, setToUpasanaQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterBrand, setFilterBrand] = useState('all');
@@ -689,6 +690,7 @@ function App() {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
+      toupasana: 'assignments.view',
       insights: 'insights.view',
       invoices: 'invoices.view',
       activity: 'activity.view',
@@ -1238,6 +1240,18 @@ function App() {
     });
   }
 
+  function buildSimNotes(row) {
+    return JSON.stringify({
+      source: 'SIM CSV',
+      s_no: row.sno || '',
+      connection_number: row.connectionnumber || '',
+      connection_type: row.connectiontype || '',
+      sim_status: row.status || '',
+      sim_number: row.simnumber || '',
+      assigned_name: row.name || ''
+    });
+  }
+
   async function uploadBulkAssets(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1262,9 +1276,14 @@ function App() {
     let failed = 0;
 
     for (const [index, row] of rows.entries()) {
-      const name = row.asset || row.assetname || row.name || fallbackName || `Bulk Asset ${index + 1}`;
-      const type = row.type || selectedAssetType || 'Laptop';
-      const serial = row.serial || row.serialnumber || `BULK-${Date.now()}-${index + 1}`;
+      const isSimCsvRow = Boolean(row.connectionnumber || row.connectiontype || row.simnumber);
+      const name = isSimCsvRow
+        ? (row.name || row.connectionnumber || `SIM ${index + 1}`)
+        : (row.asset || row.assetname || row.name || fallbackName || `Bulk Asset ${index + 1}`);
+      const type = isSimCsvRow ? 'SIM' : (row.type || selectedAssetType || 'Laptop');
+      const serial = isSimCsvRow
+        ? (row.connectionnumber || row.simnumber || `SIM-${Date.now()}-${index + 1}`)
+        : (row.serial || row.serialnumber || `BULK-${Date.now()}-${index + 1}`);
       const domain_name = (row.domain || row.domainname || fallbackDomain || 'global').trim().toLowerCase();
 
       const res = await apiFetch('/api/assets', {
@@ -1275,8 +1294,8 @@ function App() {
           type,
           serial,
           domain_name,
-          vendor: row.vendor || '',
-          notes: row.notes || '',
+          vendor: isSimCsvRow ? (row.connectiontype || '') : (row.vendor || ''),
+          notes: isSimCsvRow ? buildSimNotes(row) : (row.notes || ''),
           brand_id: null,
           model_id: null
         })
@@ -2304,10 +2323,29 @@ function App() {
       .filter(Boolean);
     return Array.from(new Set(domainValues)).sort((a, b) => a.localeCompare(b));
   }, [domains, assets, users]);
+  function getSimAssetDetails(asset) {
+    let details = {};
+    try {
+      details = asset.notes ? JSON.parse(asset.notes) : {};
+    } catch (err) {
+      details = {};
+    }
+    const connectionNumber = details.connection_number || '';
+    const connectionType = details.connection_type || asset.vendor || '';
+    const simStatus = details.sim_status || (asset.status === 'available' ? 'Active' : asset.status || '');
+    const simNumber = details.sim_number || asset.serial || '';
+    const assignedName = details.assigned_name || asset.name || '';
+    const sNo = Number(details.s_no) || null;
+    const source = details.source || '';
+    const employeeCode = details.employee_code || '';
+    return { sNo, connectionNumber, connectionType, simStatus, simNumber, assignedName, source, employeeCode };
+  }
+  const isSimInventoryView = filterType === 'SIM';
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
     const filtered = assets.filter((a) => {
-      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.domain_name || ''} ${a.assigned_to_name || ''} ${a.assigned_to_employee_code || ''} ${a.status || ''}`.toLowerCase().includes(q);
+      const simDetails = getSimAssetDetails(a);
+      const matchQuery = !q || `${a.name || ''} ${a.type || ''} ${a.serial || ''} ${a.vendor || ''} ${a.brand_name || ''} ${a.model_name || ''} ${a.domain_name || ''} ${a.assigned_to_name || ''} ${a.assigned_to_employee_code || ''} ${a.status || ''} ${simDetails.connectionNumber} ${simDetails.connectionType} ${simDetails.simStatus} ${simDetails.simNumber} ${simDetails.assignedName} ${simDetails.source} ${simDetails.employeeCode}`.toLowerCase().includes(q);
       const matchDomain = filterDomain === 'all' || String(a.domain_name || '').trim().toLowerCase() === filterDomain;
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
@@ -2316,6 +2354,12 @@ function App() {
     });
 
     const sorted = [...filtered].sort((a, b) => {
+      if (isSimInventoryView) {
+        const leftSim = getSimAssetDetails(a);
+        const rightSim = getSimAssetDetails(b);
+        if (leftSim.sNo && rightSim.sNo && leftSim.sNo !== rightSim.sNo) return leftSim.sNo - rightSim.sNo;
+        if (leftSim.connectionNumber !== rightSim.connectionNumber) return leftSim.connectionNumber.localeCompare(rightSim.connectionNumber);
+      }
       const left = (a[sortBy] || '').toString().toLowerCase();
       const right = (b[sortBy] || '').toString().toLowerCase();
       if (left < right) return sortDir === 'asc' ? -1 : 1;
@@ -2323,7 +2367,7 @@ function App() {
       return 0;
     });
     return sorted;
-  }, [assets, inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir]);
+  }, [assets, inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir, isSimInventoryView]);
   const pageSize = inventoryPageSize === 'all' ? filteredSortedAssets.length || 1 : Number(inventoryPageSize);
   const totalPages = Math.max(1, Math.ceil(filteredSortedAssets.length / pageSize));
   const paginatedAssets = useMemo(() => {
@@ -2337,6 +2381,21 @@ function App() {
     const uniqueBrands = new Set(filteredSortedAssets.map((a) => a.brand_name).filter(Boolean)).size;
     return { total, available, allocated, uniqueBrands };
   }, [filteredSortedAssets]);
+  const filteredToUpasanaRows = useMemo(() => {
+    const q = toUpasanaQuery.trim().toLowerCase();
+    if (!q) return uploadedEmployeeAssets;
+    return uploadedEmployeeAssets.filter((row) => (
+      `${row.source_sheet || ''} ${row.source_row_number || ''} ${row.employee_name || ''} ${row.employee_code || ''} ${row.domain_name || ''} ${row.date_of_joining || ''} ${row.location || ''} ${row.department || ''} ${row.designation || ''} ${row.mobile_no || ''} ${row.email || ''} ${row.laptop_brand || ''} ${row.laptop_product_no || ''} ${row.laptop_serial_no || ''} ${row.mobile_assigned || ''}`
+        .toLowerCase()
+        .includes(q)
+    ));
+  }, [uploadedEmployeeAssets, toUpasanaQuery]);
+  const toUpasanaStats = useMemo(() => {
+    const uniqueEmployees = new Set(filteredToUpasanaRows.map((row) => row.employee_code || row.employee_name).filter(Boolean)).size;
+    const laptops = filteredToUpasanaRows.filter((row) => row.laptop_serial_no || row.laptop_brand).length;
+    const mobiles = filteredToUpasanaRows.filter((row) => row.mobile_no).length;
+    return { rows: filteredToUpasanaRows.length, uniqueEmployees, laptops, mobiles };
+  }, [filteredToUpasanaRows]);
   const assignmentKpiCards = useMemo(() => {
     const totalAssets = Math.max(stats.total, 1);
     const totalEmployees = Math.max(employees.length, 1);
@@ -2528,6 +2587,7 @@ function App() {
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
+    { key: 'toupasana', label: 'ToUpasana', icon: 'TU' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
@@ -3184,19 +3244,26 @@ function App() {
                   type="button"
                   className="outline"
                   onClick={() => {
-                    const header = ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
-                    const rows = filteredSortedAssets.map((a) => [
-                      a.name || '',
-                      a.type || '',
-                      a.brand_name || '',
-                      a.model_name || '',
-                      a.assigned_to_name || '',
-                      a.assigned_to_employee_code || '',
-                      a.domain_name || '',
-                      a.vendor || '',
-                      a.serial || '',
-                      a.status || ''
-                    ]);
+                    const header = isSimInventoryView
+                      ? ['S. No.', 'CONNECTION NUMBER', 'CONNECTION TYPE', 'STATUS', 'SIM NUMBER', 'NAME', 'SOURCE']
+                      : ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
+                    const rows = isSimInventoryView
+                      ? filteredSortedAssets.map((a, index) => {
+                        const sim = getSimAssetDetails(a);
+                        return [sim.sNo || index + 1, sim.connectionNumber, sim.connectionType, sim.simStatus, sim.simNumber, sim.assignedName, sim.source];
+                      })
+                      : filteredSortedAssets.map((a) => [
+                        a.name || '',
+                        a.type || '',
+                        a.brand_name || '',
+                        a.model_name || '',
+                        a.assigned_to_name || '',
+                        a.assigned_to_employee_code || '',
+                        a.domain_name || '',
+                        a.vendor || '',
+                        a.serial || '',
+                        a.status || ''
+                      ]);
                     const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
                     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
@@ -3388,23 +3455,45 @@ function App() {
 
             <div className="inventory-table-shell">
               <div className="table-wrap">
-                <table>
-                  <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Assigned To</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
-                  <tbody>
-                    {paginatedAssets.map((a) => (
-                      <tr key={a.id}>
-                        <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.assigned_to_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
-                        <td><span className={`status ${a.status}`}>{a.status}</span></td>
-                        <td>
-                          <div className="asset-qr-cell">
-                            <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
-                            <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {isSimInventoryView ? (
+                  <table>
+                    <thead><tr><th>S. No.</th><th>CONNECTION NUMBER</th><th>CONNECTION TYPE</th><th>STATUS</th><th>SIM NUMBER</th><th>NAME</th><th>SOURCE</th></tr></thead>
+                    <tbody>
+                      {paginatedAssets.map((a, index) => {
+                        const sim = getSimAssetDetails(a);
+                        return (
+                          <tr key={a.id}>
+                            <td>{sim.sNo || (page - 1) * pageSize + index + 1}</td>
+                            <td>{sim.connectionNumber || '-'}</td>
+                            <td>{sim.connectionType || '-'}</td>
+                            <td>{sim.simStatus || '-'}</td>
+                            <td>{sim.simNumber || '-'}</td>
+                            <td>{sim.assignedName || '-'}</td>
+                            <td>{sim.source || '-'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table>
+                    <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Assigned To</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
+                    <tbody>
+                      {paginatedAssets.map((a) => (
+                        <tr key={a.id}>
+                          <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.assigned_to_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
+                          <td><span className={`status ${a.status}`}>{a.status}</span></td>
+                          <td>
+                            <div className="asset-qr-cell">
+                              <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
+                              <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
               <div className="inventory-pager">
                 <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
@@ -3592,71 +3681,136 @@ function App() {
                 </table>
               </div>
             </section>
-            <section className="panel wide assignment-directory-panel">
-              <div className="panel-head">
-                <h3>Uploaded Workbook Data</h3>
-                <span>{uploadedEmployeeAssets.length} raw rows from ToUpasana.xlsx</span>
-              </div>
-              <div className="table-wrap assignment-employee-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Sheet</th>
-                      <th>Row</th>
-                      <th>Employee Name</th>
-                      <th>Code</th>
-                      <th>Domain</th>
-                      <th>DOJ</th>
-                      <th>Location</th>
-                      <th>Department</th>
-                      <th>Designation</th>
-                      <th>PAN/Aadhaar</th>
-                      <th>Biometric</th>
-                      <th>Mobile No.</th>
-                      <th>Email</th>
-                      <th>Photo</th>
-                      <th>Gender</th>
-                      <th>Status</th>
-                      <th>Laptop Brand</th>
-                      <th>Product No.</th>
-                      <th>Serial No.</th>
-                      <th>Mobile Assigned</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uploadedEmployeeAssets.length === 0 ? (
-                      <tr><td colSpan={20}>No uploaded workbook rows found.</td></tr>
-                    ) : (
-                      uploadedEmployeeAssets.map((row) => (
-                        <tr key={row.id}>
-                          <td>{row.source_sheet || '-'}</td>
-                          <td>{row.source_row_number || '-'}</td>
-                          <td>{row.employee_name || '-'}</td>
-                          <td>{row.employee_code || '-'}</td>
-                          <td>{row.domain_name || '-'}</td>
-                          <td>{row.date_of_joining || '-'}</td>
-                          <td>{row.location || '-'}</td>
-                          <td>{row.department || '-'}</td>
-                          <td>{row.designation || '-'}</td>
-                          <td>{row.pan_aadhaar || '-'}</td>
-                          <td>{row.biometric_code || '-'}</td>
-                          <td>{row.mobile_no || '-'}</td>
-                          <td>{row.email || '-'}</td>
-                          <td>{row.employee_photo || '-'}</td>
-                          <td>{row.gender || '-'}</td>
-                          <td>{row.employment_status || '-'}</td>
-                          <td>{row.laptop_brand || '-'}</td>
-                          <td>{row.laptop_product_no || '-'}</td>
-                          <td>{row.laptop_serial_no || '-'}</td>
-                          <td>{row.mobile_assigned || '-'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
           </>
+        )}
+
+        {section === 'toupasana' && (
+          <section className="panel wide assignment-directory-panel">
+            <div className="inventory-head">
+              <div>
+                <h3>ToUpasana Workbook Data</h3>
+                <p className="hint">Separate uploaded employee, laptop, and mobile records from ToUpasana.xlsx.</p>
+              </div>
+              <div className="inventory-head-actions">
+                <button
+                  type="button"
+                  className="outline"
+                  onClick={() => {
+                    const header = ['Sheet', 'Row', 'Employee Name', 'Code', 'Domain', 'DOJ', 'Location', 'Department', 'Designation', 'PAN/Aadhaar', 'Biometric', 'Mobile No.', 'Email', 'Photo', 'Gender', 'Status', 'Laptop Brand', 'Product No.', 'Serial No.', 'Mobile Assigned'];
+                    const rows = filteredToUpasanaRows.map((row) => [
+                      row.source_sheet || '',
+                      row.source_row_number || '',
+                      row.employee_name || '',
+                      row.employee_code || '',
+                      row.domain_name || '',
+                      row.date_of_joining || '',
+                      row.location || '',
+                      row.department || '',
+                      row.designation || '',
+                      row.pan_aadhaar || '',
+                      row.biometric_code || '',
+                      row.mobile_no || '',
+                      row.email || '',
+                      row.employee_photo || '',
+                      row.gender || '',
+                      row.employment_status || '',
+                      row.laptop_brand || '',
+                      row.laptop_product_no || '',
+                      row.laptop_serial_no || '',
+                      row.mobile_assigned || ''
+                    ]);
+                    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', 'toupasana_export.csv');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+
+            <div className="inventory-filter-grid">
+              <input
+                className="inventory-search"
+                placeholder="Search ToUpasana employees, code, mobile, laptop..."
+                value={toUpasanaQuery}
+                onChange={(e) => setToUpasanaQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="inventory-mini-stats inventory-mini-stats-strong">
+              <article><span>Rows</span><strong>{toUpasanaStats.rows}</strong></article>
+              <article><span>Employees</span><strong>{toUpasanaStats.uniqueEmployees}</strong></article>
+              <article><span>Laptop Rows</span><strong>{toUpasanaStats.laptops}</strong></article>
+              <article><span>Mobile Nos.</span><strong>{toUpasanaStats.mobiles}</strong></article>
+            </div>
+
+            <div className="table-wrap assignment-employee-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sheet</th>
+                    <th>Row</th>
+                    <th>Employee Name</th>
+                    <th>Code</th>
+                    <th>Domain</th>
+                    <th>DOJ</th>
+                    <th>Location</th>
+                    <th>Department</th>
+                    <th>Designation</th>
+                    <th>PAN/Aadhaar</th>
+                    <th>Biometric</th>
+                    <th>Mobile No.</th>
+                    <th>Email</th>
+                    <th>Photo</th>
+                    <th>Gender</th>
+                    <th>Status</th>
+                    <th>Laptop Brand</th>
+                    <th>Product No.</th>
+                    <th>Serial No.</th>
+                    <th>Mobile Assigned</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredToUpasanaRows.length === 0 ? (
+                    <tr><td colSpan={20}>No ToUpasana workbook rows found.</td></tr>
+                  ) : (
+                    filteredToUpasanaRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.source_sheet || '-'}</td>
+                        <td>{row.source_row_number || '-'}</td>
+                        <td>{row.employee_name || '-'}</td>
+                        <td>{row.employee_code || '-'}</td>
+                        <td>{row.domain_name || '-'}</td>
+                        <td>{row.date_of_joining || '-'}</td>
+                        <td>{row.location || '-'}</td>
+                        <td>{row.department || '-'}</td>
+                        <td>{row.designation || '-'}</td>
+                        <td>{row.pan_aadhaar || '-'}</td>
+                        <td>{row.biometric_code || '-'}</td>
+                        <td>{row.mobile_no || '-'}</td>
+                        <td>{row.email || '-'}</td>
+                        <td>{row.employee_photo || '-'}</td>
+                        <td>{row.gender || '-'}</td>
+                        <td>{row.employment_status || '-'}</td>
+                        <td>{row.laptop_brand || '-'}</td>
+                        <td>{row.laptop_product_no || '-'}</td>
+                        <td>{row.laptop_serial_no || '-'}</td>
+                        <td>{row.mobile_assigned || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
 
         {section === 'accounts' && (
