@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import LandingPage from './components/LandingPage';
-import nextgenLogo from './assets/image.png';
-import nextgenLogoSvg from './assets/nextgen-logo.svg';
 import AssetTrackingPage from './pages/AssetTrackingPage';
 import ContactPage from './pages/ContactPage';
 import EnterprisePage from './pages/EnterprisePage';
@@ -2914,7 +2912,7 @@ function App() {
                     <div className="shape shape-c" />
                     <div className="shape shape-d" />
                     <div className="auth-brand-copy">
-                      <img src={nextgenLogo} alt="NEXTGEN" className="auth-brand-logo" />
+                      <img src="/nextgen-logo1-transparent.png" alt="NEXTGEN" className="auth-brand-logo" />
                       <h2>IT Inventory</h2>
                       <span>Stay organized</span>
                     </div>
@@ -2999,7 +2997,7 @@ function App() {
         <div className="sidebar-top">
           {!sidebarCollapsed && (
             <div className="sidebar-brand">
-              <img src={nextgenLogoSvg} alt="NEXTGEN" className="sidebar-brand-logo" />
+              <img src="/nextgen-logo1-transparent.png" alt="NEXTGEN" className="sidebar-brand-logo" />
             </div>
           )}
           <button
