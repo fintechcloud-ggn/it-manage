@@ -690,7 +690,6 @@ function App() {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
-      toupasana: 'assignments.view',
       insights: 'insights.view',
       invoices: 'invoices.view',
       activity: 'activity.view',
@@ -2663,7 +2662,6 @@ function App() {
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
-    { key: 'toupasana', label: 'ToUpasana', icon: 'TU' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
@@ -3795,7 +3793,7 @@ function App() {
                 </table>
               </div>
             </section>
-          </>
+          </section>
         )}
 
         {section === 'toupasana' && (
