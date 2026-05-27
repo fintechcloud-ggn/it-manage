@@ -688,7 +688,6 @@ function App() {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
-      toupasana: 'assignments.view',
       insights: 'insights.view',
       invoices: 'invoices.view',
       activity: 'activity.view',
@@ -2585,7 +2584,6 @@ function App() {
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
-    { key: 'toupasana', label: 'ToUpasana', icon: 'TU' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
@@ -3679,136 +3677,133 @@ function App() {
                 </table>
               </div>
             </section>
+            <section className="panel wide assignment-directory-panel">
+              <div className="inventory-head">
+                <div>
+                  <h3>Workbook data</h3>
+                  <p className="hint">Uploaded workbook employee, laptop, and mobile records.</p>
+                </div>
+                <div className="inventory-head-actions">
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => {
+                      const header = ['Sheet', 'Row', 'Employee Name', 'Code', 'Domain', 'DOJ', 'Location', 'Department', 'Designation', 'PAN/Aadhaar', 'Biometric', 'Mobile No.', 'Email', 'Photo', 'Gender', 'Status', 'Laptop Brand', 'Product No.', 'Serial No.', 'Mobile Assigned'];
+                      const rows = filteredToUpasanaRows.map((row) => [
+                        row.source_sheet || '',
+                        row.source_row_number || '',
+                        row.employee_name || '',
+                        row.employee_code || '',
+                        row.domain_name || '',
+                        row.date_of_joining || '',
+                        row.location || '',
+                        row.department || '',
+                        row.designation || '',
+                        row.pan_aadhaar || '',
+                        row.biometric_code || '',
+                        row.mobile_no || '',
+                        row.email || '',
+                        row.employee_photo || '',
+                        row.gender || '',
+                        row.employment_status || '',
+                        row.laptop_brand || '',
+                        row.laptop_product_no || '',
+                        row.laptop_serial_no || '',
+                        row.mobile_assigned || ''
+                      ]);
+                      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.setAttribute('download', 'workbook_data_export.csv');
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+
+              <div className="inventory-filter-grid">
+                <input
+                  className="inventory-search"
+                  placeholder="Search workbook employees, code, mobile, laptop..."
+                  value={toUpasanaQuery}
+                  onChange={(e) => setToUpasanaQuery(e.target.value)}
+                />
+              </div>
+
+              <div className="inventory-mini-stats inventory-mini-stats-strong">
+                <article><span>Rows</span><strong>{toUpasanaStats.rows}</strong></article>
+                <article><span>Employees</span><strong>{toUpasanaStats.uniqueEmployees}</strong></article>
+                <article><span>Laptop Rows</span><strong>{toUpasanaStats.laptops}</strong></article>
+                <article><span>Mobile Nos.</span><strong>{toUpasanaStats.mobiles}</strong></article>
+              </div>
+
+              <div className="table-wrap assignment-employee-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Sheet</th>
+                      <th>Row</th>
+                      <th>Employee Name</th>
+                      <th>Code</th>
+                      <th>Domain</th>
+                      <th>DOJ</th>
+                      <th>Location</th>
+                      <th>Department</th>
+                      <th>Designation</th>
+                      <th>PAN/Aadhaar</th>
+                      <th>Biometric</th>
+                      <th>Mobile No.</th>
+                      <th>Email</th>
+                      <th>Photo</th>
+                      <th>Gender</th>
+                      <th>Status</th>
+                      <th>Laptop Brand</th>
+                      <th>Product No.</th>
+                      <th>Serial No.</th>
+                      <th>Mobile Assigned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredToUpasanaRows.length === 0 ? (
+                      <tr><td colSpan={20}>No workbook rows found.</td></tr>
+                    ) : (
+                      filteredToUpasanaRows.map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.source_sheet || '-'}</td>
+                          <td>{row.source_row_number || '-'}</td>
+                          <td>{row.employee_name || '-'}</td>
+                          <td>{row.employee_code || '-'}</td>
+                          <td>{row.domain_name || '-'}</td>
+                          <td>{row.date_of_joining || '-'}</td>
+                          <td>{row.location || '-'}</td>
+                          <td>{row.department || '-'}</td>
+                          <td>{row.designation || '-'}</td>
+                          <td>{row.pan_aadhaar || '-'}</td>
+                          <td>{row.biometric_code || '-'}</td>
+                          <td>{row.mobile_no || '-'}</td>
+                          <td>{row.email || '-'}</td>
+                          <td>{row.employee_photo || '-'}</td>
+                          <td>{row.gender || '-'}</td>
+                          <td>{row.employment_status || '-'}</td>
+                          <td>{row.laptop_brand || '-'}</td>
+                          <td>{row.laptop_product_no || '-'}</td>
+                          <td>{row.laptop_serial_no || '-'}</td>
+                          <td>{row.mobile_assigned || '-'}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </>
-        )}
-
-        {section === 'toupasana' && (
-          <section className="panel wide assignment-directory-panel">
-            <div className="inventory-head">
-              <div>
-                <h3>ToUpasana Workbook Data</h3>
-                <p className="hint">Separate uploaded employee, laptop, and mobile records from ToUpasana.xlsx.</p>
-              </div>
-              <div className="inventory-head-actions">
-                <button
-                  type="button"
-                  className="outline"
-                  onClick={() => {
-                    const header = ['Sheet', 'Row', 'Employee Name', 'Code', 'Domain', 'DOJ', 'Location', 'Department', 'Designation', 'PAN/Aadhaar', 'Biometric', 'Mobile No.', 'Email', 'Photo', 'Gender', 'Status', 'Laptop Brand', 'Product No.', 'Serial No.', 'Mobile Assigned'];
-                    const rows = filteredToUpasanaRows.map((row) => [
-                      row.source_sheet || '',
-                      row.source_row_number || '',
-                      row.employee_name || '',
-                      row.employee_code || '',
-                      row.domain_name || '',
-                      row.date_of_joining || '',
-                      row.location || '',
-                      row.department || '',
-                      row.designation || '',
-                      row.pan_aadhaar || '',
-                      row.biometric_code || '',
-                      row.mobile_no || '',
-                      row.email || '',
-                      row.employee_photo || '',
-                      row.gender || '',
-                      row.employment_status || '',
-                      row.laptop_brand || '',
-                      row.laptop_product_no || '',
-                      row.laptop_serial_no || '',
-                      row.mobile_assigned || ''
-                    ]);
-                    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.setAttribute('download', 'toupasana_export.csv');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  Export CSV
-                </button>
-              </div>
-            </div>
-
-            <div className="inventory-filter-grid">
-              <input
-                className="inventory-search"
-                placeholder="Search ToUpasana employees, code, mobile, laptop..."
-                value={toUpasanaQuery}
-                onChange={(e) => setToUpasanaQuery(e.target.value)}
-              />
-            </div>
-
-            <div className="inventory-mini-stats inventory-mini-stats-strong">
-              <article><span>Rows</span><strong>{toUpasanaStats.rows}</strong></article>
-              <article><span>Employees</span><strong>{toUpasanaStats.uniqueEmployees}</strong></article>
-              <article><span>Laptop Rows</span><strong>{toUpasanaStats.laptops}</strong></article>
-              <article><span>Mobile Nos.</span><strong>{toUpasanaStats.mobiles}</strong></article>
-            </div>
-
-            <div className="table-wrap assignment-employee-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Sheet</th>
-                    <th>Row</th>
-                    <th>Employee Name</th>
-                    <th>Code</th>
-                    <th>Domain</th>
-                    <th>DOJ</th>
-                    <th>Location</th>
-                    <th>Department</th>
-                    <th>Designation</th>
-                    <th>PAN/Aadhaar</th>
-                    <th>Biometric</th>
-                    <th>Mobile No.</th>
-                    <th>Email</th>
-                    <th>Photo</th>
-                    <th>Gender</th>
-                    <th>Status</th>
-                    <th>Laptop Brand</th>
-                    <th>Product No.</th>
-                    <th>Serial No.</th>
-                    <th>Mobile Assigned</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredToUpasanaRows.length === 0 ? (
-                    <tr><td colSpan={20}>No ToUpasana workbook rows found.</td></tr>
-                  ) : (
-                    filteredToUpasanaRows.map((row) => (
-                      <tr key={row.id}>
-                        <td>{row.source_sheet || '-'}</td>
-                        <td>{row.source_row_number || '-'}</td>
-                        <td>{row.employee_name || '-'}</td>
-                        <td>{row.employee_code || '-'}</td>
-                        <td>{row.domain_name || '-'}</td>
-                        <td>{row.date_of_joining || '-'}</td>
-                        <td>{row.location || '-'}</td>
-                        <td>{row.department || '-'}</td>
-                        <td>{row.designation || '-'}</td>
-                        <td>{row.pan_aadhaar || '-'}</td>
-                        <td>{row.biometric_code || '-'}</td>
-                        <td>{row.mobile_no || '-'}</td>
-                        <td>{row.email || '-'}</td>
-                        <td>{row.employee_photo || '-'}</td>
-                        <td>{row.gender || '-'}</td>
-                        <td>{row.employment_status || '-'}</td>
-                        <td>{row.laptop_brand || '-'}</td>
-                        <td>{row.laptop_product_no || '-'}</td>
-                        <td>{row.laptop_serial_no || '-'}</td>
-                        <td>{row.mobile_assigned || '-'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
         )}
 
         {section === 'accounts' && (
