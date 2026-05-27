@@ -585,6 +585,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
+  const [quickAssetQuery, setQuickAssetQuery] = useState('');
   const [toUpasanaQuery, setToUpasanaQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -2338,6 +2339,26 @@ function App() {
     const employeeCode = details.employee_code || '';
     return { sNo, connectionNumber, connectionType, simStatus, simNumber, assignedName, source, employeeCode };
   }
+  const quickAssetResults = useMemo(() => {
+    const q = quickAssetQuery.trim().toLowerCase();
+    if (!q) return [];
+    return assets
+      .filter((asset) => {
+        const simDetails = getSimAssetDetails(asset);
+        return `${asset.name || ''} ${asset.type || ''} ${asset.serial || ''} ${asset.vendor || ''} ${asset.brand_name || ''} ${asset.model_name || ''} ${asset.domain_name || ''} ${asset.status || ''} ${simDetails.connectionNumber} ${simDetails.connectionType} ${simDetails.simStatus} ${simDetails.simNumber} ${simDetails.assignedName} ${simDetails.source} ${simDetails.employeeCode}`
+          .toLowerCase()
+          .includes(q);
+      })
+      .sort((a, b) => (a.type || '').localeCompare(b.type || '') || (a.name || '').localeCompare(b.name || ''))
+      .slice(0, 8);
+  }, [assets, quickAssetQuery]);
+  function openInventoryAssetSearch(query = quickAssetQuery) {
+    const nextQuery = query.trim();
+    if (!nextQuery) return;
+    setInventoryQuery(nextQuery);
+    setFilterType('all');
+    setSection('inventory');
+  }
   const isSimInventoryView = filterType === 'SIM';
   const filteredSortedAssets = useMemo(() => {
     const q = inventoryQuery.trim().toLowerCase();
@@ -3050,8 +3071,46 @@ function App() {
                 <p className="hint">Real-time IT inventory analytics across branches and entities.</p>
               </div>
               <div className="overview-search">
-                <input type="text" placeholder="Quick search assets, users, serial..." />
-                <div className="overview-period">Time period: Last 7 days</div>
+                <div className="overview-asset-search">
+                  <input
+                    type="text"
+                    placeholder="Quick search assets..."
+                    value={quickAssetQuery}
+                    onChange={(e) => setQuickAssetQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') openInventoryAssetSearch();
+                    }}
+                    aria-label="Quick search assets"
+                  />
+                  {quickAssetQuery.trim() && (
+                    <div className="overview-asset-results" role="listbox" aria-label="Asset search results">
+                      {quickAssetResults.length ? (
+                        quickAssetResults.map((asset) => (
+                          <button
+                            type="button"
+                            key={asset.id}
+                            onClick={() => openInventoryAssetSearch(asset.name || asset.type || asset.serial || quickAssetQuery)}
+                          >
+                            <span>
+                              <strong>{asset.name || asset.type || 'Asset'}</strong>
+                              <small>{[asset.type, asset.brand_name, asset.model_name].filter(Boolean).join(' / ') || 'Asset'}</small>
+                            </span>
+                            <em>{asset.serial || asset.status || '-'}</em>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="overview-asset-empty">No assets found</div>
+                      )}
+                      <button
+                        type="button"
+                        className="overview-asset-view-all"
+                        onClick={() => openInventoryAssetSearch()}
+                      >
+                        View all matching assets
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
 
