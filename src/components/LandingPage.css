@@ -1651,3 +1651,198 @@ button {
         grid-template-columns: 1fr;
     }
 }
+
+/* Cross-browser responsive safety layer */
+.landing-container,
+.lp-page-shell,
+.lp-section,
+.lp-footer,
+.lp-page-hero,
+.lp-hero,
+.lp-feature-grid,
+.lp-page-grid,
+.pricing-container,
+.solutions-container,
+.enterprise-container,
+.contact-form-card,
+.contact-location-card {
+    min-width: 0;
+}
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+    max-width: 100%;
+}
+
+@supports not (overflow-x: clip) {
+    .landing-container {
+        overflow-x: hidden;
+    }
+}
+
+@media (max-width: 1180px) {
+    .lp-nav {
+        gap: 1rem;
+    }
+
+    .lp-nav-links {
+        gap: 1.35rem;
+    }
+
+    .lp-nav-actions {
+        gap: 0.65rem;
+    }
+
+    .lp-page-hero,
+    .lp-hero {
+        gap: 2rem;
+    }
+}
+
+@media (max-width: 900px) {
+    .lp-nav {
+        position: sticky;
+        align-items: flex-start;
+    }
+
+    .lp-logo-image {
+        max-width: 180px;
+    }
+
+    .lp-nav-actions {
+        margin-left: auto;
+    }
+
+    .lp-page-hero,
+    .lp-hero,
+    .solutions-container,
+    .enterprise-container,
+    .contact-form-card,
+    .contact-location-card {
+        grid-template-columns: 1fr;
+    }
+
+    .contact-form-info {
+        min-height: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .lp-nav {
+        align-items: center;
+    }
+
+    .lp-nav-actions {
+        justify-content: stretch;
+        margin-left: 0;
+    }
+
+    .lp-page-panel,
+    .security-visual,
+    .contact-agent-visual,
+    .contact-map-card,
+    .contact-location-card,
+    .contact-form-card {
+        border-radius: 18px;
+    }
+
+    .lp-page-copy p,
+    .lp-hero-content p,
+    .solutions-text p,
+    .enterprise-content-new p {
+        font-size: 1rem;
+    }
+
+    .section-header {
+        text-align: left;
+    }
+
+    .contact-form-heading {
+        margin-top: 0.5rem;
+    }
+
+    .footer-bottom {
+        align-items: stretch;
+    }
+}
+
+@media (max-width: 560px) {
+    .lp-nav {
+        gap: 0.75rem;
+    }
+
+    .lp-nav-actions {
+        flex-direction: row;
+        gap: 0.5rem;
+    }
+
+    .lp-nav-actions button,
+    .btn-primary,
+    .btn-ghost {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+        min-width: 0;
+    }
+
+    .lp-logo-image {
+        height: 46px;
+        max-width: 140px;
+    }
+
+    .lp-page-shell {
+        padding-top: 0.75rem;
+    }
+
+    .lp-page-copy h1,
+    .lp-hero-content h1 {
+        letter-spacing: 0;
+    }
+
+    .lp-page-panel,
+    .security-visual,
+    .contact-form,
+    .contact-form-info,
+    .contact-location-info,
+    .lp-feature-card,
+    .pricing-card,
+    .resource-info {
+        padding: 1.15rem;
+    }
+
+    .contact-agent-visual,
+    .contact-map-card,
+    .contact-map-card iframe,
+    .contact-map-frame,
+    .contact-map-frame iframe {
+        min-height: 260px;
+    }
+
+    .contact-form-info h2 {
+        font-size: clamp(1.75rem, 9vw, 2.4rem);
+    }
+
+    .contact-form h2,
+    .contact-form-heading h2 {
+        font-size: clamp(1.65rem, 8vw, 2.2rem);
+    }
+}
+
+@media (max-width: 380px) {
+    .lp-nav-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .lp-nav-actions button {
+        width: 100%;
+    }
+}

@@ -5736,3 +5736,263 @@ body {
     padding: 0 16px;
   }
 }
+
+/* Cross-device responsive safety layer */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+.dashboard-shell,
+.inventory-app,
+.panel,
+.create-box,
+.inventory-table-shell,
+.table-wrap,
+.acct-table-wrap,
+.audit-table-wrap,
+.account-admin-table-wrap,
+.employee-modal,
+.invoice-preview-modal,
+.account-permission-modal {
+  min-width: 0;
+}
+
+.dashboard-shell table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.dashboard-shell td,
+.dashboard-shell th {
+  overflow-wrap: anywhere;
+}
+
+.auth-modal-frame {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border-radius: 16px;
+}
+
+.auth-shell {
+  min-height: min(620px, calc(100dvh - 32px));
+}
+
+@supports not (height: 100dvh) {
+  .auth-modal-frame {
+    max-height: calc(100vh - 32px);
+  }
+
+  .auth-shell {
+    min-height: min(620px, calc(100vh - 32px));
+  }
+}
+
+@media (max-width: 1280px) {
+  .dashboard-shell.app-layout {
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+  }
+
+  .dashboard-shell .sidebar {
+    width: 280px;
+  }
+}
+
+@media (max-width: 1024px) {
+  html,
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .auth-screen,
+  .wk-page {
+    min-height: 100dvh;
+    height: auto;
+  }
+
+  .dashboard-shell.app-layout {
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    overflow: visible;
+  }
+
+  .dashboard-shell .sidebar {
+    position: static;
+    height: auto;
+    max-height: none;
+  }
+
+  .dashboard-shell .sidebar-top {
+    gap: 12px;
+  }
+
+  .dashboard-shell .sidebar-nav {
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  }
+
+  .dashboard-shell .sidebar-nav button {
+    min-height: 46px;
+  }
+
+  .dashboard-shell .inventory-app {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .auth-modal-overlay {
+    place-items: start center;
+    padding: 14px;
+  }
+
+  .auth-modal-frame {
+    width: min(100%, 620px);
+  }
+
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-brand-panel {
+    min-height: 260px;
+  }
+
+  .auth-form-panel {
+    min-height: 340px;
+  }
+
+  .dashboard-shell .inventory-head,
+  .dashboard-shell .create-head,
+  .dashboard-shell .panel-head,
+  .dashboard-shell .create-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dashboard-shell .inventory-filter-grid,
+  .dashboard-shell .asset-create-form,
+  .dashboard-shell .assignment-inline-form,
+  .dashboard-shell .assignment-search-top {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-shell .inventory-type-buttons {
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .dashboard-shell .inventory-type-buttons button {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    min-width: 320px;
+  }
+
+  .auth-brand-logo {
+    width: min(92%, 420px);
+  }
+
+  .auth-form-panel h3 {
+    font-size: clamp(36px, 14vw, 52px);
+  }
+
+  .auth-form-modern .input-shell input {
+    min-height: 48px;
+  }
+
+  .dashboard-shell.app-layout {
+    padding: 8px;
+  }
+
+  .dashboard-shell .sidebar {
+    padding: 12px;
+  }
+
+  .dashboard-shell .sidebar-brand-logo {
+    width: min(200px, 72vw);
+  }
+
+  .dashboard-shell .sidebar-user {
+    grid-template-columns: 40px 1fr;
+  }
+
+  .dashboard-shell .sidebar-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-shell .nav-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .dashboard-shell .nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dashboard-shell .overview-kpis,
+  .dashboard-shell .inventory-mini-stats,
+  .dashboard-shell .assignment-stats,
+  .dashboard-shell .overview-main-grid,
+  .dashboard-shell .overview-bottom-grid,
+  .dashboard-shell .lp-page-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-shell .table-wrap,
+  .inventory-table-shell .table-wrap,
+  .assignment-employee-table,
+  .employee-modal-assets .table-wrap,
+  .acct-table-wrap,
+  .audit-table-wrap,
+  .account-admin-table-wrap {
+    max-width: calc(100vw - 48px);
+  }
+
+  .dashboard-shell th,
+  .dashboard-shell td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .employee-modal,
+  .account-permission-modal,
+  .invoice-preview-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-shell .sidebar-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-shell .inventory-pager {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-shell .inventory-pager span {
+    text-align: center;
+  }
+
+  .auth-form-panel {
+    padding: 24px 16px;
+  }
+}
