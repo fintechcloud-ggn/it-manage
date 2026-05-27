@@ -259,7 +259,6 @@ const INVOICE_APPROVAL_SORT_ORDER = {
 };
 const INVOICE_STORAGE_VERSION = 'head_accounts_approval_v1';
 const INVOICE_ACCOUNTANT_NAMES = ['hansi kunwar', 'umesh', 'umesh ji', 'jeetiesh', 'jeetiesh ji'];
-const ASSET_VENDOR_OPTIONS = ['Jordan', 'ABCOM', 'Silicon', 'GCvendor'];
 const ROLE_ACCOUNT_PASSWORDS_KEY = 'itmanage_role_account_passwords';
 
 function stripInvoiceAttachmentData(invoice) {
@@ -585,7 +584,6 @@ function App() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
-  const [dashboardSearch, setDashboardSearch] = useState('');
   const [inventoryQuery, setInventoryQuery] = useState('');
   const [toUpasanaQuery, setToUpasanaQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
@@ -690,6 +688,7 @@ function App() {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
+      toupasana: 'assignments.view',
       insights: 'insights.view',
       invoices: 'invoices.view',
       activity: 'activity.view',
@@ -2165,82 +2164,6 @@ function App() {
     () => employeeDirectory.find((emp) => emp.id === selectedEmployeeId) || null,
     [employeeDirectory, selectedEmployeeId]
   );
-  const dashboardSearchResults = useMemo(() => {
-    const query = dashboardSearch.trim().toLowerCase();
-    if (!query) return [];
-
-    const assetResults = assets
-      .filter((asset) => {
-        const haystack = [
-          asset.name,
-          asset.type,
-          asset.serial,
-          asset.vendor,
-          asset.brand_name,
-          asset.model_name,
-          asset.domain_name,
-          asset.status,
-          asset.assigned_to_name,
-          asset.assigned_to_employee_code
-        ].join(' ').toLowerCase();
-        return haystack.includes(query);
-      })
-      .slice(0, 6)
-      .map((asset) => ({
-        key: `asset-${asset.id}`,
-        kind: 'Asset',
-        title: asset.name || `Asset ${asset.id}`,
-        meta: [asset.type, asset.serial, asset.assigned_to_name ? `Assigned to ${asset.assigned_to_name}` : asset.status]
-          .filter(Boolean)
-          .join(' | '),
-        onSelect: () => {
-          setInventoryQuery(asset.serial || asset.name || dashboardSearch.trim());
-          setFilterDomain('all');
-          setFilterStatus('all');
-          setFilterBrand('all');
-          setFilterType('all');
-          setPage(1);
-          setSection('inventory');
-        }
-      }));
-
-    const employeeResults = employees
-      .filter((employee) => {
-        const assignedAssets = activeAllocations
-          .filter((allocation) => allocation.user_id === employee.id)
-          .map((allocation) => assetById[allocation.asset_id])
-          .filter(Boolean);
-        const haystack = [
-          employee.name,
-          employee.email,
-          employee.employee_code,
-          employee.domain_name,
-          employee.department,
-          employee.designation,
-          ...assignedAssets.flatMap((asset) => [asset.name, asset.type, asset.serial])
-        ].join(' ').toLowerCase();
-        return haystack.includes(query);
-      })
-      .slice(0, 6)
-      .map((employee) => {
-        const assignedCount = activeAllocations.filter((allocation) => allocation.user_id === employee.id).length;
-        return {
-          key: `employee-${employee.id}`,
-          kind: 'User',
-          title: employee.name || `User ${employee.id}`,
-          meta: [employee.employee_code, employee.email, `${assignedCount} assigned`].filter(Boolean).join(' | '),
-          onSelect: () => {
-            setAssignmentUserFilter('all');
-            setAssignmentSearch('');
-            setAssignmentSearchDraft('');
-            setSelectedEmployeeId(employee.id);
-            setSection('assignments');
-          }
-        };
-      });
-
-    return [...assetResults, ...employeeResults].slice(0, 8);
-  }, [dashboardSearch, assets, employees, activeAllocations, assetById]);
   const selectedEmployeeHistory = useMemo(() => {
     if (!selectedEmployee) return [];
     return allocations
@@ -2662,6 +2585,7 @@ function App() {
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
+    { key: 'toupasana', label: 'ToUpasana', icon: 'TU' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
@@ -3068,7 +2992,7 @@ function App() {
   }
 
   return (
-    <div className={`app-layout dashboard-shell ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
+    <div className="app-layout dashboard-shell">
       <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-top">
           {!sidebarCollapsed && (
@@ -3126,37 +3050,8 @@ function App() {
                 <p className="hint">Real-time IT inventory analytics across branches and entities.</p>
               </div>
               <div className="overview-search">
-                <div className="overview-search-field">
-                  <input
-                    type="text"
-                    value={dashboardSearch}
-                    onChange={(e) => setDashboardSearch(e.target.value)}
-                    placeholder="Quick search assets, users, serial..."
-                  />
-                  {dashboardSearch.trim() && (
-                    <div className="overview-search-results">
-                      {dashboardSearchResults.length === 0 ? (
-                        <div className="overview-search-empty">No matching assets or users</div>
-                      ) : (
-                        dashboardSearchResults.map((item) => (
-                          <button
-                            type="button"
-                            key={item.key}
-                            className="overview-search-result"
-                            onClick={() => {
-                              item.onSelect();
-                              setDashboardSearch('');
-                            }}
-                          >
-                            <span>{item.kind}</span>
-                            <strong>{item.title}</strong>
-                            <small>{item.meta || '-'}</small>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
+                <input type="text" placeholder="Quick search assets, users, serial..." />
+                <div className="overview-period">Time period: Last 7 days</div>
               </div>
             </section>
 
@@ -3449,16 +3344,7 @@ function App() {
                   </label>
                   <label className="field">
                     <span>Vendor (optional)</span>
-                    <input
-                      name="vendor"
-                      list="asset-vendor-options"
-                      placeholder="Select or type vendor"
-                    />
-                    <datalist id="asset-vendor-options">
-                      {ASSET_VENDOR_OPTIONS.map((vendor) => (
-                        <option key={vendor} value={vendor}>{vendor}</option>
-                      ))}
-                    </datalist>
+                    <input name="vendor" placeholder="e.g. Dell Partner, Amazon, Local Supplier" />
                   </label>
                   <label className="field">
                     <span>Domain</span>
@@ -3617,7 +3503,7 @@ function App() {
         )}
 
         {section === 'assignments' && (
-          <section className="assignments-page">
+          <>
             <section className="inventory-mini-stats assignment-stats">
               {assignmentKpiCards.map((item) => (
                 <article key={item.key} className="metric-card donut-card" style={{ '--metric-pct': `${item.pct}%` }}>
@@ -3793,7 +3679,7 @@ function App() {
                 </table>
               </div>
             </section>
-          </section>
+          </>
         )}
 
         {section === 'toupasana' && (
