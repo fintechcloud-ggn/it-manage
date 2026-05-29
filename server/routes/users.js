@@ -198,12 +198,18 @@ function serializePermissions(value) {
   return next.size ? JSON.stringify(Array.from(next)) : null;
 }
 
+function canViewAssignmentOption(user, row = {}) {
+  if (isSuperAdmin(user)) return true;
+  if (canAccessDomainRecord(user, row)) return true;
+  return !normalizeDomain(row.domain_name || row.domain || '');
+}
+
 router.get('/', requireAuth, async (req, res) => {
   try {
     if (String(req.query.assignment_options || '') === '1') {
       let rows = await getAssignmentOptionRows();
       if (!isSuperAdmin(req.user)) {
-        rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
+        rows = rows.filter((row) => canViewAssignmentOption(req.user, row));
       }
       return res.json(rows);
     }
@@ -224,7 +230,7 @@ router.get('/assignment-options', requireAuth, async (req, res) => {
   try {
     let rows = await getAssignmentOptionRows();
     if (!isSuperAdmin(req.user)) {
-      rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
+      rows = rows.filter((row) => canViewAssignmentOption(req.user, row));
     }
     res.json(rows);
   } catch (err) {
@@ -412,6 +418,42 @@ router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), a
     res.json(normalizeUserRow(updatedRows[0]));
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/:id/photo', requireAnyPermission(['assignments.manage', 'accounts.edit', 'accounts.manage']), async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const profileImageUrl = String(req.body?.profile_image_url || '').trim();
+    if (!id) return res.status(400).json({ error: 'Invalid user id' });
+    if (!profileImageUrl) return res.status(400).json({ error: 'Photo is required' });
+    if (profileImageUrl.length > 2500000) return res.status(413).json({ error: 'Photo is too large' });
+    const allowedPhoto = /^(data:image\/(png|jpe?g|webp);base64,|https?:\/\/)/i.test(profileImageUrl);
+    if (!allowedPhoto) return res.status(400).json({ error: 'Photo must be a camera image or image URL' });
+
+    const existingRows = await query(
+      'SELECT id, name, email, role, domain_name FROM users WHERE id = ? LIMIT 1',
+      [id]
+    );
+    const existing = existingRows[0];
+    if (!existing) return res.status(404).json({ error: 'User not found' });
+    if (!canAccessDomainRecord(req.user, existing)) return res.status(403).json({ error: 'Forbidden' });
+
+    await query('UPDATE users SET profile_image_url = ? WHERE id = ?', [profileImageUrl, id]);
+    const updatedRows = await query(
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json, company, department, designation, location, employment_type, employment_status, date_of_joining, personal_mobile_no, pan_aadhaar, biometric_code, gender FROM users WHERE id = ? LIMIT 1',
+      [id]
+    );
+    await writeAuditLog({
+      user: req.user,
+      action: 'UPDATE_USER_PHOTO',
+      entityType: 'user',
+      entityId: id,
+      details: `name=${existing.name}, email=${existing.email}, domain=${existing.domain_name || ''}`
+    });
+    res.json(normalizeUserRow(updatedRows[0]));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

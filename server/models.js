@@ -38,7 +38,7 @@ async function init() {
       role VARCHAR(30) NOT NULL DEFAULT 'user',
       domain_name VARCHAR(160) NULL,
       employee_code_prefix VARCHAR(50) NULL,
-      profile_image_url VARCHAR(500) NULL,
+      profile_image_url MEDIUMTEXT NULL,
       permissions_json TEXT NULL,
       password VARCHAR(255) NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -178,7 +178,9 @@ async function init() {
     await query('ALTER TABLE users ADD COLUMN employee_code_prefix VARCHAR(50) NULL AFTER domain_name');
   }
   if (!userProfileImageCol.length) {
-    await query('ALTER TABLE users ADD COLUMN profile_image_url VARCHAR(500) NULL AFTER employee_code_prefix');
+    await query('ALTER TABLE users ADD COLUMN profile_image_url MEDIUMTEXT NULL AFTER employee_code_prefix');
+  } else if (!['mediumtext', 'longtext', 'text'].includes(String(userProfileImageCol[0].Type || '').toLowerCase())) {
+    await query('ALTER TABLE users MODIFY COLUMN profile_image_url MEDIUMTEXT NULL');
   }
   const userPermissionsCol = await query("SHOW COLUMNS FROM users LIKE 'permissions_json'");
   if (!userPermissionsCol.length) {

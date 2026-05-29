@@ -514,8 +514,8 @@ p {
   min-height: 100vh;
   height: auto;
   display: grid;
-  grid-template-columns: auto 1fr;
-  overflow: visible;
+  grid-template-columns: auto minmax(0, 1fr);
+  overflow-x: hidden;
   align-items: start;
 }
 
@@ -756,6 +756,7 @@ p {
   width: 100%;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   padding: 16px 20px;
   display: grid;
   gap: 14px;
@@ -1538,6 +1539,7 @@ p {
   background: var(--surface);
   padding: 14px;
   min-height: 120px;
+  min-width: 0;
 }
 
 .panel.wide {
@@ -1568,6 +1570,7 @@ p {
   overflow: auto;
   border: 1px solid #e6edf3;
   border-radius: 10px;
+  max-width: 100%;
 }
 
 .inventory-head {
@@ -1701,6 +1704,7 @@ p {
   border-color: #cfe0ee;
   background: linear-gradient(180deg, #fbfdff 0%, #f4f9ff 100%);
   box-shadow: 0 14px 28px rgba(19, 54, 86, 0.08);
+  min-width: 0;
 }
 
 .assignment-directory-panel .panel-head {
@@ -1719,6 +1723,7 @@ p {
   border-radius: 12px;
   background: #ffffff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  min-width: 0;
 }
 
 .assignment-search-top input,
@@ -1755,6 +1760,7 @@ p {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   align-items: end;
+  min-width: 0;
 }
 
 .assignment-inline-form input,
@@ -1894,11 +1900,87 @@ p {
   font-size: 12px;
 }
 
+.assignment-selfie-capture {
+  margin-top: 0;
+  border-color: #d2e2f0;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fcff 100%);
+  box-shadow: 0 8px 20px rgba(20, 54, 82, 0.06);
+}
+
+.selfie-capture-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.selfie-capture-head h4 {
+  margin-bottom: 4px;
+}
+
+.selfie-capture-head p {
+  margin: 0;
+  color: #61738a;
+  font-size: 0.9rem;
+}
+
+.assignment-selfie-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.assignment-selfie-form .searchable-select__trigger,
+.assignment-selfie-form button {
+  min-height: 42px;
+}
+
+.assignment-selfie-form button,
+.selfie-capture-btn {
+  border-radius: 10px;
+  background: linear-gradient(90deg, #0f6d7b 0%, #1ea879 100%);
+  color: #fff;
+}
+
+.assignment-selfie-form button:disabled,
+.selfie-capture-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.selfie-camera-box {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) auto;
+  gap: 14px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.selfie-camera-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid #cddceb;
+  border-radius: 14px;
+  background: #eaf3f8;
+  object-fit: cover;
+}
+
+.selfie-error {
+  margin: 10px 0 0;
+  color: #b42318;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
 .assignment-employee-table {
   max-height: 420px;
   border: 1px solid #dce6f2;
   border-radius: 12px;
   background: #fff;
+  max-width: 100%;
+  overflow: auto;
 }
 
 .assignment-employee-table th {
@@ -1951,6 +2033,7 @@ p {
 
 .employee-photo-cell img {
   z-index: 1;
+  display: block;
   object-fit: cover;
   border: 1px solid #d6e2ee;
   background: #f6fafc;
@@ -2165,6 +2248,8 @@ p {
 }
 
 .employee-modal-photo {
+  position: relative;
+  overflow: hidden;
   width: 130px;
   height: 130px;
   border-radius: 14px;
@@ -2176,6 +2261,27 @@ p {
   font-weight: 800;
   letter-spacing: -0.04em;
   color: #1f5f8b;
+}
+
+.employee-modal-photo-img,
+.employee-modal-photo-fallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.employee-modal-photo-img {
+  z-index: 1;
+  display: block;
+  object-fit: cover;
+  background: #eef4fa;
+}
+
+.employee-modal-photo-fallback {
+  display: grid;
+  place-items: center;
 }
 
 .employee-modal-headcopy h3 {
@@ -3162,9 +3268,11 @@ th {
 
 /* Dashboard refresh inspired by the soft editorial KPI layout */
 .dashboard-shell {
+  height: 100vh;
   min-height: 100vh;
   padding: 24px;
   gap: 0;
+  overflow: hidden;
   background:
     radial-gradient(1400px 520px at 50% 0%, rgba(255, 255, 255, 0.88), transparent 68%),
     linear-gradient(180deg, #dfe8f3 0%, #edf3f8 100%);
@@ -3182,6 +3290,10 @@ body {
 }
 
 .dashboard-shell .sidebar {
+  position: sticky;
+  top: 24px;
+  height: calc(100vh - 48px);
+  align-self: start;
   width: 296px;
   padding: 22px 16px 16px;
   border-radius: 34px 0 0 34px;
@@ -3351,6 +3463,8 @@ body {
 
 .dashboard-shell .inventory-app {
   position: relative;
+  min-width: 0;
+  height: calc(100vh - 48px);
   padding: 28px;
   border-radius: 0 34px 34px 0;
   border: 1px solid rgba(208, 220, 233, 0.95);
@@ -3360,7 +3474,14 @@ body {
     linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(248, 251, 253, 0.98) 100%);
   background-size: 190px 150px, 190px 150px, auto;
   box-shadow: 0 22px 60px rgba(94, 118, 148, 0.16);
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dashboard-shell .inventory-app::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-shell .inventory-app::before {
@@ -3634,6 +3755,7 @@ body {
 .dashboard-shell .branch-map-mock,
 .dashboard-shell .assignment-directory-panel,
 .dashboard-shell .assignment-quick-assign,
+.dashboard-shell .assignment-selfie-capture,
 .dashboard-shell .assignment-employee-table,
 .dashboard-shell .employee-modal,
 .dashboard-shell .employee-modal-hero,
@@ -3678,7 +3800,7 @@ body {
 
 .dashboard-shell .assignment-stats {
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   align-items: stretch;
 }
@@ -3734,6 +3856,8 @@ body {
 
 .dashboard-shell .assignment-search-top .small,
 .dashboard-shell .assignment-inline-form button,
+.dashboard-shell .assignment-selfie-form button,
+.dashboard-shell .selfie-capture-btn,
 .dashboard-shell .assignment-view-btn,
 .dashboard-shell .assignment-assign-btn {
   background: linear-gradient(135deg, #2b92c1 0%, #27ba8e 100%);
@@ -3744,6 +3868,8 @@ body {
 
 .dashboard-shell .assignment-search-top .small:hover,
 .dashboard-shell .assignment-inline-form button:not(:disabled):hover,
+.dashboard-shell .assignment-selfie-form button:not(:disabled):hover,
+.dashboard-shell .selfie-capture-btn:not(:disabled):hover,
 .dashboard-shell .assignment-view-btn:hover,
 .dashboard-shell .assignment-assign-btn:hover {
   background: linear-gradient(135deg, #2fa4d3 0%, #25b884 100%);
@@ -3754,6 +3880,124 @@ body {
   background: linear-gradient(135deg, #8da69f 0%, #71817c 100%);
   color: rgba(255, 255, 255, 0.9);
   box-shadow: none;
+}
+
+.dashboard-shell .assignment-selfie-form button:disabled,
+.dashboard-shell .selfie-capture-btn:disabled {
+  background: linear-gradient(135deg, #8da69f 0%, #71817c 100%);
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: none;
+}
+
+.dashboard-shell .inventory-panel {
+  display: block;
+  height: auto;
+  overflow: visible;
+}
+
+.dashboard-shell .inventory-page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  width: 100%;
+}
+
+.dashboard-shell .inventory-page-stack > * {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-shell .inventory-page-stack .inventory-head,
+.dashboard-shell .inventory-page-stack .inventory-filter-grid,
+.dashboard-shell .inventory-page-stack .inventory-mini-stats {
+  margin-bottom: 0;
+}
+
+.dashboard-shell .inventory-page-stack .inventory-filter-grid {
+  grid-template-columns: minmax(260px, 2fr) repeat(6, minmax(150px, 1fr));
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.dashboard-shell .inventory-page-stack .inventory-type-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboard-shell .inventory-page-stack .inventory-mini-stats {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.dashboard-shell .inventory-page-stack .inventory-table-shell {
+  min-height: auto;
+  overflow: visible;
+}
+
+.dashboard-shell .inventory-page-stack .inventory-table-shell .table-wrap {
+  max-height: 58vh;
+  overflow: auto;
+}
+
+.dashboard-shell .assignments-page-stack {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  width: 100%;
+}
+
+.dashboard-shell .assignments-page-stack > * {
+  position: relative;
+  z-index: 0;
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.dashboard-shell .assignment-directory-panel,
+.dashboard-shell .assignment-quick-assign,
+.dashboard-shell .assignment-search-top,
+.dashboard-shell .assignment-inline-form,
+.dashboard-shell .assignment-selfie-form,
+.dashboard-shell .assignment-employee-table {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-shell .assignment-directory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dashboard-shell .assignment-quick-assign,
+.dashboard-shell .assignment-selfie-capture,
+.dashboard-shell .assignment-employee-table {
+  position: relative;
+  z-index: 0;
+}
+
+.dashboard-shell .assignment-search-top {
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px) auto;
+}
+
+.dashboard-shell .assignment-inline-form {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.dashboard-shell .assignment-selfie-form {
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.dashboard-shell .assignment-employee-table table {
+  min-width: 1180px;
+}
+
+.dashboard-shell .assignment-row-actions {
+  flex-wrap: wrap;
 }
 
 .dashboard-shell .employee-modal-actions .small,
@@ -3778,6 +4022,9 @@ body {
 @media (max-width: 1024px) {
   .dashboard-shell {
     padding: 14px;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .dashboard-shell.app-layout {
@@ -3803,6 +4050,7 @@ body {
 
   .dashboard-shell .inventory-app {
     overflow: visible;
+    height: auto;
     border-radius: 28px;
   }
 }
@@ -3981,6 +4229,8 @@ body {
 
   .assignment-search-top .small,
   .assignment-inline-form button,
+  .assignment-selfie-form button,
+  .selfie-capture-btn,
   .assignment-view-btn,
   .assignment-assign-btn {
     width: 100%;
@@ -5056,7 +5306,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .assignment-inline-form {
+  .assignment-inline-form,
+  .assignment-selfie-form {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -5225,7 +5476,9 @@ body {
   }
 
   .assignment-search-top,
-  .assignment-inline-form {
+  .assignment-inline-form,
+  .assignment-selfie-form,
+  .selfie-camera-box {
     grid-template-columns: 1fr;
   }
 

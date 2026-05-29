@@ -15,6 +15,10 @@ import { MARKETING_HOME_PATH, normalizeMarketingPath } from './pages/marketingPa
 
 const DEV_API_PORTS = Array.from({ length: 20 }, (_, index) => 4000 + index);
 const API_BASE_STORAGE_KEY = 'itmanage.apiBase';
+const EMPLOYEE_PHOTO_BUCKET = process.env.REACT_APP_EMPLOYEE_PHOTO_BUCKET || 'it-manage-145023120812-ap-south-1-an';
+const EMPLOYEE_PHOTO_REGION = process.env.REACT_APP_EMPLOYEE_PHOTO_REGION || 'ap-south-1';
+const EMPLOYEE_PHOTO_BASE_URL = process.env.REACT_APP_EMPLOYEE_PHOTO_BASE_URL
+  || `https://${EMPLOYEE_PHOTO_BUCKET}.s3.${EMPLOYEE_PHOTO_REGION}.amazonaws.com`;
 
 function readStoredApiBase() {
   try {
@@ -474,6 +478,89 @@ function getNameInitials(name) {
   return `${parts[0].slice(0, 1)}${parts[parts.length - 1].slice(0, 1)}`.toUpperCase();
 }
 
+function isAbsoluteAssetUrl(value) {
+  return /^(https?:|data:|blob:)/i.test(String(value || '').trim());
+}
+
+function encodeS3Key(key) {
+  return String(key || '')
+    .split('/')
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+}
+
+function buildS3PhotoUrl(key) {
+  const cleanKey = String(key || '').trim().replace(/^\/+/, '');
+  if (!cleanKey) return '';
+  if (isAbsoluteAssetUrl(cleanKey)) return cleanKey;
+  return `${EMPLOYEE_PHOTO_BASE_URL.replace(/\/$/, '')}/${encodeS3Key(cleanKey)}`;
+}
+
+function slugForPhoto(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
+function getEmployeePhotoCandidates(employee) {
+  const explicit = [
+    employee?.profile_image_url,
+    employee?.employee_photo,
+    employee?.photo_url,
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+
+  const identifiers = [
+    employee?.employee_code,
+    employee?.email ? String(employee.email).split('@')[0] : '',
+    employee?.id ? `employee-${employee.id}` : '',
+    slugForPhoto(employee?.name),
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+
+  const generated = [];
+  const prefixes = ['', 'photos/', 'employee-photos/', 'employees/', 'profile-photos/'];
+  const extensions = ['jpg', 'jpeg', 'png', 'webp'];
+  identifiers.forEach((identifier) => {
+    const variants = Array.from(new Set([identifier, identifier.toUpperCase(), identifier.toLowerCase(), slugForPhoto(identifier)].filter(Boolean)));
+    variants.forEach((variant) => {
+      prefixes.forEach((prefix) => {
+        extensions.forEach((extension) => generated.push(`${prefix}${variant}.${extension}`));
+      });
+    });
+  });
+
+  return Array.from(new Set([...explicit.map(buildS3PhotoUrl), ...generated.map(buildS3PhotoUrl)].filter(Boolean)));
+}
+
+function EmployeePhoto({ employee, variant = 'cell' }) {
+  const candidates = useMemo(() => getEmployeePhotoCandidates(employee), [employee]);
+  const candidateKey = candidates.join('|');
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [candidateKey]);
+
+  const initials = getNameInitials(employee?.name);
+  const src = candidates[candidateIndex] || '';
+  const isModal = variant === 'modal';
+  const containerClass = isModal ? 'employee-modal-photo' : 'employee-photo-cell';
+  const fallbackClass = isModal ? 'employee-modal-photo-fallback' : 'employee-photo-fallback';
+  const imageClass = isModal ? 'employee-modal-photo-img' : 'employee-photo-img';
+
+  return (
+    <div className={containerClass} aria-hidden={isModal ? 'true' : undefined}>
+      {src ? (
+        <img
+          className={imageClass}
+          src={src}
+          alt={employee?.name || 'Employee'}
+          onError={() => setCandidateIndex((index) => (index + 1 < candidates.length ? index + 1 : candidates.length))}
+        />
+      ) : null}
+      <span className={fallbackClass}>{initials}</span>
+    </div>
+  );
+}
+
 function formatAssignedByName(value) {
   const rawValue = String(value || '').trim();
   if (!rawValue) return '-';
@@ -606,6 +693,12 @@ function App() {
     assetSearch: '',
     notes: ''
   });
+  const [selfieEmployeeId, setSelfieEmployeeId] = useState('');
+  const [selfieCameraOpen, setSelfieCameraOpen] = useState(false);
+  const [selfieSaving, setSelfieSaving] = useState(false);
+  const [selfieError, setSelfieError] = useState('');
+  const selfieVideoRef = useRef(null);
+  const selfieStreamRef = useRef(null);
 
   useEffect(() => {
     if (!message) return undefined;
@@ -613,6 +706,12 @@ function App() {
     const timeoutId = setTimeout(() => setMessage(''), 5000);
     return () => clearTimeout(timeoutId);
   }, [message]);
+  useEffect(() => () => {
+    if (selfieStreamRef.current) {
+      selfieStreamRef.current.getTracks().forEach((track) => track.stop());
+      selfieStreamRef.current = null;
+    }
+  }, []);
   const [accountSearch, setAccountSearch] = useState('');
   const [createAdminPopupOpen, setCreateAdminPopupOpen] = useState(false);
   const [selectedAdminPermissionId, setSelectedAdminPermissionId] = useState(null);
@@ -1091,6 +1190,92 @@ function App() {
         assetSearch: '',
         notes: ''
       }));
+    }
+  }
+
+  function stopSelfieCamera() {
+    if (selfieStreamRef.current) {
+      selfieStreamRef.current.getTracks().forEach((track) => track.stop());
+      selfieStreamRef.current = null;
+    }
+    if (selfieVideoRef.current) {
+      selfieVideoRef.current.srcObject = null;
+    }
+    setSelfieCameraOpen(false);
+  }
+
+  function getQuickAssignSelfieUserId() {
+    const selectedEmployeeOption = quickAssignUsers.find((item) => String(item.selection_value || item.local_user_id || item.id) === String(quickAssignForm.userId));
+    return selectedEmployeeOption?.local_user_id ? String(selectedEmployeeOption.local_user_id) : '';
+  }
+
+  async function openSelfieCamera(e, targetEmployeeId = '') {
+    e?.preventDefault();
+    setSelfieError('');
+    const nextEmployeeId = targetEmployeeId || selfieEmployeeId || getQuickAssignSelfieUserId();
+    if (!nextEmployeeId) {
+      setSelfieError('Select employee before opening camera.');
+      return;
+    }
+    setSelfieEmployeeId(nextEmployeeId);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSelfieError('Camera is not available in this browser.');
+      return;
+    }
+    try {
+      stopSelfieCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: false,
+      });
+      selfieStreamRef.current = stream;
+      setSelfieCameraOpen(true);
+      requestAnimationFrame(() => {
+        if (selfieVideoRef.current) {
+          selfieVideoRef.current.srcObject = stream;
+          selfieVideoRef.current.play().catch(() => {});
+        }
+      });
+    } catch (err) {
+      setSelfieError('Camera permission denied or camera is not available.');
+    }
+  }
+
+  async function captureEmployeeSelfie() {
+    setSelfieError('');
+    const video = selfieVideoRef.current;
+    if (!selfieEmployeeId || !video || !video.videoWidth) {
+      setSelfieError('Open camera and wait for preview before capture.');
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    const side = Math.min(video.videoWidth, video.videoHeight);
+    const sourceX = Math.max(0, Math.floor((video.videoWidth - side) / 2));
+    const sourceY = Math.max(0, Math.floor((video.videoHeight - side) / 2));
+    canvas.width = 480;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, sourceX, sourceY, side, side, 0, 0, canvas.width, canvas.height);
+    const profileImageUrl = canvas.toDataURL('image/jpeg', 0.82);
+
+    setSelfieSaving(true);
+    try {
+      const res = await apiFetch(`/api/users/${selfieEmployeeId}/photo`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ profile_image_url: profileImageUrl }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Selfie upload failed');
+      setUsers((prev) => prev.map((item) => (
+        Number(item.id) === Number(selfieEmployeeId) ? { ...item, ...body, profile_image_url: body.profile_image_url || profileImageUrl } : item
+      )));
+      setMessage('Employee selfie saved successfully.');
+      stopSelfieCamera();
+    } catch (err) {
+      setSelfieError(err.message || 'Selfie upload failed.');
+    } finally {
+      setSelfieSaving(false);
     }
   }
 
@@ -2116,13 +2301,44 @@ function App() {
     return lookup;
   }, [uploadedEmployeeAssets]);
   const employeeDirectory = useMemo(() => {
-    return employees
-      .map((emp) => {
-        const uploadedEmployee = buildEmployeeLookupKeys(emp)
+    const directorySource = quickAssignUsers.length
+      ? quickAssignUsers
+      : employees.map((emp) => ({
+        ...emp,
+        local_user_id: emp.id,
+        employee_email: emp.email,
+        label: emp.employee_code ? `${emp.name} (${emp.employee_code})` : emp.name,
+      }));
+
+    return directorySource
+      .map((option) => {
+        const selectionValue = buildAssignmentSelectionValue(option);
+        const localUserId = option.local_user_id ? Number(option.local_user_id) : (Number(option.id) || null);
+        const localUser = localUserId ? userById[localUserId] : null;
+        const baseEmployee = localUser || option;
+        const name = baseEmployee.name || option.name || option.label || '';
+        const email = baseEmployee.email || option.employee_email || '';
+        const employeeCode = baseEmployee.employee_code || option.employee_code || '';
+        const uploadedEmployee = buildEmployeeLookupKeys({
+          ...baseEmployee,
+          name,
+          email,
+          employee_code: employeeCode
+        })
           .map((key) => uploadedEmployeeLookup[key])
           .find(Boolean);
         const assignedAssets = activeAllocations
-          .filter((a) => a.user_id === emp.id)
+          .filter((a) => {
+            if (localUserId && Number(a.user_id) === Number(localUserId)) return true;
+            const allocationCode = String(a.employee_code || '').trim().toLowerCase();
+            const allocationEmail = String(a.employee_email || '').trim().toLowerCase();
+            const allocationName = String(a.employee_name || '').trim().toLowerCase();
+            return (
+              (employeeCode && allocationCode === String(employeeCode).trim().toLowerCase())
+              || (email && allocationEmail === String(email).trim().toLowerCase())
+              || (name && allocationName === String(name).trim().toLowerCase())
+            );
+          })
           .map((a) => ({
             id: a.id,
             assetId: a.asset_id,
@@ -2143,9 +2359,18 @@ function App() {
             .sort((a, b) => b - a)[0]
           : null;
         return {
-          ...emp,
-          profile_image_url: emp.profile_image_url || uploadedEmployee?.employee_photo || '',
-          geolocation: emp.location || uploadedEmployee?.location || '',
+          ...baseEmployee,
+          id: selectionValue,
+          local_user_id: localUserId,
+          name,
+          email,
+          employee_code: employeeCode,
+          role: baseEmployee.role || 'user',
+          department: baseEmployee.department || option.department || uploadedEmployee?.department || '',
+          designation: baseEmployee.designation || option.designation || uploadedEmployee?.designation || '',
+          personal_mobile_no: baseEmployee.personal_mobile_no || uploadedEmployee?.mobile_no || uploadedEmployee?.mobile || '',
+          profile_image_url: baseEmployee.profile_image_url || uploadedEmployee?.employee_photo || '',
+          geolocation: baseEmployee.location || option.location || uploadedEmployee?.location || '',
           assignedAssets,
           assignedCount: assignedAssets.length,
           latestAllocatedAt: latestAllocatedAt ? new Date(latestAllocatedAt) : null
@@ -2159,15 +2384,16 @@ function App() {
         return `${emp.name || ''} ${emp.employee_code || ''} ${emp.email || ''} ${emp.personal_mobile_no || ''} ${emp.role || ''} ${emp.department || ''} ${emp.designation || ''} ${emp.geolocation || emp.location || ''} ${assetsText}`.toLowerCase().includes(q);
       })
       .sort((a, b) => b.assignedCount - a.assignedCount || (a.name || '').localeCompare(b.name || ''));
-  }, [employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch, uploadedEmployeeLookup]);
+  }, [quickAssignUsers, employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch, uploadedEmployeeLookup, userById]);
   const selectedEmployee = useMemo(
     () => employeeDirectory.find((emp) => emp.id === selectedEmployeeId) || null,
     [employeeDirectory, selectedEmployeeId]
   );
   const selectedEmployeeHistory = useMemo(() => {
     if (!selectedEmployee) return [];
+    const selectedLocalUserId = selectedEmployee.local_user_id || selectedEmployee.id;
     return allocations
-      .filter((a) => a.user_id === selectedEmployee.id)
+      .filter((a) => String(a.user_id || '') === String(selectedLocalUserId || ''))
       .map((a) => {
         const assignmentAuditLog = allocationAssignAuditById[a.id];
         const assignmentActor = getAllocationAssignmentActor(a, assignmentAuditLog);
@@ -3288,53 +3514,54 @@ function App() {
 
         {section === 'inventory' && (
           <section className="panel wide inventory-panel">
-            <div className="inventory-head">
-              <div>
-                <h3>Asset Inventory</h3>
-                <p className="hint">Structured registry for all devices across brand, model, and lifecycle state.</p>
+            <div className="inventory-page-stack">
+              <div className="inventory-head">
+                <div>
+                  <h3>Asset Inventory</h3>
+                  <p className="hint">Structured registry for all devices across brand, model, and lifecycle state.</p>
+                </div>
+                <div className="inventory-head-actions">
+                  <button type="button" className="outline" onClick={resetInventoryFilters}>Reset Filters</button>
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => {
+                      const header = isSimInventoryView
+                        ? ['S. No.', 'CONNECTION NUMBER', 'CONNECTION TYPE', 'STATUS', 'SIM NUMBER', 'NAME', 'SOURCE']
+                        : ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
+                      const rows = isSimInventoryView
+                        ? filteredSortedAssets.map((a, index) => {
+                          const sim = getSimAssetDetails(a);
+                          return [sim.sNo || index + 1, sim.connectionNumber, sim.connectionType, sim.simStatus, sim.simNumber, sim.assignedName, sim.source];
+                        })
+                        : filteredSortedAssets.map((a) => [
+                          a.name || '',
+                          a.type || '',
+                          a.brand_name || '',
+                          a.model_name || '',
+                          a.assigned_to_name || '',
+                          a.assigned_to_employee_code || '',
+                          a.domain_name || '',
+                          a.vendor || '',
+                          a.serial || '',
+                          a.status || ''
+                        ]);
+                      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.setAttribute('download', 'inventory_export.csv');
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Export CSV
+                  </button>
+                </div>
               </div>
-              <div className="inventory-head-actions">
-                <button type="button" className="outline" onClick={resetInventoryFilters}>Reset Filters</button>
-                <button
-                  type="button"
-                  className="outline"
-                  onClick={() => {
-                    const header = isSimInventoryView
-                      ? ['S. No.', 'CONNECTION NUMBER', 'CONNECTION TYPE', 'STATUS', 'SIM NUMBER', 'NAME', 'SOURCE']
-                      : ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
-                    const rows = isSimInventoryView
-                      ? filteredSortedAssets.map((a, index) => {
-                        const sim = getSimAssetDetails(a);
-                        return [sim.sNo || index + 1, sim.connectionNumber, sim.connectionType, sim.simStatus, sim.simNumber, sim.assignedName, sim.source];
-                      })
-                      : filteredSortedAssets.map((a) => [
-                        a.name || '',
-                        a.type || '',
-                        a.brand_name || '',
-                        a.model_name || '',
-                        a.assigned_to_name || '',
-                        a.assigned_to_employee_code || '',
-                        a.domain_name || '',
-                        a.vendor || '',
-                        a.serial || '',
-                        a.status || ''
-                      ]);
-                    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.setAttribute('download', 'inventory_export.csv');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                  }}
-                >
-                  Export CSV
-                </button>
-              </div>
-            </div>
 
             {hasAdminPermission('inventory.manage') && (
               <div className="create-box inventory-create-top">
@@ -3556,11 +3783,12 @@ function App() {
                 <button type="button" className="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
               </div>
             </div>
+            </div>
           </section>
         )}
 
         {section === 'assignments' && (
-          <>
+          <div className="assignments-page-stack">
             <section className="inventory-mini-stats assignment-stats">
               {assignmentKpiCards.map((item) => (
                 <article key={item.key} className="metric-card donut-card" style={{ '--metric-pct': `${item.pct}%` }}>
@@ -3652,6 +3880,16 @@ function App() {
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
                       placeholder={isSuperAdmin ? 'Transfer note...' : 'Reason, team, project, ticket...'}
                     />
+                    {!isSuperAdmin && (
+                      <button
+                        type="button"
+                        className="selfie-open-btn"
+                        disabled={!getQuickAssignSelfieUserId()}
+                        onClick={(e) => openSelfieCamera(e, getQuickAssignSelfieUserId())}
+                      >
+                        Live Selfie
+                      </button>
+                    )}
                     <button
                       type="submit"
                       disabled={isSuperAdmin ? (!quickAssignForm.domainName || !quickAssignForm.assetId) : (!quickAssignForm.userId || !quickAssignForm.assetId)}
@@ -3659,6 +3897,20 @@ function App() {
                       {isSuperAdmin ? 'Send To Domain' : 'Assign Asset'}
                     </button>
                   </form>
+                  {selfieCameraOpen && (
+                    <div className="selfie-camera-box quick-selfie-camera">
+                      <video ref={selfieVideoRef} className="selfie-camera-preview" autoPlay playsInline muted />
+                      <div className="selfie-camera-actions">
+                        <button type="button" className="small selfie-capture-btn" onClick={captureEmployeeSelfie} disabled={selfieSaving}>
+                          {selfieSaving ? 'Saving...' : 'Capture Selfie'}
+                        </button>
+                        <button type="button" className="small outline" onClick={stopSelfieCamera}>
+                          Close Camera
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {selfieError && <p className="selfie-error">{selfieError}</p>}
                   <p className="assignment-inline-meta">
                     {quickAssignAssetOptions.length} matching available assets
                     {quickAssignForm.assetType !== 'all' ? ` in ${quickAssignForm.assetType}` : ''}
@@ -3671,7 +3923,6 @@ function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Photo</th>
                       <th>Employee</th>
                       <th>Code</th>
                       <th>Email</th>
@@ -3688,18 +3939,6 @@ function App() {
                   <tbody>
                     {employeeDirectory.map((emp) => (
                       <tr key={emp.id}>
-                        <td>
-                          <div className="employee-photo-cell">
-                            {emp.profile_image_url ? (
-                              <img
-                                src={emp.profile_image_url}
-                                alt={emp.name || 'Employee'}
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                              />
-                            ) : null}
-                            <span className="employee-photo-fallback">{getNameInitials(emp.name)}</span>
-                          </div>
-                        </td>
                         <td className="employee-cell">
                           <span className="employee-avatar">{(emp.name || 'U').slice(0, 1).toUpperCase()}</span>
                           <div>
@@ -3862,7 +4101,7 @@ function App() {
                 </table>
               </div>
             </section>
-          </>
+          </div>
         )}
 
         {section === 'accounts' && (
@@ -4367,15 +4606,13 @@ function App() {
           <div className="employee-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="employee-view-title" onClick={() => setSelectedEmployeeId(null)}>
             <section className="employee-modal" onClick={(e) => e.stopPropagation()}>
               <header className="employee-modal-hero">
-                <div className="employee-modal-photo" aria-hidden="true">
-                  {getNameInitials(selectedEmployee.name)}
-                </div>
+                <EmployeePhoto employee={selectedEmployee} variant="modal" />
                 <div className="employee-modal-headcopy">
                   <div className="employee-modal-title-row">
                     <h3 id="employee-view-title">{selectedEmployee.name}</h3>
                     <div className="employee-modal-actions">
                       <button type="button" className="small outline" onClick={printEmployeeDetails}>Print</button>
-                      {hasAdminPermission('assignments.manage') && (
+                      {hasAdminPermission('assignments.manage') && selectedEmployee.local_user_id && (
                         <button type="button" className="small outline" onClick={() => setIsEditingEmployee((v) => !v)}>{isEditingEmployee ? 'Cancel Edit' : 'Edit'}</button>
                       )}
                       <button type="button" className="small outline" onClick={() => setSelectedEmployeeId(null)}>Close</button>
