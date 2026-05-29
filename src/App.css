@@ -4692,7 +4692,7 @@ body {
 
 .permission-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
   gap: 8px;
   border: 1px solid #dce6ef;
   border-radius: 10px;
@@ -4707,28 +4707,36 @@ body {
 }
 
 .permission-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
   align-items: center;
-  justify-content: space-between;
-  gap: 7px;
-  font-size: 12px;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.35;
   color: #314d65;
   border: 1px solid #dfe8f0;
   border-radius: 8px;
   background: #fff;
-  padding: 7px 8px;
-  min-height: 36px;
+  padding: 12px 14px;
+  min-height: 58px;
 }
 
 .permission-item span {
-  order: 1;
-  flex: 1;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
 }
 
 .permission-item input {
-  order: 2;
-  flex: 0 0 auto;
-  margin-left: 10px;
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  width: 16px;
+  height: 16px;
+  margin: 0;
   accent-color: #1f7a8c;
 }
 
@@ -4954,10 +4962,22 @@ body {
   overflow: auto;
   align-content: start;
   border-radius: 10px;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+}
+
+.account-create-form .permission-popup-grid {
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  max-height: none;
+  overflow: visible;
+}
+
+.account-create-form .permission-item {
+  min-height: 64px;
 }
 
 .permission-popup-grid .permission-item {
   transition: all 0.18s ease;
+  min-height: 62px;
 }
 
 .permission-popup-grid .permission-item:hover {

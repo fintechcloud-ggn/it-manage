@@ -346,16 +346,16 @@ function getInvoiceAttachmentKey(invoiceId, type) {
 }
 
 const ADMIN_PERMISSION_OPTIONS = [
-  { key: 'overview.view', label: 'Dashboard / Overview' },
-  { key: 'inventory.view', label: 'Inventory - View Assets' },
-  { key: 'inventory.manage', label: 'Inventory - Add, Edit, Delete Assets' },
-  { key: 'assignments.view', label: 'Assignments - View Employee Assets' },
-  { key: 'assignments.manage', label: 'Assignments - Assign, Return, Replace Assets' },
-  { key: 'insights.view', label: 'Insights View' },
-  { key: 'invoices.view', label: 'Invoices - View Bills' },
-  { key: 'invoices.manage', label: 'Invoices - Add Bills' },
-  { key: 'activity.view', label: 'Recent Activity View' },
-  { key: 'accounts.manage', label: 'Role Account Management' }
+  { key: 'overview.view', label: 'Dashboard: Overview' },
+  { key: 'inventory.view', label: 'Inventory: View Assets' },
+  { key: 'inventory.manage', label: 'Inventory: Add/Edit/Delete Assets' },
+  { key: 'assignments.view', label: 'Assignments: View Employee Assets' },
+  { key: 'assignments.manage', label: 'Assignments: Assign/Return/Replace Assets' },
+  { key: 'insights.view', label: 'Insights: View' },
+  { key: 'invoices.view', label: 'Invoices: View Bills' },
+  { key: 'invoices.manage', label: 'Invoices: Add Bills' },
+  { key: 'activity.view', label: 'Recent Activity: View' },
+  { key: 'accounts.manage', label: 'Role Account: Management' }
 ];
 const ADMIN_PERMISSION_KEYS = ADMIN_PERMISSION_OPTIONS.map((item) => item.key);
 
