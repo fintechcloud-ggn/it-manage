@@ -11,6 +11,7 @@ import ResourcesPage from './pages/ResourcesPage';
 import SecurityOpsPage from './pages/SecurityOpsPage';
 import SolutionsPage from './pages/SolutionsPage';
 import { MARKETING_HOME_PATH, normalizeMarketingPath } from './pages/marketingPages';
+import importedTrackerInvoices from './data/importedInvoices.json';
 
 
 const DEV_API_PORTS = Array.from({ length: 20 }, (_, index) => 4000 + index);
@@ -264,6 +265,27 @@ const INVOICE_APPROVAL_SORT_ORDER = {
 const INVOICE_STORAGE_VERSION = 'head_accounts_approval_v1';
 const INVOICE_ACCOUNTANT_NAMES = ['hansi kunwar', 'umesh', 'umesh ji', 'jeetiesh', 'jeetiesh ji'];
 const ROLE_ACCOUNT_PASSWORDS_KEY = 'itmanage_role_account_passwords';
+
+function getInvoiceMergeKey(invoice = {}) {
+  return [
+    String(invoice.billNo || '').trim().toLowerCase(),
+    String(invoice.vendor || '').trim().toLowerCase(),
+    String(invoice.amount || '').trim(),
+    String(invoice.dueDate || '').trim()
+  ].join('|');
+}
+
+function mergeImportedInvoices(savedInvoices = [], importedInvoices = []) {
+  const merged = [];
+  const seen = new Set();
+  [...savedInvoices, ...importedInvoices].forEach((invoice) => {
+    const key = getInvoiceMergeKey(invoice);
+    if (!key.replace(/\|/g, '') || seen.has(key)) return;
+    seen.add(key);
+    merged.push(invoice);
+  });
+  return merged;
+}
 
 function stripInvoiceAttachmentData(invoice) {
   return {
@@ -631,14 +653,19 @@ function App() {
   const [invoices, setInvoices] = useState(() => {
     try {
       const savedVersion = localStorage.getItem('invoice_storage_version');
+      let savedInvoices = [];
       if (savedVersion !== INVOICE_STORAGE_VERSION) {
         localStorage.setItem('invoice_storage_version', INVOICE_STORAGE_VERSION);
         localStorage.setItem('invoices', '[]');
-        return [];
+      } else {
+        savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
       }
-      return JSON.parse(localStorage.getItem('invoices') || '[]');
+      return mergeImportedInvoices(
+        Array.isArray(savedInvoices) ? savedInvoices : [],
+        Array.isArray(importedTrackerInvoices) ? importedTrackerInvoices : []
+      );
     } catch {
-      return [];
+      return Array.isArray(importedTrackerInvoices) ? importedTrackerInvoices : [];
     }
   });
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('all');
@@ -663,7 +690,7 @@ function App() {
   const invoiceAttachmentsLoadedRef = useRef(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
-  const [domains, setDomains] = useState([]);
+  const [, setDomains] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -2256,6 +2283,14 @@ function App() {
     () => users.filter((u) => (u.role || '').toLowerCase() !== 'user' && !u.is_super_admin),
     [users]
   );
+  const accountManagementDomains = useMemo(
+    () => Array.from(new Set(
+      managedAdmins
+        .map((admin) => String(admin.domain_name || '').trim().toLowerCase())
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b)),
+    [managedAdmins]
+  );
   const filteredManagedAdmins = useMemo(() => {
     const q = accountSearch.trim().toLowerCase();
     if (!q) return managedAdmins;
@@ -2268,8 +2303,8 @@ function App() {
     [managedAdmins, selectedAdminPermissionId]
   );
   const accountSummary = useMemo(() => {
-    const totalAdmins = users.filter((u) => (u.role || '').toLowerCase() !== 'user').length;
-    const totalManaged = managedAdmins.length;
+    const totalRoleAccounts = managedAdmins.length;
+    const managedDomains = accountManagementDomains.length;
     const fullyPrivileged = managedAdmins.filter((u) =>
       ADMIN_PERMISSION_OPTIONS.every((perm) => (u.permissions || []).includes(perm.key))
     ).length;
@@ -2278,8 +2313,8 @@ function App() {
     const avgPermissions = permissionCounts.length
       ? Math.round((permissionCounts.reduce((sum, n) => sum + n, 0) / permissionCounts.length) * 10) / 10
       : 0;
-    return { totalAdmins, totalManaged, fullyPrivileged, maxPermissions, avgPermissions };
-  }, [users, managedAdmins]);
+    return { totalRoleAccounts, managedDomains, fullyPrivileged, maxPermissions, avgPermissions };
+  }, [managedAdmins, accountManagementDomains]);
   const assignedUsersCount = useMemo(
     () => {
       const employeeIds = new Set(employees.map((e) => e.id));
@@ -2538,15 +2573,11 @@ function App() {
     return Array.from(new Set(assets.map((a) => a.brand_name).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   }, [assets]);
   const inventoryDomains = useMemo(() => {
-    const domainValues = [
-      ...domains.map((domain) => domain),
-      ...assets.map((a) => a.domain_name),
-      ...users.map((u) => u.domain_name)
-    ]
+    const domainValues = (accountManagementDomains.length ? accountManagementDomains : [currentUserDomain])
       .map((domain) => String(domain || '').trim().toLowerCase())
       .filter(Boolean);
     return Array.from(new Set(domainValues)).sort((a, b) => a.localeCompare(b));
-  }, [domains, assets, users]);
+  }, [accountManagementDomains, currentUserDomain]);
   function getSimAssetDetails(asset) {
     let details = {};
     try {
@@ -4135,8 +4166,8 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Managed Roles</span>
-                    <strong>{accountSummary.totalManaged}</strong>
+                    <span>Managed Domains</span>
+                    <strong>{accountSummary.managedDomains}</strong>
                   </div>
                 </div>
                 <div className="acct-metric-card">
@@ -4145,7 +4176,7 @@ function App() {
                   </div>
                   <div className="acct-metric-body">
                     <span>Total Role Accounts</span>
-                    <strong>{accountSummary.totalAdmins}</strong>
+                    <strong>{accountSummary.totalRoleAccounts}</strong>
                   </div>
                 </div>
                 <div className="acct-metric-card">
@@ -4270,10 +4301,10 @@ function App() {
                     <p>Domains created from role accounts appear in asset and dashboard dropdowns.</p>
                   </div>
                   <div className="domain-chip-list">
-                    {domains.length === 0 ? (
+                    {accountManagementDomains.length === 0 ? (
                       <span className="domain-empty">No domains found.</span>
                     ) : (
-                      domains.map((domain) => (
+                      accountManagementDomains.map((domain) => (
                         <span key={domain} className="domain-delete-chip">
                           {domain}
                           <button

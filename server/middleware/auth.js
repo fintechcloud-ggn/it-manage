@@ -8,7 +8,8 @@ function normalizeDomain(value) {
 }
 
 const DOMAIN_EMPLOYEE_CODE_RULES = {
-  fintech: ['fch']
+  fintech: ['fch'],
+  zapto: ['zpt']
 };
 
 function normalizeEmployeeCode(value) {
@@ -77,9 +78,14 @@ function canAccessDomainRecord(user, record = {}) {
   const userPrefix = getUserEmployeeCodePrefix(user);
 
   const recordDomain = normalizeDomain(record.domain_name || record.domain || '');
-  const recordCode = normalizeEmployeeCode(record.employee_code);
+  const recordCode = normalizeEmployeeCode(
+    record.employee_code ||
+    record.assigned_to_employee_code ||
+    record.user_employee_code ||
+    record.employeeCode
+  );
   if (userPrefix) {
-    return !!recordCode && recordCode.startsWith(userPrefix);
+    if (recordCode && recordCode.includes(userPrefix)) return true;
   }
 
   if (!userDomain) return false;

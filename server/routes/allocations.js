@@ -90,14 +90,16 @@ router.get('/', requireAuth, async (req, res) => {
             AND log.action IN ('ALLOCATE_ASSET', 'REPLACE_ASSET')
           ORDER BY log.id ASC
           LIMIT 1
-        )) AS assigned_by_role
+        )) AS assigned_by_role,
+        assigned_user.employee_code AS employee_code,
+        assigned_user.domain_name AS user_domain_name
       FROM allocations al
       INNER JOIN assets a ON a.id = al.asset_id
+      LEFT JOIN users assigned_user ON assigned_user.id = al.user_id
       ORDER BY al.id DESC
     `);
     if (!isSuperAdmin(req.user)) {
-      const currentDomain = getUserDomain(req.user);
-      rows = rows.filter((row) => normalizeDomain(row.domain_name) === currentDomain);
+      rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
     }
     res.json(rows);
   } catch (err) {
@@ -179,15 +181,16 @@ router.put('/:id/return', requireAuth, async (req, res) => {
     const { reason, reason_detail } = req.body || {};
     const returnedAtMs = Date.now();
     const rows = await query(`
-      SELECT al.id, al.asset_id, al.returned_at, a.domain_name
+      SELECT al.id, al.asset_id, al.returned_at, a.domain_name, assigned_user.employee_code
       FROM allocations al
       INNER JOIN assets a ON a.id = al.asset_id
+      LEFT JOIN users assigned_user ON assigned_user.id = al.user_id
       WHERE al.id = ? LIMIT 1
     `, [id]);
     const alloc = rows[0];
     if (!alloc) return res.status(404).json({ error: 'Allocation not found' });
     if (alloc.returned_at) return res.status(400).json({ error: 'Already returned' });
-    if (!isSuperAdmin(req.user) && normalizeDomain(alloc.domain_name) !== getUserDomain(req.user)) {
+    if (!isSuperAdmin(req.user) && !canAccessDomainRecord(req.user, alloc)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -229,15 +232,16 @@ router.post('/:id/replace', requireAuth, async (req, res) => {
     }
 
     const rows = await query(`
-      SELECT al.id, al.asset_id, al.user_id, al.returned_at, al.notes, a.domain_name
+      SELECT al.id, al.asset_id, al.user_id, al.returned_at, al.notes, a.domain_name, assigned_user.employee_code
       FROM allocations al
       INNER JOIN assets a ON a.id = al.asset_id
+      LEFT JOIN users assigned_user ON assigned_user.id = al.user_id
       WHERE al.id = ? LIMIT 1
     `, [id]);
     const currentAlloc = rows[0];
     if (!currentAlloc) return res.status(404).json({ error: 'Allocation not found' });
     if (currentAlloc.returned_at) return res.status(400).json({ error: 'Current allocation already returned' });
-    if (!isSuperAdmin(req.user) && normalizeDomain(currentAlloc.domain_name) !== getUserDomain(req.user)) {
+    if (!isSuperAdmin(req.user) && !canAccessDomainRecord(req.user, currentAlloc)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
     if (Number(currentAlloc.asset_id) === Number(new_asset_id)) {

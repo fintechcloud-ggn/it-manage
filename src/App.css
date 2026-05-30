@@ -5835,6 +5835,9 @@ body {
   background: #ffffff;
   box-shadow: 0 4px 16px rgba(10, 35, 55, 0.05);
   overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(220px, 1fr);
+  min-height: 0;
 }
 
 .acct-table-header {
@@ -5905,8 +5908,27 @@ body {
 
 /* Admin table */
 .acct-table-wrap {
-  overflow: auto;
-  max-height: 600px;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: clamp(260px, 48vh, 600px);
+  min-height: 220px;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.acct-table-wrap::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.acct-table-wrap::-webkit-scrollbar-thumb {
+  background: #b9c9d6;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+}
+
+.acct-table-wrap::-webkit-scrollbar-track {
+  background: #eef4f8;
 }
 
 .acct-table {

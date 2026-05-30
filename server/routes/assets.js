@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../db');
-const { requireAuth, requirePermission, isSuperAdmin, normalizeDomain, getUserDomain, canAccessDomain } = require('../middleware/auth');
+const { requireAuth, requirePermission, isSuperAdmin, normalizeDomain, getUserDomain, canAccessDomain, canAccessDomainRecord } = require('../middleware/auth');
 const { writeAuditLog } = require('../audit');
 
 router.get('/', requireAuth, async (req, res) => {
@@ -26,8 +26,7 @@ router.get('/', requireAuth, async (req, res) => {
       ORDER BY a.id DESC
     `);
     if (!isSuperAdmin(req.user)) {
-      const currentDomain = getUserDomain(req.user);
-      rows = rows.filter((row) => normalizeDomain(row.domain_name) === currentDomain);
+      rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
     }
     res.json(rows);
   } catch (err) {
@@ -58,7 +57,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       WHERE a.id = ? LIMIT 1
     `, [id]);
     if (!rows[0]) return res.status(404).json({ error: 'Asset not found' });
-    if (!canAccessDomain(req.user, rows[0].domain_name)) return res.status(403).json({ error: 'Forbidden' });
+    if (!canAccessDomainRecord(req.user, rows[0])) return res.status(403).json({ error: 'Forbidden' });
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
