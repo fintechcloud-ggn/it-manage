@@ -36,9 +36,10 @@ router.get('/models', async (req, res) => {
 
 router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   try {
-    const { name } = req.body;
-    const result = await query('INSERT INTO brands (name) VALUES (?)', [name]);
-    const created = await query('SELECT id, name FROM brands WHERE id = ? LIMIT 1', [result.insertId]);
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'Brand name is required' });
+    await query('INSERT IGNORE INTO brands (name) VALUES (?)', [name]);
+    const created = await query('SELECT id, name FROM brands WHERE name = ? LIMIT 1', [name]);
     res.status(201).json(created[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -47,9 +48,16 @@ router.post('/', requirePermission('inventory.manage'), async (req, res) => {
 
 router.post('/models', requirePermission('inventory.manage'), async (req, res) => {
   try {
-    const { brand_id, name, category } = req.body;
-    const result = await query('INSERT INTO asset_models (brand_id, name, category) VALUES (?, ?, ?)', [Number(brand_id), name, category || 'Laptop']);
-    const created = await query('SELECT id, brand_id, name, category FROM asset_models WHERE id = ? LIMIT 1', [result.insertId]);
+    const brandId = Number(req.body.brand_id || 0);
+    const name = String(req.body.name || '').trim();
+    const category = String(req.body.category || 'Laptop').trim() || 'Laptop';
+    if (!brandId) return res.status(400).json({ error: 'Brand is required' });
+    if (!name) return res.status(400).json({ error: 'Model name is required' });
+    await query('INSERT IGNORE INTO asset_models (brand_id, name, category) VALUES (?, ?, ?)', [brandId, name, category]);
+    const created = await query(
+      'SELECT id, brand_id, name, category FROM asset_models WHERE brand_id = ? AND name = ? LIMIT 1',
+      [brandId, name]
+    );
     res.status(201).json(created[0]);
   } catch (err) {
     res.status(400).json({ error: err.message });

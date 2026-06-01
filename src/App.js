@@ -166,6 +166,8 @@ const INVOICE_SUBCATEGORIES_BY_CATEGORY = {
   'Other Bill': ['Other----']
 };
 
+const INVOICE_APPROVER_NAME_OPTIONS = ['Hansi Kunwar'];
+
 const BILL_DESCRIPTION_VENDOR_OPTIONS = [
   'AbCom',
   'ACT Bill, SANT NAGAR',
@@ -263,6 +265,7 @@ const INVOICE_APPROVAL_SORT_ORDER = {
   completed: 2
 };
 const INVOICE_STORAGE_VERSION = 'head_accounts_approval_v1';
+const DELETED_INVOICE_KEYS_STORAGE_KEY = 'deleted_invoice_keys';
 const INVOICE_ACCOUNTANT_NAMES = ['hansi kunwar', 'umesh', 'umesh ji', 'jeetiesh', 'jeetiesh ji'];
 const ROLE_ACCOUNT_PASSWORDS_KEY = 'itmanage_role_account_passwords';
 
@@ -285,6 +288,15 @@ function mergeImportedInvoices(savedInvoices = [], importedInvoices = []) {
     merged.push(invoice);
   });
   return merged;
+}
+
+function readDeletedInvoiceKeys() {
+  try {
+    const keys = JSON.parse(localStorage.getItem(DELETED_INVOICE_KEYS_STORAGE_KEY) || '[]');
+    return new Set(Array.isArray(keys) ? keys : []);
+  } catch (_error) {
+    return new Set();
+  }
 }
 
 function stripInvoiceAttachmentData(invoice) {
@@ -401,6 +413,10 @@ function SearchableSelect({
   searchPlaceholder,
   emptyMessage,
   className = '',
+  allowCreate = false,
+  createLabel = 'Add',
+  selectedLabel = '',
+  onCreate,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -419,6 +435,10 @@ function SearchableSelect({
       `${option.label || ''} ${option.searchText || ''}`.toLowerCase().includes(normalizedQuery)
     );
   }, [options, query]);
+  const trimmedQuery = query.trim();
+  const canCreate = allowCreate && trimmedQuery && !options.some((option) =>
+    String(option.label || '').trim().toLowerCase() === trimmedQuery.toLowerCase()
+  );
 
   useEffect(() => {
     if (!isOpen) {
@@ -450,8 +470,8 @@ function SearchableSelect({
         className={`searchable-select__trigger${isOpen ? ' is-open' : ''}`}
         onClick={() => setIsOpen((prev) => !prev)}
       >
-        <span className={`searchable-select__value${selectedOption ? '' : ' is-placeholder'}`}>
-          {selectedOption?.label || placeholder}
+        <span className={`searchable-select__value${selectedOption || selectedLabel ? '' : ' is-placeholder'}`}>
+          {selectedOption?.label || selectedLabel || placeholder}
         </span>
         <span className="searchable-select__caret" aria-hidden="true">▾</span>
       </button>
@@ -466,6 +486,19 @@ function SearchableSelect({
             placeholder={searchPlaceholder}
           />
           <div className="searchable-select__list">
+            {canCreate && (
+              <button
+                type="button"
+                className="searchable-select__option searchable-select__option--create"
+                onClick={() => {
+                  onCreate?.(trimmedQuery);
+                  setQuery('');
+                  setIsOpen(false);
+                }}
+              >
+                {createLabel} "{trimmedQuery}"
+              </button>
+            )}
             {filteredOptions.length ? (
               filteredOptions.map((option) => (
                 <button
@@ -481,7 +514,7 @@ function SearchableSelect({
                 </button>
               ))
             ) : (
-              <div className="searchable-select__empty">{emptyMessage}</div>
+              !canCreate && <div className="searchable-select__empty">{emptyMessage}</div>
             )}
           </div>
         </div>
@@ -636,6 +669,24 @@ function buildAssignmentSelectionValue(userOption) {
   return `external:${userOption?.external_employee_id || userOption?.employee_code || userOption?.name || 'unknown'}`;
 }
 
+function formatCsvCell(value) {
+  const normalizedText = String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+  const text = Array.from(normalizedText)
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code === 10 || code === 9 || (code > 31 && code !== 127);
+    })
+    .join('');
+  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
+}
+
+function buildExcelCsv(rows) {
+  return `\uFEFF${rows.map((row) => row.map(formatCsvCell).join(',')).join('\r\n')}\r\n`;
+}
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
@@ -653,6 +704,7 @@ function App() {
   const [invoices, setInvoices] = useState(() => {
     try {
       const savedVersion = localStorage.getItem('invoice_storage_version');
+      const deletedInvoiceKeys = readDeletedInvoiceKeys();
       let savedInvoices = [];
       if (savedVersion !== INVOICE_STORAGE_VERSION) {
         localStorage.setItem('invoice_storage_version', INVOICE_STORAGE_VERSION);
@@ -661,8 +713,10 @@ function App() {
         savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
       }
       return mergeImportedInvoices(
-        Array.isArray(savedInvoices) ? savedInvoices : [],
-        Array.isArray(importedTrackerInvoices) ? importedTrackerInvoices : []
+        (Array.isArray(savedInvoices) ? savedInvoices : [])
+          .filter((invoice) => !deletedInvoiceKeys.has(getInvoiceMergeKey(invoice))),
+        (Array.isArray(importedTrackerInvoices) ? importedTrackerInvoices : [])
+          .filter((invoice) => !deletedInvoiceKeys.has(getInvoiceMergeKey(invoice)))
       );
     } catch {
       return Array.isArray(importedTrackerInvoices) ? importedTrackerInvoices : [];
@@ -683,6 +737,7 @@ function App() {
     amount: '',
     dueDate: '',
     status: 'unpaid',
+    approvalAssignee: '',
     notes: '',
     invoiceFileName: '',
     invoiceFileData: ''
@@ -692,6 +747,7 @@ function App() {
   const [brands, setBrands] = useState([]);
   const [, setDomains] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
+  const [customBrandName, setCustomBrandName] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [showLoginUsername, setShowLoginUsername] = useState(false);
@@ -773,7 +829,9 @@ function App() {
   });
   const [selectedAssetType, setSelectedAssetType] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
+  const [customModelName, setCustomModelName] = useState('');
   const [assetDomainName, setAssetDomainName] = useState('');
+  const [showBulkFormatMenu, setShowBulkFormatMenu] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const isSuperAdmin = useMemo(
@@ -808,6 +866,55 @@ function App() {
     const normalizedRole = String(user?.role || '').toLowerCase();
     const normalizedName = String(user?.name || '').trim().toLowerCase();
     return normalizedRole.includes('account') || INVOICE_ACCOUNTANT_NAMES.includes(normalizedName);
+  }
+
+  function canDeleteInvoices() {
+    if (isSuperAdmin) return true;
+    return String(user?.role || '').trim().toLowerCase() === 'admin';
+  }
+
+  function normalizeApprovalIdentity(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  function compactApprovalIdentity(value) {
+    return normalizeApprovalIdentity(value).replace(/[^a-z0-9]/g, '');
+  }
+
+  function getCurrentUserApprovalIdentifiers() {
+    if (!user) return [];
+    return [
+      user.id,
+      user.name,
+      user.email,
+      user.email ? String(user.email).split('@')[0] : '',
+      user.employee_code,
+      user.employee_code_prefix,
+    ]
+      .map((value) => normalizeApprovalIdentity(value))
+      .filter(Boolean);
+  }
+
+  function hasInvoiceApprovalAssignee(invoice) {
+    return Boolean(normalizeApprovalIdentity(invoice?.approvalAssignee));
+  }
+
+  function isInvoiceApprovalAssignee(invoice) {
+    const assignee = normalizeApprovalIdentity(invoice?.approvalAssignee);
+    if (!assignee) return true;
+    const assigneeParts = assignee.split(/[^a-z0-9@._-]+/).filter(Boolean);
+    const compactAssignee = compactApprovalIdentity(assignee);
+    return getCurrentUserApprovalIdentifiers().some((identifier) => (
+      assignee === identifier
+      || assigneeParts.includes(identifier)
+      || compactAssignee === compactApprovalIdentity(identifier)
+    ));
+  }
+
+  function canUseInvoiceApprovalAction(invoice, fallbackAccess) {
+    return hasInvoiceApprovalAssignee(invoice)
+      ? isInvoiceApprovalAssignee(invoice)
+      : fallbackAccess;
   }
 
   function canAccessSection(sectionKey) {
@@ -1357,17 +1464,48 @@ function App() {
     }
   }
 
+  async function ensureBrand(name) {
+    const trimmedName = String(name || '').trim();
+    if (!trimmedName) return null;
+    const existing = brands.find((brand) => normalizeBrandName(brand.name) === normalizeBrandName(trimmedName));
+    if (existing) return existing;
+    const res = await apiFetch('/api/brands', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ name: trimmedName })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Brand create failed');
+    return body;
+  }
+
+  async function ensureModel(brandId, name, category) {
+    const trimmedName = String(name || '').trim();
+    if (!brandId || !trimmedName) return null;
+    const existingBrand = brands.find((brand) => String(brand.id) === String(brandId));
+    const existing = (existingBrand?.models || []).find((model) =>
+      normalizeBrandName(model.name) === normalizeBrandName(trimmedName)
+      && normalizeBrandName(model.category) === normalizeBrandName(category)
+    );
+    if (existing) return existing;
+    const res = await apiFetch('/api/brands/models', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ brand_id: brandId, name: trimmedName, category })
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Model create failed');
+    return body;
+  }
+
   async function createAsset(e) {
     e.preventDefault();
-    const type = selectedAssetType;
+    const type = selectedAssetType.trim();
     const selectedModel = modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
-    const name = (selectedModel?.name || selectedBrandName || type || 'Asset').trim();
-    const serial = e.target.serial.value;
-    const vendor = e.target.vendor.value;
-    const notes = e.target.notes.value;
+    const serial = e.target.serial.value.trim();
+    const vendor = e.target.vendor.value.trim();
+    const notes = e.target.notes.value.trim();
     const domain_name = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
-    const brand_id = selectedBrandId ? Number(selectedBrandId) : null;
-    const model_id = selectedModelId ? Number(selectedModelId) : null;
     if (!type) {
       setMessage('Select asset type.');
       return;
@@ -1376,6 +1514,31 @@ function App() {
       setMessage('Asset domain is required.');
       return;
     }
+    let brand_id = selectedBrandId ? Number(selectedBrandId) : null;
+    let model_id = selectedModelId ? Number(selectedModelId) : null;
+    let createdBrandName = selectedBrandName;
+    let createdModelName = selectedModel?.name || customModelName.trim();
+    try {
+      if (customBrandName.trim()) {
+        const brand = await ensureBrand(customBrandName);
+        brand_id = brand?.id ? Number(brand.id) : brand_id;
+        createdBrandName = brand?.name || customBrandName.trim();
+      }
+      if (customModelName.trim()) {
+        if (!brand_id) {
+          const brand = await ensureBrand(customBrandName.trim() || 'Generic');
+          brand_id = brand?.id ? Number(brand.id) : brand_id;
+          createdBrandName = brand?.name || createdBrandName;
+        }
+        const model = await ensureModel(brand_id, customModelName, type);
+        model_id = model?.id ? Number(model.id) : model_id;
+        createdModelName = model?.name || customModelName.trim();
+      }
+    } catch (error) {
+      setMessage(error.message || 'Unable to add brand/model');
+      return;
+    }
+    const name = (createdModelName || createdBrandName || type || 'Asset').trim();
     const res = await apiFetch('/api/assets', {
       method: 'POST',
       headers: authHeaders(),
@@ -1402,9 +1565,12 @@ function App() {
       fetchAuditLogs();
       e.target.reset();
       setSelectedBrandId('');
+      setCustomBrandName('');
       setSelectedAssetType('');
       setSelectedModelId('');
+      setCustomModelName('');
       setAssetDomainName(currentUserDomain || '');
+      fetchBrands();
     }
   }
 
@@ -1462,6 +1628,26 @@ function App() {
     });
   }
 
+  function downloadBulkAssetTemplate() {
+    const headers = ['S.No', 'Asset Type', 'Brand', 'Model', 'Asset Serial Number', 'Vendor', 'Domain'];
+    const csv = buildExcelCsv([headers]);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'bulk_asset_upload_format.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    const preview = window.open(url, '_blank');
+    if (preview) {
+      preview.opener = null;
+    } else {
+      setMessage('Format downloaded. Browser blocked the preview tab.');
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
   async function uploadBulkAssets(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1487,14 +1673,36 @@ function App() {
 
     for (const [index, row] of rows.entries()) {
       const isSimCsvRow = Boolean(row.connectionnumber || row.connectiontype || row.simnumber);
-      const name = isSimCsvRow
-        ? (row.name || row.connectionnumber || `SIM ${index + 1}`)
-        : (row.asset || row.assetname || row.name || fallbackName || `Bulk Asset ${index + 1}`);
-      const type = isSimCsvRow ? 'SIM' : (row.type || selectedAssetType || 'Laptop');
+      const rowType = row.assettype || row.type || selectedAssetType || 'Laptop';
+      const rowBrandName = (row.brand || row.brandname || '').trim();
+      const rowModelName = (row.model || row.modelname || '').trim();
+      const type = isSimCsvRow ? 'SIM' : rowType;
       const serial = isSimCsvRow
         ? (row.connectionnumber || row.simnumber || `SIM-${Date.now()}-${index + 1}`)
-        : (row.serial || row.serialnumber || `BULK-${Date.now()}-${index + 1}`);
+        : (row.assetserialnumber || row.serial || row.serialnumber || `BULK-${Date.now()}-${index + 1}`);
       const domain_name = (row.domain || row.domainname || fallbackDomain || 'global').trim().toLowerCase();
+      let brand_id = null;
+      let model_id = null;
+      let rowBrand = null;
+      let rowModel = null;
+
+      try {
+        if (!isSimCsvRow && (rowBrandName || rowModelName)) {
+          rowBrand = await ensureBrand(rowBrandName || 'Generic');
+          brand_id = rowBrand?.id || null;
+        }
+        if (!isSimCsvRow && rowModelName && brand_id) {
+          rowModel = await ensureModel(brand_id, rowModelName, type);
+          model_id = rowModel?.id || null;
+        }
+      } catch (_error) {
+        failed += 1;
+        continue;
+      }
+
+      const name = isSimCsvRow
+        ? (row.name || row.connectionnumber || `SIM ${index + 1}`)
+        : (row.asset || row.assetname || row.name || rowModel?.name || rowBrand?.name || fallbackName || `Bulk Asset ${index + 1}`);
 
       const res = await apiFetch('/api/assets', {
         method: 'POST',
@@ -1506,8 +1714,8 @@ function App() {
           domain_name,
           vendor: isSimCsvRow ? (row.connectiontype || '') : (row.vendor || ''),
           notes: isSimCsvRow ? buildSimNotes(row) : (row.notes || ''),
-          brand_id: null,
-          model_id: null
+          brand_id,
+          model_id
         })
       });
 
@@ -1520,6 +1728,7 @@ function App() {
 
     fetchAssets();
     fetchAuditLogs();
+    fetchBrands();
     e.target.value = '';
     setMessage(`Bulk upload complete: ${created} assets added${failed ? `, ${failed} failed` : ''}.`);
   }
@@ -2204,22 +2413,47 @@ function App() {
   }, [brands, selectedAssetType]);
   const modelOptionsByType = selectedBrandId ? selectedBrandModelsByType : allModelsBySelectedType;
   const selectedBrandName = useMemo(() => {
+    if (customBrandName) return customBrandName;
     const brand = brands.find((b) => String(b.id) === String(selectedBrandId));
     return brand?.name || '';
-  }, [brands, selectedBrandId]);
+  }, [brands, customBrandName, selectedBrandId]);
   const brandsBySelectedType = useMemo(() => {
     return brands.filter((b) =>
       (b.models || []).some((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase()),
     );
   }, [brands, selectedAssetType]);
+  const assetTypeDropdownOptions = useMemo(() => {
+    const values = new Set(TYPE_OPTIONS);
+    assets.forEach((asset) => {
+      if (asset.type) values.add(asset.type);
+    });
+    brands.forEach((brand) => {
+      (brand.models || []).forEach((model) => {
+        if (model.category) values.add(model.category);
+      });
+    });
+    return Array.from(values)
+      .sort((a, b) => a.localeCompare(b))
+      .map((type) => ({ value: type, label: type, searchText: type }));
+  }, [assets, brands]);
+  const brandDropdownOptions = useMemo(
+    () => brands.map((brand) => ({
+      value: String(brand.id),
+      label: brand.name,
+      searchText: brand.name,
+    })),
+    [brands]
+  );
   useEffect(() => {
     if (!selectedBrandId) return;
-    const existsForType = brandsBySelectedType.some((b) => String(b.id) === String(selectedBrandId));
-    if (!existsForType) {
+    const exists = brands.some((b) => String(b.id) === String(selectedBrandId));
+    if (!exists) {
       setSelectedBrandId('');
+      setCustomBrandName('');
       setSelectedModelId('');
+      setCustomModelName('');
     }
-  }, [brandsBySelectedType, selectedBrandId]);
+  }, [brands, selectedBrandId]);
   useEffect(() => {
     setSelectedModelId((prev) => (
       prev && modelOptionsByType.some((model) => String(model.id) === String(prev)) ? prev : ''
@@ -2762,12 +2996,74 @@ function App() {
   const invoiceVendorOptions = useMemo(() => {
     return Array.from(new Set([...BILL_DESCRIPTION_VENDOR_OPTIONS, ...invoiceVendors])).sort((a, b) => a.localeCompare(b));
   }, [invoiceVendors]);
+  const invoiceVendorDropdownOptions = useMemo(
+    () => invoiceVendorOptions.map((vendor) => ({
+      value: vendor,
+      label: vendor,
+      searchText: vendor,
+    })),
+    [invoiceVendorOptions]
+  );
+  const invoiceApproverDropdownOptions = useMemo(
+    () => Array.from(new Set([
+      ...INVOICE_APPROVER_NAME_OPTIONS,
+      ...invoices.map((invoice) => invoice.approvalAssignee).filter(Boolean),
+    ]))
+      .sort((a, b) => a.localeCompare(b))
+      .map((approver) => ({
+        value: approver,
+        label: approver,
+        searchText: approver,
+      })),
+    [invoices]
+  );
+  const invoiceCategoryOptions = useMemo(() => {
+    return Array.from(new Set([
+      ...Object.keys(INVOICE_SUBCATEGORIES_BY_CATEGORY),
+      ...invoices.map((invoice) => invoice.category).filter(Boolean),
+    ])).sort((a, b) => a.localeCompare(b));
+  }, [invoices]);
+  const invoiceCategoryDropdownOptions = useMemo(
+    () => invoiceCategoryOptions.map((category) => ({
+      value: category,
+      label: category,
+      searchText: category,
+    })),
+    [invoiceCategoryOptions]
+  );
+  const invoiceFormSubcategoryOptions = useMemo(() => {
+    return Array.from(new Set([
+      ...(INVOICE_SUBCATEGORIES_BY_CATEGORY[invoiceForm.category] || []),
+      ...invoices
+        .filter((invoice) => invoice.category === invoiceForm.category)
+        .map((invoice) => invoice.subcategory)
+        .filter(Boolean),
+      invoiceForm.subcategory,
+    ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [invoiceForm.category, invoiceForm.subcategory, invoices]);
+  const invoiceFormSubcategoryDropdownOptions = useMemo(
+    () => invoiceFormSubcategoryOptions.map((subcategory) => ({
+      value: subcategory,
+      label: subcategory,
+      searchText: subcategory,
+    })),
+    [invoiceFormSubcategoryOptions]
+  );
   const invoiceSubcategoryOptions = useMemo(() => {
     if (invoiceCategoryFilter === 'all') {
-      return Array.from(new Set(Object.values(INVOICE_SUBCATEGORIES_BY_CATEGORY).flat())).sort((a, b) => a.localeCompare(b));
+      return Array.from(new Set([
+        ...Object.values(INVOICE_SUBCATEGORIES_BY_CATEGORY).flat(),
+        ...invoices.map((invoice) => invoice.subcategory).filter(Boolean),
+      ])).sort((a, b) => a.localeCompare(b));
     }
-    return INVOICE_SUBCATEGORIES_BY_CATEGORY[invoiceCategoryFilter] || [];
-  }, [invoiceCategoryFilter]);
+    return Array.from(new Set([
+      ...(INVOICE_SUBCATEGORIES_BY_CATEGORY[invoiceCategoryFilter] || []),
+      ...invoices
+        .filter((invoice) => invoice.category === invoiceCategoryFilter)
+        .map((invoice) => invoice.subcategory)
+        .filter(Boolean),
+    ])).sort((a, b) => a.localeCompare(b));
+  }, [invoiceCategoryFilter, invoices]);
   const filteredInvoiceStats = useMemo(() => {
     return {
       totalAmount: filteredInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0),
@@ -2919,6 +3215,7 @@ function App() {
         amount,
         dueDate: invoiceForm.dueDate,
         status: invoiceForm.status,
+        approvalAssignee: invoiceForm.approvalAssignee.trim(),
         notes: invoiceForm.notes.trim(),
         invoiceFileName: invoiceForm.invoiceFileName,
         invoiceFileData: invoiceForm.invoiceFileData,
@@ -2939,6 +3236,7 @@ function App() {
       amount: '',
       dueDate: '',
       status: 'unpaid',
+      approvalAssignee: '',
       notes: '',
       invoiceFileName: '',
       invoiceFileData: ''
@@ -2977,11 +3275,15 @@ function App() {
     const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
     if (!targetInvoice) return;
     const targetApproval = getInvoiceApproval(targetInvoice);
-    const canActOnHeadStage = targetApproval.stageKey === 'head' && hasInvoiceHeadApprovalAccess();
-    const canActOnAccountsStage = targetApproval.stageKey === 'accounts' && hasInvoiceAccountsApprovalAccess();
+    const canActOnHeadStage = targetApproval.stageKey === 'head'
+      && canUseInvoiceApprovalAction(targetInvoice, hasInvoiceHeadApprovalAccess());
+    const canActOnAccountsStage = targetApproval.stageKey === 'accounts'
+      && canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess());
     const canResubmitBill = action === 'Resubmit' && hasAdminPermission('invoices.manage');
     if (!canActOnHeadStage && !canActOnAccountsStage && !canResubmitBill) {
-      setMessage('You do not have permission for this approval stage.');
+      setMessage(hasInvoiceApprovalAssignee(targetInvoice)
+        ? `Only ${targetInvoice.approvalAssignee} can approve this bill.`
+        : 'You do not have permission for this approval stage.');
       return;
     }
 
@@ -3066,11 +3368,13 @@ function App() {
   }
 
   function markInvoicePaid(invoiceId) {
-    if (!hasInvoiceAccountsApprovalAccess()) {
-      setMessage('You do not have permission to update invoice payment.');
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    if (!canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess())) {
+      setMessage(hasInvoiceApprovalAssignee(targetInvoice)
+        ? `Only ${targetInvoice.approvalAssignee} can update this bill payment.`
+        : 'You do not have permission to update invoice payment.');
       return;
     }
-    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
     if (!targetInvoice?.paidBillScreenshotData) {
       setMessage('Upload paid bill screenshot before marking the bill paid.');
       return;
@@ -3089,6 +3393,22 @@ function App() {
         }
         : invoice
     )));
+  }
+
+  function deleteInvoice(invoiceId) {
+    if (!canDeleteInvoices()) {
+      setMessage('Only admin can delete bill records.');
+      return;
+    }
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    if (!targetInvoice) return;
+    const confirmed = window.confirm(`Delete bill "${targetInvoice.billNo || targetInvoice.vendor || invoiceId}"?`);
+    if (!confirmed) return;
+    const deletedInvoiceKeys = readDeletedInvoiceKeys();
+    deletedInvoiceKeys.add(getInvoiceMergeKey(targetInvoice));
+    localStorage.setItem(DELETED_INVOICE_KEYS_STORAGE_KEY, JSON.stringify(Array.from(deletedInvoiceKeys)));
+    setInvoices((prev) => prev.filter((invoice) => invoice.id !== invoiceId));
+    setMessage('Bill record deleted.');
   }
 
   function updateInvoiceUpload(invoiceId, file) {
@@ -3110,8 +3430,11 @@ function App() {
 
   function updatePaidBillScreenshot(invoiceId, file) {
     if (!file) return;
-    if (!hasInvoiceAccountsApprovalAccess()) {
-      setMessage('You do not have permission to attach paid bill screenshots.');
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    if (!canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess())) {
+      setMessage(hasInvoiceApprovalAssignee(targetInvoice)
+        ? `Only ${targetInvoice.approvalAssignee} can attach paid bill screenshots.`
+        : 'You do not have permission to attach paid bill screenshots.');
       return;
     }
     const reader = new FileReader();
@@ -3577,7 +3900,7 @@ function App() {
                           a.serial || '',
                           a.status || ''
                         ]);
-                      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                      const csv = buildExcelCsv([header, ...rows]);
                       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                       const url = URL.createObjectURL(blob);
                       const link = document.createElement('a');
@@ -3610,47 +3933,75 @@ function App() {
                 <form onSubmit={createAsset} className="form asset-create-form">
                   <label className="field">
                     <span>Asset Type</span>
-                    <select
-                      name="type"
+                    <SearchableSelect
                       value={selectedAssetType}
-                      onChange={(e) => {
-                        setSelectedAssetType(e.target.value);
+                      onChange={(value) => {
+                        setSelectedAssetType(value);
                         setSelectedBrandId('');
+                        setCustomBrandName('');
                         setSelectedModelId('');
+                        setCustomModelName('');
                       }}
-                      required
-                    >
-                      <option value="" disabled>Select asset type</option>
-                      {TYPE_OPTIONS.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                      options={assetTypeDropdownOptions}
+                      placeholder="Select asset type"
+                      searchPlaceholder="Search or type asset type..."
+                      emptyMessage="No asset type found"
+                      allowCreate
+                      createLabel="Add asset type"
+                      selectedLabel={selectedAssetType}
+                      onCreate={(value) => {
+                        setSelectedAssetType(value);
+                        setSelectedBrandId('');
+                        setCustomBrandName('');
+                        setSelectedModelId('');
+                        setCustomModelName('');
+                      }}
+                    />
                   </label>
                   <label className="field">
                     <span>Brand</span>
-                    <select
-                      name="brand_id"
+                    <SearchableSelect
                       value={selectedBrandId}
-                      onChange={(e) => {
-                        setSelectedBrandId(e.target.value);
+                      onChange={(value) => {
+                        setSelectedBrandId(value);
+                        setCustomBrandName('');
                         setSelectedModelId('');
+                        setCustomModelName('');
                       }}
-                    >
-                      <option value="">Select asset brand</option>
-                      {brandsBySelectedType.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
+                      options={brandDropdownOptions}
+                      placeholder="Select asset brand"
+                      searchPlaceholder="Search or type brand..."
+                      emptyMessage="No brand found"
+                      allowCreate
+                      createLabel="Add brand"
+                      selectedLabel={customBrandName}
+                      onCreate={(value) => {
+                        setSelectedBrandId('');
+                        setCustomBrandName(value);
+                        setSelectedModelId('');
+                        setCustomModelName('');
+                      }}
+                    />
                   </label>
                   <label className="field">
                     <span>Model</span>
                     <SearchableSelect
                       value={selectedModelId}
-                      onChange={setSelectedModelId}
+                      onChange={(value) => {
+                        setSelectedModelId(value);
+                        setCustomModelName('');
+                      }}
                       options={modelDropdownOptions}
                       placeholder={`Select ${selectedAssetType || 'asset'} model`}
-                      searchPlaceholder={`Search ${(selectedAssetType || 'asset').toLowerCase()} model...`}
+                      searchPlaceholder={`Search or type ${(selectedAssetType || 'asset').toLowerCase()} model...`}
                       emptyMessage="No model found"
+                      allowCreate
+                      createLabel="Add model"
+                      selectedLabel={customModelName}
+                      onCreate={(value) => {
+                        setSelectedModelId('');
+                        setCustomModelName(value);
+                      }}
                     />
                   </label>
                   <label className="field">
@@ -3682,10 +4033,45 @@ function App() {
                     <span>Notes</span>
                     <input name="notes" placeholder="Branch, team, procurement, warranty..." />
                   </label>
-                  <label className="field asset-bulk-upload">
+                  <div className="field asset-bulk-upload">
                     <span>Bulk Upload Assets</span>
-                    <input type="file" accept=".csv,text/csv" onChange={uploadBulkAssets} />
-                  </label>
+                    <div className="bulk-upload-box">
+                      <input
+                        id="bulk-asset-upload"
+                        className="bulk-upload-input"
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={uploadBulkAssets}
+                      />
+                      <label className="bulk-upload-picker" htmlFor="bulk-asset-upload">
+                        Choose file
+                      </label>
+                      <span className="bulk-upload-copy">CSV upload</span>
+                      <div className="bulk-format-menu">
+                        <button
+                          type="button"
+                          className="bulk-format-button"
+                          aria-expanded={showBulkFormatMenu}
+                          onClick={() => setShowBulkFormatMenu((prev) => !prev)}
+                        >
+                          Format
+                        </button>
+                        {showBulkFormatMenu && (
+                          <div className="bulk-format-options">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                downloadBulkAssetTemplate();
+                                setShowBulkFormatMenu(false);
+                              }}
+                            >
+                              Download CSV format
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   <div className="create-actions">
                     <small>
                       {selectedBrandId
@@ -4040,7 +4426,7 @@ function App() {
                         row.laptop_serial_no || '',
                         row.mobile_assigned || ''
                       ]);
-                      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+                      const csv = buildExcelCsv([header, ...rows]);
                       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                       const url = URL.createObjectURL(blob);
                       const link = document.createElement('a');
@@ -4210,6 +4596,7 @@ function App() {
             </div>
 
             {/* ── Content ── */}
+
             {!isSuperAdmin ? (
               <div className="acct-restricted">
                 <div className="acct-restricted-icon">
@@ -5090,7 +5477,7 @@ function App() {
                     }}
                   >
                     <option value="all">All</option>
-                    {Object.keys(INVOICE_SUBCATEGORIES_BY_CATEGORY).map((category) => (
+                    {invoiceCategoryOptions.map((category) => (
                       <option key={category} value={category}>{category}</option>
                     ))}
                   </select>
@@ -5157,16 +5544,18 @@ function App() {
                   <form className="form invoice-form" onSubmit={createInvoice}>
                     <label className="field">
                       <span>Vendor</span>
-                      <select
+                      <SearchableSelect
                         value={invoiceForm.vendor}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, vendor: e.target.value }))}
-                        required
-                      >
-                        <option value="" disabled>Select bill description</option>
-                        {invoiceVendorOptions.map((vendor) => (
-                          <option key={vendor} value={vendor}>{vendor}</option>
-                        ))}
-                      </select>
+                        onChange={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
+                        options={invoiceVendorDropdownOptions}
+                        placeholder="Select bill description"
+                        searchPlaceholder="Search or type vendor..."
+                        emptyMessage="No vendor found"
+                        allowCreate
+                        createLabel="Add vendor"
+                        selectedLabel={invoiceForm.vendor}
+                        onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
+                      />
                     </label>
                     <label className="field">
                       <span>Bill Number</span>
@@ -5179,32 +5568,45 @@ function App() {
                     </label>
                     <label className="field">
                       <span>Category</span>
-                      <select
+                      <SearchableSelect
                         value={invoiceForm.category}
-                        onChange={(e) => {
-                          const nextCategory = e.target.value;
+                        onChange={(nextCategory) => {
                           setInvoiceForm((prev) => ({
                             ...prev,
                             category: nextCategory,
-                            subcategory: INVOICE_SUBCATEGORIES_BY_CATEGORY[nextCategory][0]
+                            subcategory: INVOICE_SUBCATEGORIES_BY_CATEGORY[nextCategory]?.[0] || ''
                           }));
                         }}
-                      >
-                        {Object.keys(INVOICE_SUBCATEGORIES_BY_CATEGORY).map((category) => (
-                          <option key={category} value={category}>{category}</option>
-                        ))}
-                      </select>
+                        options={invoiceCategoryDropdownOptions}
+                        placeholder="Select category"
+                        searchPlaceholder="Search or type category..."
+                        emptyMessage="No category found"
+                        allowCreate
+                        createLabel="Add category"
+                        selectedLabel={invoiceForm.category}
+                        onCreate={(nextCategory) => {
+                          setInvoiceForm((prev) => ({
+                            ...prev,
+                            category: nextCategory,
+                            subcategory: ''
+                          }));
+                        }}
+                      />
                     </label>
                     <label className="field">
                       <span>Subcategory</span>
-                      <select
+                      <SearchableSelect
                         value={invoiceForm.subcategory}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, subcategory: e.target.value }))}
-                      >
-                        {(INVOICE_SUBCATEGORIES_BY_CATEGORY[invoiceForm.category] || []).map((subcategory) => (
-                          <option key={subcategory} value={subcategory}>{subcategory}</option>
-                        ))}
-                      </select>
+                        onChange={(value) => setInvoiceForm((prev) => ({ ...prev, subcategory: value }))}
+                        options={invoiceFormSubcategoryDropdownOptions}
+                        placeholder="Select subcategory"
+                        searchPlaceholder="Search or type subcategory..."
+                        emptyMessage="No subcategory found"
+                        allowCreate
+                        createLabel="Add subcategory"
+                        selectedLabel={invoiceForm.subcategory}
+                        onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, subcategory: value }))}
+                      />
                     </label>
                     <label className="field">
                       <span>Amount</span>
@@ -5227,14 +5629,19 @@ function App() {
                       />
                     </label>
                     <label className="field">
-                      <span>Status</span>
-                      <select
-                        value={invoiceForm.status}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, status: e.target.value }))}
-                      >
-                        <option value="unpaid">Unpaid</option>
-                        <option value="paid">Paid</option>
-                      </select>
+                      <span>Approval</span>
+                      <SearchableSelect
+                        value={invoiceForm.approvalAssignee}
+                        onChange={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
+                        options={invoiceApproverDropdownOptions}
+                        placeholder="Approver name"
+                        searchPlaceholder="Search or type approver name..."
+                        emptyMessage="No approver found"
+                        allowCreate
+                        createLabel="Add approver"
+                        selectedLabel={invoiceForm.approvalAssignee}
+                        onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
+                      />
                     </label>
                     <label className="field invoice-notes">
                       <span>Notes</span>
@@ -5295,31 +5702,44 @@ function App() {
                       {filteredInvoices.map((invoice) => (
                         (() => {
                           const approval = getInvoiceApproval(invoice);
-                          const canApproveHead = approval.statusKey === 'pending_head' && hasInvoiceHeadApprovalAccess();
-                          const canApproveAccounts = approval.statusKey === 'pending_accounts' && hasInvoiceAccountsApprovalAccess();
+                          const canApproveHead = approval.statusKey === 'pending_head'
+                            && canUseInvoiceApprovalAction(invoice, hasInvoiceHeadApprovalAccess());
+                          const canApproveAccounts = approval.statusKey === 'pending_accounts'
+                            && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
                           const canApprove = canApproveHead || canApproveAccounts;
                           const needsResubmit = ['rejected', 'correction'].includes(approval.statusKey);
-                          const canPay = approval.statusKey === 'payment_pending' && invoice.status !== 'paid' && hasInvoiceAccountsApprovalAccess();
+                          const canPay = approval.statusKey === 'payment_pending'
+                            && invoice.status !== 'paid'
+                            && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
                           const isDomainRaiserView = hasAdminPermission('invoices.manage') && !hasInvoiceHeadApprovalAccess() && !hasInvoiceAccountsApprovalAccess();
                           const showInvoiceRaised = isDomainRaiserView && ['pending_head', 'pending_accounts', 'payment_pending'].includes(approval.statusKey);
                           const hasPaidProof = !!(invoice.paidBillScreenshotData || invoice.paidBillScreenshotName);
+                          const canAttachPaidProof = ['pending_accounts', 'payment_pending'].includes(approval.statusKey)
+                            && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
                           return (
                             <tr key={invoice.id}>
                               <td>{invoice.billNo}</td>
-                              <td>{invoice.vendor}</td>
-                              <td>{invoice.category}</td>
-                              <td>{invoice.subcategory || '-'}</td>
+                              <td><span className="invoice-two-line" title={invoice.vendor}>{invoice.vendor}</span></td>
+                              <td><span className="invoice-two-line" title={invoice.category}>{invoice.category}</span></td>
+                              <td><span className="invoice-two-line" title={invoice.subcategory || '-'}>{invoice.subcategory || '-'}</span></td>
                               <td>{formatCurrency(invoice.amount)}</td>
                               <td>{invoice.dueDate || '-'}</td>
                               <td><span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span></td>
                               <td>{approval.stageLabel}</td>
                               <td>
                                 <span className={`invoice-approval-badge approval-${approval.statusKey}`}>{approval.statusLabel}</span>
+                                {invoice.approvalAssignee && (
+                                  <small className="invoice-rejection-reason">Approver: {invoice.approvalAssignee}</small>
+                                )}
                                 {invoice.rejectionReason && (
                                   <small className="invoice-rejection-reason">Reason: {invoice.rejectionReason}</small>
                                 )}
                               </td>
-                              <td>{invoice.notes || '-'}</td>
+                              <td>
+                                <span className="invoice-notes-preview" title={invoice.notes || '-'}>
+                                  {invoice.notes || '-'}
+                                </span>
+                              </td>
                               <td>
                                 <label className="invoice-table-upload">
                                   <span>{invoice.invoiceFileName || 'Upload'}</span>
@@ -5358,17 +5778,20 @@ function App() {
                                   {approval.statusKey === 'completed' && (
                                     <span className="invoice-done-text">Done</span>
                                   )}
+                                  {canDeleteInvoices() && (
+                                    <button type="button" className="small danger" onClick={() => deleteInvoice(invoice.id)}>Delete</button>
+                                  )}
                                   <button
                                     type="button"
                                     className="small invoice-show-btn"
                                     disabled={!invoice.invoiceFileData}
                                     onClick={() => showInvoice(invoice)}
                                   >
-                                    Show Invoice
+                                    Show
                                   </button>
-                                  {hasInvoiceAccountsApprovalAccess() && ['pending_accounts', 'payment_pending'].includes(approval.statusKey) && (
+                                  {canAttachPaidProof && (
                                     <label className="small invoice-action-upload">
-                                      <span>{invoice.paidBillScreenshotName ? 'Change Proof' : 'Upload Screenshot'}</span>
+                                      <span>{invoice.paidBillScreenshotName ? 'Change' : 'Upload'}</span>
                                       <input
                                         type="file"
                                         accept=".png,.jpg,.jpeg,.webp"
@@ -5382,7 +5805,7 @@ function App() {
                                     disabled={!hasPaidProof}
                                     onClick={() => showPaidBillScreenshot(invoice)}
                                   >
-                                    View Proof
+                                    Proof
                                   </button>
                                 </div>
                               </td>
