@@ -8,10 +8,26 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     if (!isSuperAdmin(req.user)) {
       const domain = getUserDomain(req.user);
-      return res.json(domain ? [{ name: domain }] : []);
+      if (!domain) return res.json([]);
+      const rows = await query(
+        `SELECT d.*, primary_admin.name AS primary_admin_name, backup_admin.name AS backup_admin_name
+         FROM domains d
+         LEFT JOIN users primary_admin ON primary_admin.id = d.primary_admin_id
+         LEFT JOIN users backup_admin ON backup_admin.id = d.backup_admin_id
+         WHERE d.name = ?
+         LIMIT 1`,
+        [domain]
+      );
+      return res.json(rows.length ? rows : [{ name: domain, status: 'active' }]);
     }
 
-    const rows = await query('SELECT id, name, created_at FROM domains ORDER BY name ASC');
+    const rows = await query(
+      `SELECT d.*, primary_admin.name AS primary_admin_name, backup_admin.name AS backup_admin_name
+       FROM domains d
+       LEFT JOIN users primary_admin ON primary_admin.id = d.primary_admin_id
+       LEFT JOIN users backup_admin ON backup_admin.id = d.backup_admin_id
+       ORDER BY d.name ASC`
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,16 +39,74 @@ router.post('/', requireAuth, async (req, res) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: 'Only super admin can create domains' });
 
     const name = normalizeDomain(req.body?.name);
+    const code = String(req.body?.code || '').trim().toUpperCase();
+    const branchType = String(req.body?.branch_type || '').trim();
+    const country = String(req.body?.country || '').trim();
+    const state = String(req.body?.state || '').trim();
+    const city = String(req.body?.city || '').trim();
+    const address = String(req.body?.address || '').trim();
+    const pincode = String(req.body?.pincode || '').trim();
+    const latitude = String(req.body?.latitude || '').trim();
+    const longitude = String(req.body?.longitude || '').trim();
+    const status = ['inactive', 'maintenance'].includes(String(req.body?.status || '').trim().toLowerCase())
+      ? String(req.body.status).trim().toLowerCase()
+      : 'active';
+    const primaryAdminId = Number(req.body?.primary_admin_id || 0) || null;
+    const backupAdminId = Number(req.body?.backup_admin_id || 0) || null;
+    const employeeCodePrefix = String(req.body?.employee_code_prefix || '').trim().toLowerCase();
     if (!name) return res.status(400).json({ error: 'Domain name is required' });
 
-    await query('INSERT IGNORE INTO domains (name) VALUES (?)', [name]);
-    const rows = await query('SELECT id, name, created_at FROM domains WHERE name = ? LIMIT 1', [name]);
+    await query(
+      `INSERT INTO domains (
+        name, code, branch_type, country, state, city, address, pincode, latitude, longitude,
+        status, primary_admin_id, backup_admin_id, employee_code_prefix
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        code = VALUES(code),
+        branch_type = VALUES(branch_type),
+        country = VALUES(country),
+        state = VALUES(state),
+        city = VALUES(city),
+        address = VALUES(address),
+        pincode = VALUES(pincode),
+        latitude = VALUES(latitude),
+        longitude = VALUES(longitude),
+        status = VALUES(status),
+        primary_admin_id = VALUES(primary_admin_id),
+        backup_admin_id = VALUES(backup_admin_id),
+        employee_code_prefix = VALUES(employee_code_prefix)`,
+      [
+        name,
+        code || null,
+        branchType || null,
+        country || null,
+        state || null,
+        city || null,
+        address || null,
+        pincode || null,
+        latitude || null,
+        longitude || null,
+        status,
+        primaryAdminId,
+        backupAdminId,
+        employeeCodePrefix || null
+      ]
+    );
+    const rows = await query(
+      `SELECT d.*, primary_admin.name AS primary_admin_name, backup_admin.name AS backup_admin_name
+       FROM domains d
+       LEFT JOIN users primary_admin ON primary_admin.id = d.primary_admin_id
+       LEFT JOIN users backup_admin ON backup_admin.id = d.backup_admin_id
+       WHERE d.name = ?
+       LIMIT 1`,
+      [name]
+    );
     await writeAuditLog({
       user: req.user,
       action: 'CREATE_DOMAIN',
       entityType: 'domain',
       entityId: rows[0]?.id || null,
-      details: `domain=${name}`
+      details: `domain=${name}; code=${code || '-'}; city=${city || '-'}; status=${status}`
     });
     res.status(201).json(rows[0] || { name });
   } catch (err) {

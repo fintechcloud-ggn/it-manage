@@ -138,6 +138,9 @@ async function apiFetch(path, options = {}) {
   }
 }
 const TYPE_OPTIONS = ['Laptop', 'Desktop', 'Monitor', 'Peripheral', 'Tablet', 'Mobile', 'Network', 'Printer', 'Scanner', 'Sim Card'];
+const OTHER_ASSET_TYPE_VALUE = '__other_asset_type__';
+const OTHER_BRAND_VALUE = '__other_brand__';
+const OTHER_MODEL_VALUE = '__other_model__';
 
 function normalizeBrandName(name) {
   return String(name || '').trim().toLowerCase();
@@ -417,6 +420,11 @@ function SearchableSelect({
   createLabel = 'Add',
   selectedLabel = '',
   onCreate,
+  showSearch = true,
+  customMode = false,
+  customValue = '',
+  customPlaceholder = '',
+  onCustomChange,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -429,14 +437,15 @@ function SearchableSelect({
   );
 
   const filteredOptions = useMemo(() => {
+    if (!showSearch) return options;
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return options;
     return options.filter((option) =>
       `${option.label || ''} ${option.searchText || ''}`.toLowerCase().includes(normalizedQuery)
     );
-  }, [options, query]);
+  }, [options, query, showSearch]);
   const trimmedQuery = query.trim();
-  const canCreate = allowCreate && trimmedQuery && !options.some((option) =>
+  const canCreate = showSearch && allowCreate && trimmedQuery && !options.some((option) =>
     String(option.label || '').trim().toLowerCase() === trimmedQuery.toLowerCase()
   );
 
@@ -452,19 +461,41 @@ function SearchableSelect({
       }
     };
 
-    const focusTimer = window.setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 0);
+    const focusTimer = showSearch
+      ? window.setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 0)
+      : null;
 
     document.addEventListener('mousedown', handlePointerDown);
     return () => {
-      window.clearTimeout(focusTimer);
+      if (focusTimer) window.clearTimeout(focusTimer);
       document.removeEventListener('mousedown', handlePointerDown);
     };
-  }, [isOpen]);
+  }, [isOpen, showSearch]);
 
   return (
     <div ref={rootRef} className={`searchable-select ${className}`.trim()}>
+      {customMode && (
+        <div className={`searchable-select__trigger searchable-select__trigger--custom${isOpen ? ' is-open' : ''}`}>
+          <input
+            className="searchable-select__custom-input"
+            value={customValue}
+            onChange={(event) => onCustomChange?.(event.target.value)}
+            placeholder={customPlaceholder || placeholder}
+            autoFocus
+          />
+          <button
+            type="button"
+            className="searchable-select__caret-button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            aria-label="Open options"
+          >
+            <span className="searchable-select__caret" aria-hidden="true">▾</span>
+          </button>
+        </div>
+      )}
+      {!customMode && (
       <button
         type="button"
         className={`searchable-select__trigger${isOpen ? ' is-open' : ''}`}
@@ -475,16 +506,19 @@ function SearchableSelect({
         </span>
         <span className="searchable-select__caret" aria-hidden="true">▾</span>
       </button>
+      )}
 
       {isOpen && (
         <div className="searchable-select__menu">
-          <input
-            ref={searchInputRef}
-            className="searchable-select__search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={searchPlaceholder}
-          />
+          {showSearch && (
+            <input
+              ref={searchInputRef}
+              className="searchable-select__search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={searchPlaceholder}
+            />
+          )}
           <div className="searchable-select__list">
             {canCreate && (
               <button
@@ -745,7 +779,8 @@ function App() {
   const invoiceAttachmentsLoadedRef = useRef(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
-  const [, setDomains] = useState([]);
+  const [domains, setDomains] = useState([]);
+  const [domainRecords, setDomainRecords] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState('');
   const [customBrandName, setCustomBrandName] = useState('');
   const [message, setMessage] = useState('');
@@ -796,8 +831,26 @@ function App() {
     }
   }, []);
   const [accountSearch, setAccountSearch] = useState('');
+  const [accountManagementTab, setAccountManagementTab] = useState('roles');
   const [createAdminPopupOpen, setCreateAdminPopupOpen] = useState(false);
+  const [createDomainPopupOpen, setCreateDomainPopupOpen] = useState(false);
   const [selectedAdminPermissionId, setSelectedAdminPermissionId] = useState(null);
+  const [domainCreateForm, setDomainCreateForm] = useState({
+    code: '',
+    name: '',
+    branch_type: 'Branch',
+    country: 'India',
+    state: '',
+    city: '',
+    address: '',
+    pincode: '',
+    latitude: '',
+    longitude: '',
+    status: 'active',
+    primary_admin_id: '',
+    backup_admin_id: '',
+    employee_code_prefix: ''
+  });
   const [adminCreateForm, setAdminCreateForm] = useState({
     name: '',
     email: '',
@@ -828,6 +881,7 @@ function App() {
     reasonDetail: ''
   });
   const [selectedAssetType, setSelectedAssetType] = useState('');
+  const [customAssetType, setCustomAssetType] = useState('');
   const [selectedModelId, setSelectedModelId] = useState('');
   const [customModelName, setCustomModelName] = useState('');
   const [assetDomainName, setAssetDomainName] = useState('');
@@ -1105,13 +1159,27 @@ function App() {
         return r.json();
       })
       .then((rows) => {
-        const nextDomains = Array.isArray(rows)
-          ? rows.map((row) => String(row.name || row.domain_name || '').trim().toLowerCase()).filter(Boolean)
+        const nextRecords = Array.isArray(rows)
+          ? rows
+            .map((row) => ({
+              ...row,
+              name: String(row.name || row.domain_name || '').trim().toLowerCase(),
+              code: String(row.code || '').trim(),
+              status: String(row.status || 'active').trim().toLowerCase()
+            }))
+            .filter((row) => row.name)
           : [];
-        setDomains(Array.from(new Set(nextDomains)).sort((a, b) => a.localeCompare(b)));
+        const recordMap = new Map();
+        nextRecords.forEach((row) => {
+          if (!recordMap.has(row.name)) recordMap.set(row.name, row);
+        });
+        const uniqueRecords = Array.from(recordMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+        setDomainRecords(uniqueRecords);
+        setDomains(uniqueRecords.map((row) => row.name));
       })
       .catch((err) => {
         if (err.message === 'unauthorized') return;
+        setDomainRecords([]);
         setDomains([]);
       });
   }
@@ -1500,8 +1568,10 @@ function App() {
 
   async function createAsset(e) {
     e.preventDefault();
-    const type = selectedAssetType.trim();
-    const selectedModel = modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
+    const type = effectiveAssetType.trim();
+    const selectedModel = selectedModelId === OTHER_MODEL_VALUE
+      ? null
+      : modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
     const serial = e.target.serial.value.trim();
     const vendor = e.target.vendor.value.trim();
     const notes = e.target.notes.value.trim();
@@ -1510,12 +1580,20 @@ function App() {
       setMessage('Select asset type.');
       return;
     }
+    if (selectedBrandId === OTHER_BRAND_VALUE && !customBrandName.trim()) {
+      setMessage('Type asset brand.');
+      return;
+    }
+    if (selectedModelId === OTHER_MODEL_VALUE && !customModelName.trim()) {
+      setMessage('Type asset model.');
+      return;
+    }
     if (!domain_name) {
       setMessage('Asset domain is required.');
       return;
     }
-    let brand_id = selectedBrandId ? Number(selectedBrandId) : null;
-    let model_id = selectedModelId ? Number(selectedModelId) : null;
+    let brand_id = selectedBrandId && selectedBrandId !== OTHER_BRAND_VALUE ? Number(selectedBrandId) : null;
+    let model_id = selectedModelId && selectedModelId !== OTHER_MODEL_VALUE ? Number(selectedModelId) : null;
     let createdBrandName = selectedBrandName;
     let createdModelName = selectedModel?.name || customModelName.trim();
     try {
@@ -1567,6 +1645,7 @@ function App() {
       setSelectedBrandId('');
       setCustomBrandName('');
       setSelectedAssetType('');
+      setCustomAssetType('');
       setSelectedModelId('');
       setCustomModelName('');
       setAssetDomainName(currentUserDomain || '');
@@ -1666,14 +1745,16 @@ function App() {
     }
 
     const fallbackDomain = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
-    const selectedModel = modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
-    const fallbackName = selectedModel?.name || selectedBrandName || selectedAssetType;
+    const selectedModel = selectedModelId === OTHER_MODEL_VALUE
+      ? null
+      : modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
+    const fallbackName = selectedModel?.name || customModelName.trim() || selectedBrandName || effectiveAssetType;
     let created = 0;
     let failed = 0;
 
     for (const [index, row] of rows.entries()) {
       const isSimCsvRow = Boolean(row.connectionnumber || row.connectiontype || row.simnumber);
-      const rowType = row.assettype || row.type || selectedAssetType || 'Laptop';
+      const rowType = row.assettype || row.type || effectiveAssetType || 'Laptop';
       const rowBrandName = (row.brand || row.brandname || '').trim();
       const rowModelName = (row.model || row.modelname || '').trim();
       const type = isSimCsvRow ? 'SIM' : rowType;
@@ -2009,6 +2090,63 @@ function App() {
       fetchDomains();
       fetchAuditLogs();
       setCreateAdminPopupOpen(false);
+    }
+    return res.ok;
+  }
+
+  async function createDomain(event) {
+    event.preventDefault();
+    if (!isSuperAdmin) {
+      setMessage('Only super admin can create domains.');
+      return false;
+    }
+    const payload = {
+      code: String(domainCreateForm.code || '').trim().toUpperCase(),
+      name: String(domainCreateForm.name || '').trim().toLowerCase(),
+      branch_type: String(domainCreateForm.branch_type || '').trim(),
+      country: String(domainCreateForm.country || '').trim(),
+      state: String(domainCreateForm.state || '').trim(),
+      city: String(domainCreateForm.city || '').trim(),
+      address: String(domainCreateForm.address || '').trim(),
+      pincode: String(domainCreateForm.pincode || '').trim(),
+      latitude: String(domainCreateForm.latitude || '').trim(),
+      longitude: String(domainCreateForm.longitude || '').trim(),
+      status: String(domainCreateForm.status || 'active').trim().toLowerCase(),
+      primary_admin_id: domainCreateForm.primary_admin_id || null,
+      backup_admin_id: domainCreateForm.backup_admin_id || null,
+      employee_code_prefix: String(domainCreateForm.employee_code_prefix || '').trim().toLowerCase()
+    };
+    if (!payload.code || !payload.name || !payload.branch_type || !payload.city) {
+      setMessage('Domain code, domain name, branch type, and city are required.');
+      return false;
+    }
+    const res = await apiFetch('/api/domains', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Domain location created.' : body.error || 'Domain creation failed');
+    if (res.ok) {
+      setDomainCreateForm({
+        code: '',
+        name: '',
+        branch_type: 'Branch',
+        country: 'India',
+        state: '',
+        city: '',
+        address: '',
+        pincode: '',
+        latitude: '',
+        longitude: '',
+        status: 'active',
+        primary_admin_id: '',
+        backup_admin_id: '',
+        employee_code_prefix: ''
+      });
+      setCreateDomainPopupOpen(false);
+      fetchDomains();
+      fetchAuditLogs();
     }
     return res.ok;
   }
@@ -2389,7 +2527,14 @@ function App() {
     pct: stats.total ? Math.round((count / stats.total) * 100) : 0
   }));
   const topAssignees = teamLoad.slice(0, 5);
+  const effectiveAssetType = selectedAssetType === OTHER_ASSET_TYPE_VALUE
+    ? customAssetType.trim()
+    : selectedAssetType;
+  const displayedAssetType = selectedAssetType === OTHER_ASSET_TYPE_VALUE
+    ? (customAssetType.trim() || 'Other Asset')
+    : selectedAssetType;
   const selectedBrandModels = useMemo(() => {
+    if (selectedBrandId === OTHER_BRAND_VALUE) return [];
     const brand = brands.find((b) => b.id === Number(selectedBrandId));
     if (!brand) return [];
     const brandModels = brand.models || [];
@@ -2403,25 +2548,27 @@ function App() {
   }, [brands, selectedBrandId]);
   const selectedBrandModelsByType = useMemo(() => {
     return selectedBrandModels.filter(
-      (m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase(),
+      (m) => (m.category || '').toLowerCase() === effectiveAssetType.toLowerCase(),
     );
-  }, [selectedBrandModels, selectedAssetType]);
+  }, [selectedBrandModels, effectiveAssetType]);
   const allModelsBySelectedType = useMemo(() => {
     return brands
       .flatMap((brand) => brand.models || [])
-      .filter((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase());
-  }, [brands, selectedAssetType]);
-  const modelOptionsByType = selectedBrandId ? selectedBrandModelsByType : allModelsBySelectedType;
+      .filter((m) => (m.category || '').toLowerCase() === effectiveAssetType.toLowerCase());
+  }, [brands, effectiveAssetType]);
+  const hasSelectedExistingBrand = selectedBrandId && selectedBrandId !== OTHER_BRAND_VALUE;
+  const modelOptionsByType = hasSelectedExistingBrand ? selectedBrandModelsByType : allModelsBySelectedType;
   const selectedBrandName = useMemo(() => {
     if (customBrandName) return customBrandName;
+    if (selectedBrandId === OTHER_BRAND_VALUE) return 'Other Brand';
     const brand = brands.find((b) => String(b.id) === String(selectedBrandId));
     return brand?.name || '';
   }, [brands, customBrandName, selectedBrandId]);
   const brandsBySelectedType = useMemo(() => {
     return brands.filter((b) =>
-      (b.models || []).some((m) => (m.category || '').toLowerCase() === selectedAssetType.toLowerCase()),
+      (b.models || []).some((m) => (m.category || '').toLowerCase() === effectiveAssetType.toLowerCase()),
     );
-  }, [brands, selectedAssetType]);
+  }, [brands, effectiveAssetType]);
   const assetTypeDropdownOptions = useMemo(() => {
     const values = new Set(TYPE_OPTIONS);
     assets.forEach((asset) => {
@@ -2432,20 +2579,28 @@ function App() {
         if (model.category) values.add(model.category);
       });
     });
-    return Array.from(values)
+    const baseOptions = Array.from(values)
       .sort((a, b) => a.localeCompare(b))
       .map((type) => ({ value: type, label: type, searchText: type }));
+    return [
+      ...baseOptions.filter((option) => option.label.toLowerCase() !== 'other asset'),
+      { value: OTHER_ASSET_TYPE_VALUE, label: 'Other Asset', searchText: 'Other Asset' },
+    ];
   }, [assets, brands]);
   const brandDropdownOptions = useMemo(
-    () => brands.map((brand) => ({
-      value: String(brand.id),
-      label: brand.name,
-      searchText: brand.name,
-    })),
+    () => [
+      ...brands.map((brand) => ({
+        value: String(brand.id),
+        label: brand.name,
+        searchText: brand.name,
+      })),
+      { value: OTHER_BRAND_VALUE, label: 'Other Brand', searchText: 'Other Brand' },
+    ],
     [brands]
   );
   useEffect(() => {
     if (!selectedBrandId) return;
+    if (selectedBrandId === OTHER_BRAND_VALUE) return;
     const exists = brands.some((b) => String(b.id) === String(selectedBrandId));
     if (!exists) {
       setSelectedBrandId('');
@@ -2456,6 +2611,7 @@ function App() {
   }, [brands, selectedBrandId]);
   useEffect(() => {
     setSelectedModelId((prev) => (
+      prev === OTHER_MODEL_VALUE ? prev :
       prev && modelOptionsByType.some((model) => String(model.id) === String(prev)) ? prev : ''
     ));
   }, [modelOptionsByType]);
@@ -2481,11 +2637,14 @@ function App() {
     [employeeDropdownOptions]
   );
   const modelDropdownOptions = useMemo(
-    () => modelOptionsByType.map((model) => ({
-      value: String(model.id),
-      label: model.name,
-      searchText: `${model.name || ''} ${model.category || ''}`,
-    })),
+    () => [
+      ...modelOptionsByType.map((model) => ({
+        value: String(model.id),
+        label: model.name,
+        searchText: `${model.name || ''} ${model.category || ''}`,
+      })),
+      { value: OTHER_MODEL_VALUE, label: 'Other Model', searchText: 'Other Model' },
+    ],
     [modelOptionsByType]
   );
   const assignmentFilterOptions = useMemo(
@@ -2519,12 +2678,60 @@ function App() {
   );
   const accountManagementDomains = useMemo(
     () => Array.from(new Set(
-      managedAdmins
-        .map((admin) => String(admin.domain_name || '').trim().toLowerCase())
+      [...domains, ...managedAdmins.map((admin) => admin.domain_name)]
+        .map((domain) => String(domain || '').trim().toLowerCase())
         .filter(Boolean)
     )).sort((a, b) => a.localeCompare(b)),
+    [domains, managedAdmins]
+  );
+  const adminSelectOptions = useMemo(
+    () => managedAdmins.map((admin) => ({
+      value: String(admin.id),
+      label: `${admin.name || admin.email || 'Admin'} (${admin.domain_name || 'no domain'})`,
+      searchText: `${admin.name || ''} ${admin.email || ''} ${admin.domain_name || ''}`
+    })),
     [managedAdmins]
   );
+  const domainManagementRows = useMemo(() => {
+    const rowMap = new Map();
+    domainRecords.forEach((domain) => {
+      if (domain.name) rowMap.set(domain.name, domain);
+    });
+    accountManagementDomains.forEach((name) => {
+      if (!rowMap.has(name)) {
+        rowMap.set(name, { name, status: 'active' });
+      }
+    });
+    return Array.from(rowMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [domainRecords, accountManagementDomains]);
+  const domainDashboardStats = useMemo(() => {
+    const domainNames = new Set(domainManagementRows.map((domain) => domain.name).filter(Boolean));
+    const domainAssetCount = assets.filter((asset) => domainNames.has(String(asset.domain_name || '').trim().toLowerCase())).length;
+    const domainEmployeeCount = employees.filter((employee) => domainNames.has(String(employee.domain_name || '').trim().toLowerCase())).length;
+    const domainAdminIds = new Set();
+    managedAdmins.forEach((admin) => {
+      if (admin.domain_name) domainAdminIds.add(`role-${admin.id}`);
+    });
+    domainManagementRows.forEach((domain) => {
+      if (domain.primary_admin_id) domainAdminIds.add(`primary-${domain.primary_admin_id}`);
+      if (domain.backup_admin_id) domainAdminIds.add(`backup-${domain.backup_admin_id}`);
+    });
+    const pendingBills = invoices.filter((invoice) => {
+      const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
+      return ['pending_domain', 'pending_head', 'pending_accounts', 'payment_pending'].includes(approvalStatus);
+    }).length;
+    return {
+      totalDomains: domainManagementRows.length,
+      activeLocations: domainManagementRows.filter((domain) => (domain.status || 'active') === 'active').length,
+      totalAssets: domainAssetCount || assets.length,
+      domainAdmins: domainAdminIds.size || managedAdmins.filter((admin) => admin.domain_name).length,
+      employees: domainEmployeeCount || employees.length,
+      openTickets: 0,
+      unassignedAssets: availableAssets.length,
+      pendingApprovals: pendingBills,
+      pendingBills
+    };
+  }, [assets, availableAssets, domainManagementRows, employees, invoices, managedAdmins]);
   const filteredManagedAdmins = useMemo(() => {
     const q = accountSearch.trim().toLowerCase();
     if (!q) return managedAdmins;
@@ -3925,7 +4132,7 @@ function App() {
                     <p className="hint">Register device details, brand/model mapping, and serial in one flow.</p>
                   </div>
                   <div className="create-meta">
-                    <span>{selectedAssetType || 'Select asset type'}</span>
+                    <span>{displayedAssetType || 'Select asset type'}</span>
                     <span>{brandsBySelectedType.length} brands</span>
                     <span>{modelOptionsByType.length} models</span>
                   </div>
@@ -3937,6 +4144,7 @@ function App() {
                       value={selectedAssetType}
                       onChange={(value) => {
                         setSelectedAssetType(value);
+                        setCustomAssetType('');
                         setSelectedBrandId('');
                         setCustomBrandName('');
                         setSelectedModelId('');
@@ -3946,11 +4154,13 @@ function App() {
                       placeholder="Select asset type"
                       searchPlaceholder="Search or type asset type..."
                       emptyMessage="No asset type found"
-                      allowCreate
-                      createLabel="Add asset type"
-                      selectedLabel={selectedAssetType}
-                      onCreate={(value) => {
-                        setSelectedAssetType(value);
+                      showSearch={false}
+                      selectedLabel={displayedAssetType}
+                      customMode={selectedAssetType === OTHER_ASSET_TYPE_VALUE}
+                      customValue={customAssetType}
+                      customPlaceholder="Type asset type"
+                      onCustomChange={(value) => {
+                        setCustomAssetType(value);
                         setSelectedBrandId('');
                         setCustomBrandName('');
                         setSelectedModelId('');
@@ -3972,11 +4182,12 @@ function App() {
                       placeholder="Select asset brand"
                       searchPlaceholder="Search or type brand..."
                       emptyMessage="No brand found"
-                      allowCreate
-                      createLabel="Add brand"
+                      showSearch={false}
                       selectedLabel={customBrandName}
-                      onCreate={(value) => {
-                        setSelectedBrandId('');
+                      customMode={selectedBrandId === OTHER_BRAND_VALUE}
+                      customValue={customBrandName}
+                      customPlaceholder="Type asset brand"
+                      onCustomChange={(value) => {
                         setCustomBrandName(value);
                         setSelectedModelId('');
                         setCustomModelName('');
@@ -3992,16 +4203,15 @@ function App() {
                         setCustomModelName('');
                       }}
                       options={modelDropdownOptions}
-                      placeholder={`Select ${selectedAssetType || 'asset'} model`}
-                      searchPlaceholder={`Search or type ${(selectedAssetType || 'asset').toLowerCase()} model...`}
+                      placeholder="Select asset model"
+                      searchPlaceholder="Search or type asset model..."
                       emptyMessage="No model found"
-                      allowCreate
-                      createLabel="Add model"
+                      showSearch={false}
                       selectedLabel={customModelName}
-                      onCreate={(value) => {
-                        setSelectedModelId('');
-                        setCustomModelName(value);
-                      }}
+                      customMode={selectedModelId === OTHER_MODEL_VALUE}
+                      customValue={customModelName}
+                      customPlaceholder="Type asset model"
+                      onCustomChange={setCustomModelName}
                     />
                   </label>
                   <label className="field">
@@ -4075,8 +4285,8 @@ function App() {
                   <div className="create-actions">
                     <small>
                       {selectedBrandId
-                        ? `Adding ${selectedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
-                        : `Choose any ${selectedAssetType || 'asset'} model or narrow by brand`}
+                        ? `Adding ${displayedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
+                        : `Choose any ${displayedAssetType || 'asset'} model or narrow by brand`}
                     </small>
                     <button type="submit">Add Asset</button>
                   </div>
@@ -4608,7 +4818,26 @@ function App() {
                 </div>
               </div>
             ) : (
-              <section className="acct-table-section">
+              <>
+              <div className="account-tabs">
+                <button
+                  type="button"
+                  className={accountManagementTab === 'roles' ? 'active' : ''}
+                  onClick={() => setAccountManagementTab('roles')}
+                >
+                  Role Accounts
+                </button>
+                <button
+                  type="button"
+                  className={accountManagementTab === 'domains' ? 'active' : ''}
+                  onClick={() => setAccountManagementTab('domains')}
+                >
+                  Domain / Location Management
+                </button>
+              </div>
+
+              {accountManagementTab === 'roles' && (
+                <section className="acct-table-section">
                 <div className="acct-table-header">
                   <div className="acct-table-title-group">
                     <h4>Role Permission Control</h4>
@@ -4682,32 +4911,82 @@ function App() {
                     </tbody>
                   </table>
                 </div>
-                <div className="domain-management-card">
-                  <div>
-                    <h4>Domain Management</h4>
-                    <p>Domains created from role accounts appear in asset and dashboard dropdowns.</p>
-                  </div>
-                  <div className="domain-chip-list">
-                    {accountManagementDomains.length === 0 ? (
-                      <span className="domain-empty">No domains found.</span>
-                    ) : (
-                      accountManagementDomains.map((domain) => (
-                        <span key={domain} className="domain-delete-chip">
-                          {domain}
-                          <button
-                            type="button"
-                            disabled={domain === 'global'}
-                            onClick={() => deleteDomain(domain)}
-                            title={domain === 'global' ? 'Global domain cannot be deleted' : `Delete ${domain}`}
-                          >
-                            Delete
-                          </button>
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
               </section>
+              )}
+
+              {accountManagementTab === 'domains' && (
+                <section className="domain-location-panel">
+                  <div className="domain-location-head">
+                    <div>
+                      <h4>Domain / Location Management</h4>
+                      <p>Central control for branch details, admins, assets, employees, and pending approvals.</p>
+                    </div>
+                    <button type="button" className="small" onClick={() => setCreateDomainPopupOpen(true)}>Create Domain</button>
+                  </div>
+
+                  <div className="domain-dashboard-grid">
+                    <article><span>Total Domains</span><strong>{domainDashboardStats.totalDomains}</strong></article>
+                    <article><span>Active Locations</span><strong>{domainDashboardStats.activeLocations}</strong></article>
+                    <article><span>IT Assets</span><strong>{domainDashboardStats.totalAssets}</strong></article>
+                    <article><span>Domain Admins</span><strong>{domainDashboardStats.domainAdmins}</strong></article>
+                    <article><span>Employees</span><strong>{domainDashboardStats.employees}</strong></article>
+                    <article><span>Open IT Tickets</span><strong>{domainDashboardStats.openTickets}</strong></article>
+                    <article><span>Unassigned Assets</span><strong>{domainDashboardStats.unassignedAssets}</strong></article>
+                    <article><span>Pending Bills</span><strong>{domainDashboardStats.pendingBills}</strong></article>
+                  </div>
+
+                  <div className="domain-master-table-wrap">
+                    <table className="domain-master-table">
+                      <thead>
+                        <tr>
+                          <th>Code</th>
+                          <th>Location</th>
+                          <th>Type</th>
+                          <th>City</th>
+                          <th>Primary Admin</th>
+                          <th>Backup Admin</th>
+                          <th>Prefix</th>
+                          <th>Status</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {domainManagementRows.length === 0 ? (
+                          <tr><td colSpan={9} className="acct-empty-row">No domains found.</td></tr>
+                        ) : (
+                          domainManagementRows.map((domain) => (
+                            <tr key={domain.name}>
+                              <td>{domain.code || '-'}</td>
+                              <td>
+                                <strong>{domain.name}</strong>
+                                <small>{domain.address || '-'}</small>
+                              </td>
+                              <td>{domain.branch_type || '-'}</td>
+                              <td>{domain.city || '-'}</td>
+                              <td>{domain.primary_admin_name || '-'}</td>
+                              <td>{domain.backup_admin_name || '-'}</td>
+                              <td>{domain.employee_code_prefix || '-'}</td>
+                              <td><span className={`domain-status-pill status-${domain.status || 'active'}`}>{domain.status || 'active'}</span></td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="domain-delete-btn"
+                                  disabled={domain.name === 'global'}
+                                  onClick={() => deleteDomain(domain.name)}
+                                  title={domain.name === 'global' ? 'Global domain cannot be deleted' : `Delete ${domain.name}`}
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+              </>
             )}
           </section>
         )}
@@ -4824,6 +5103,127 @@ function App() {
                 </div>
                 <div className="employee-edit-actions">
                   <button type="submit" className="small">Create Account</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
+        {createDomainPopupOpen && (
+          <div className="account-permission-overlay" role="dialog" aria-modal="true" aria-labelledby="create-domain-title" onClick={() => setCreateDomainPopupOpen(false)}>
+            <section className="account-permission-modal domain-create-modal" onClick={(e) => e.stopPropagation()}>
+              <header className="account-permission-header">
+                <div>
+                  <h3 id="create-domain-title">Create Domain / Location</h3>
+                  <p>Add branch identity, address, admins, status, and employee code prefix.</p>
+                </div>
+                <div className="employee-modal-actions">
+                  <button type="button" className="small outline" onClick={() => setCreateDomainPopupOpen(false)}>Close</button>
+                </div>
+              </header>
+              <form className="form account-create-form domain-create-form" onSubmit={createDomain}>
+                <div className="account-form-row">
+                  <label className="account-field">
+                    <span>Location Code</span>
+                    <input
+                      placeholder="e.g. DEL-HO"
+                      value={domainCreateForm.code}
+                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                      required
+                    />
+                  </label>
+                  <label className="account-field">
+                    <span>Domain Name</span>
+                    <input
+                      placeholder="e.g. Delhi Head Office"
+                      value={domainCreateForm.name}
+                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
+                  </label>
+                </div>
+                <div className="account-form-row">
+                  <label className="account-field">
+                    <span>Branch Type</span>
+                    <select
+                      value={domainCreateForm.branch_type}
+                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, branch_type: e.target.value }))}
+                    >
+                      <option value="Head Office">Head Office</option>
+                      <option value="Branch">Branch</option>
+                      <option value="Tech Center">Tech Center</option>
+                      <option value="Warehouse">Warehouse</option>
+                      <option value="Remote Hub">Remote Hub</option>
+                    </select>
+                  </label>
+                  <label className="account-field">
+                    <span>Status</span>
+                    <select
+                      value={domainCreateForm.status}
+                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, status: e.target.value }))}
+                    >
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="maintenance">Maintenance</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="account-form-row">
+                  <label className="account-field">
+                    <span>Country</span>
+                    <input value={domainCreateForm.country} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, country: e.target.value }))} />
+                  </label>
+                  <label className="account-field">
+                    <span>State</span>
+                    <input placeholder="e.g. Delhi" value={domainCreateForm.state} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, state: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="account-form-row">
+                  <label className="account-field">
+                    <span>City</span>
+                    <input placeholder="e.g. New Delhi" value={domainCreateForm.city} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, city: e.target.value }))} required />
+                  </label>
+                  <label className="account-field">
+                    <span>Pincode</span>
+                    <input placeholder="e.g. 110001" value={domainCreateForm.pincode} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, pincode: e.target.value }))} />
+                  </label>
+                </div>
+                <label className="account-field">
+                  <span>Full Address</span>
+                  <input placeholder="Office address" value={domainCreateForm.address} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, address: e.target.value }))} />
+                </label>
+                <div className="account-form-row">
+                  <label className="account-field">
+                    <span>Latitude</span>
+                    <input placeholder="28.6139" value={domainCreateForm.latitude} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, latitude: e.target.value }))} />
+                  </label>
+                  <label className="account-field">
+                    <span>Longitude</span>
+                    <input placeholder="77.2090" value={domainCreateForm.longitude} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, longitude: e.target.value }))} />
+                  </label>
+                </div>
+                <div className="account-form-row">
+                  <label className="account-field">
+                    <span>Primary Admin</span>
+                    <select value={domainCreateForm.primary_admin_id} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, primary_admin_id: e.target.value }))}>
+                      <option value="">Select admin</option>
+                      {adminSelectOptions.map((admin) => <option key={admin.value} value={admin.value}>{admin.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="account-field">
+                    <span>Backup Admin</span>
+                    <select value={domainCreateForm.backup_admin_id} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, backup_admin_id: e.target.value }))}>
+                      <option value="">Select backup admin</option>
+                      {adminSelectOptions.map((admin) => <option key={admin.value} value={admin.value}>{admin.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="account-field">
+                  <span>Employee Code Prefix</span>
+                  <input placeholder="e.g. del" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))} />
+                </label>
+                <div className="employee-edit-actions">
+                  <button type="submit" className="small">Create Domain</button>
                 </div>
               </form>
             </section>

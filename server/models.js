@@ -14,6 +14,19 @@ async function init() {
     CREATE TABLE IF NOT EXISTS domains (
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(160) NOT NULL UNIQUE,
+      code VARCHAR(60) NULL,
+      branch_type VARCHAR(80) NULL,
+      country VARCHAR(100) NULL,
+      state VARCHAR(100) NULL,
+      city VARCHAR(100) NULL,
+      address TEXT NULL,
+      pincode VARCHAR(20) NULL,
+      latitude VARCHAR(40) NULL,
+      longitude VARCHAR(40) NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'active',
+      primary_admin_id INT NULL,
+      backup_admin_id INT NULL,
+      employee_code_prefix VARCHAR(50) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB
   `);
@@ -135,6 +148,27 @@ async function init() {
   const auditMsCol = await query("SHOW COLUMNS FROM audit_logs LIKE 'event_at_ms'");
   if (!auditMsCol.length) {
     await query('ALTER TABLE audit_logs ADD COLUMN event_at_ms BIGINT NULL AFTER event_at');
+  }
+  const domainColumnMigrations = [
+    ['code', 'ALTER TABLE domains ADD COLUMN code VARCHAR(60) NULL AFTER name'],
+    ['branch_type', 'ALTER TABLE domains ADD COLUMN branch_type VARCHAR(80) NULL AFTER code'],
+    ['country', 'ALTER TABLE domains ADD COLUMN country VARCHAR(100) NULL AFTER branch_type'],
+    ['state', 'ALTER TABLE domains ADD COLUMN state VARCHAR(100) NULL AFTER country'],
+    ['city', 'ALTER TABLE domains ADD COLUMN city VARCHAR(100) NULL AFTER state'],
+    ['address', 'ALTER TABLE domains ADD COLUMN address TEXT NULL AFTER city'],
+    ['pincode', 'ALTER TABLE domains ADD COLUMN pincode VARCHAR(20) NULL AFTER address'],
+    ['latitude', 'ALTER TABLE domains ADD COLUMN latitude VARCHAR(40) NULL AFTER pincode'],
+    ['longitude', 'ALTER TABLE domains ADD COLUMN longitude VARCHAR(40) NULL AFTER latitude'],
+    ['status', "ALTER TABLE domains ADD COLUMN status VARCHAR(30) NOT NULL DEFAULT 'active' AFTER longitude"],
+    ['primary_admin_id', 'ALTER TABLE domains ADD COLUMN primary_admin_id INT NULL AFTER status'],
+    ['backup_admin_id', 'ALTER TABLE domains ADD COLUMN backup_admin_id INT NULL AFTER primary_admin_id'],
+    ['employee_code_prefix', 'ALTER TABLE domains ADD COLUMN employee_code_prefix VARCHAR(50) NULL AFTER backup_admin_id']
+  ];
+  for (const [columnName, alterSql] of domainColumnMigrations) {
+    const existingColumn = await query(`SHOW COLUMNS FROM domains LIKE '${columnName}'`);
+    if (!existingColumn.length) {
+      await query(alterSql);
+    }
   }
   await query(`
     UPDATE allocations al
