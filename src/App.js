@@ -4275,7 +4275,7 @@ function App() {
                                 setShowBulkFormatMenu(false);
                               }}
                             >
-                              Download CSV format
+                              Download sample format
                             </button>
                           </div>
                         )}
@@ -6142,7 +6142,7 @@ function App() {
                               </td>
                               <td>
                                 <label className="invoice-table-upload">
-                                  <span>{invoice.invoiceFileName || 'Upload'}</span>
+                                  <span>Upload Invoice</span>
                                   <input
                                     type="file"
                                     accept=".pdf,.png,.jpg,.jpeg,.webp"
