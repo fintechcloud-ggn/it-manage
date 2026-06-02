@@ -3361,6 +3361,18 @@ function App() {
     setPage(1);
   }, [inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir, inventoryPageSize]);
 
+  function openAssignedDomainAssets(domain, type = 'all') {
+    const normalizedDomain = String(domain || '').trim().toLowerCase();
+    if (!normalizedDomain) return;
+    setInventoryQuery('');
+    setFilterDomain(normalizedDomain);
+    setFilterStatus('allocated');
+    setFilterBrand('all');
+    setFilterType(type);
+    setPage(1);
+    setSection('inventory');
+  }
+
   const navItems = [
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
@@ -3998,9 +4010,27 @@ function App() {
                       <div>
                         <strong>{item.domain}</strong>
                         <small className="domain-asset-breakdown">
-                          <span>Laptop {item.laptop}</span>
-                          <span>Mobile {item.mobile}</span>
-                          <span>SIM {item.sim}</span>
+                          <button
+                            type="button"
+                            disabled={!item.laptop}
+                            onClick={() => openAssignedDomainAssets(item.domain, 'Laptop')}
+                          >
+                            Laptop {item.laptop}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!item.mobile}
+                            onClick={() => openAssignedDomainAssets(item.domain, 'Mobile')}
+                          >
+                            Mobile {item.mobile}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!item.sim}
+                            onClick={() => openAssignedDomainAssets(item.domain, 'SIM')}
+                          >
+                            SIM {item.sim}
+                          </button>
                         </small>
                       </div>
                       <div className="activity-meta">
@@ -4357,8 +4387,8 @@ function App() {
 
             <div className="inventory-mini-stats inventory-mini-stats-strong">
               <article><span>Filtered Total</span><strong>{inventoryStats.total}</strong></article>
-              <article><span>Available</span><strong>{inventoryStats.available}</strong></article>
-              <article><span>Allocated</span><strong>{inventoryStats.allocated}</strong></article>
+              <article><span>Available Stock</span><strong>{inventoryStats.available}</strong></article>
+              <article><span>Allocated Stock</span><strong>{inventoryStats.allocated}</strong></article>
               <article><span>Brands</span><strong>{inventoryStats.uniqueBrands}</strong></article>
             </div>
 
