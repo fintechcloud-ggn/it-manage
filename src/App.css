@@ -5424,6 +5424,11 @@ body {
   box-shadow: 0 4px 16px rgba(10, 35, 55, 0.05);
 }
 
+.domain-location-panel-compact .domain-location-head,
+.domain-location-panel-compact .domain-dashboard-grid {
+  display: none;
+}
+
 .domain-location-head {
   display: flex;
   align-items: center;

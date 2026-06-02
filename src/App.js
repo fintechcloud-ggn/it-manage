@@ -4779,13 +4779,21 @@ function App() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
                     Admin Console
                   </div>
-                  <h2 className="acct-hero-title">Account Management</h2>
-                  <p className="acct-hero-sub">Control admin access, permissions, and account lifecycle from one place.</p>
+                  <h2 className="acct-hero-title">{accountManagementTab === 'domains' ? 'Domain / Location Management' : 'Account Management'}</h2>
+                  <p className="acct-hero-sub">
+                    {accountManagementTab === 'domains'
+                      ? 'Central control for branch details, admins, assets, employees, and pending approvals.'
+                      : 'Control admin access, permissions, and account lifecycle from one place.'}
+                  </p>
                 </div>
                 {isSuperAdmin && (
-                  <button type="button" className="acct-hero-cta" onClick={() => setCreateAdminPopupOpen(true)}>
+                  <button
+                    type="button"
+                    className="acct-hero-cta"
+                    onClick={() => (accountManagementTab === 'domains' ? setCreateDomainPopupOpen(true) : setCreateAdminPopupOpen(true))}
+                  >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
-                    Create Role Account
+                    {accountManagementTab === 'domains' ? 'Create Domain' : 'Create Role Account'}
                   </button>
                 )}
               </div>
@@ -4797,8 +4805,8 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Managed Domains</span>
-                    <strong>{accountSummary.managedDomains}</strong>
+                    <span>{accountManagementTab === 'domains' ? 'Total Domains' : 'Managed Domains'}</span>
+                    <strong>{accountManagementTab === 'domains' ? domainDashboardStats.totalDomains : accountSummary.managedDomains}</strong>
                   </div>
                 </div>
                 <div className="acct-metric-card">
@@ -4806,8 +4814,8 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Total Role Accounts</span>
-                    <strong>{accountSummary.totalRoleAccounts}</strong>
+                    <span>{accountManagementTab === 'domains' ? 'Active Locations' : 'Total Role Accounts'}</span>
+                    <strong>{accountManagementTab === 'domains' ? domainDashboardStats.activeLocations : accountSummary.totalRoleAccounts}</strong>
                   </div>
                 </div>
                 <div className="acct-metric-card">
@@ -4815,8 +4823,8 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Full Access</span>
-                    <strong>{accountSummary.fullyPrivileged}</strong>
+                    <span>{accountManagementTab === 'domains' ? 'IT Assets' : 'Full Access'}</span>
+                    <strong>{accountManagementTab === 'domains' ? domainDashboardStats.totalAssets : accountSummary.fullyPrivileged}</strong>
                   </div>
                 </div>
                 <div className="acct-metric-card">
@@ -4824,8 +4832,8 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Avg Permissions</span>
-                    <strong>{accountSummary.avgPermissions}</strong>
+                    <span>{accountManagementTab === 'domains' ? 'Employees' : 'Avg Permissions'}</span>
+                    <strong>{accountManagementTab === 'domains' ? domainDashboardStats.employees : accountSummary.avgPermissions}</strong>
                   </div>
                 </div>
                 <div className="acct-metric-card">
@@ -4833,8 +4841,8 @@ function App() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
                   </div>
                   <div className="acct-metric-body">
-                    <span>Max Permissions</span>
-                    <strong>{accountSummary.maxPermissions}</strong>
+                    <span>{accountManagementTab === 'domains' ? 'Pending Bills' : 'Max Permissions'}</span>
+                    <strong>{accountManagementTab === 'domains' ? domainDashboardStats.pendingBills : accountSummary.maxPermissions}</strong>
                   </div>
                 </div>
               </div>
@@ -4950,7 +4958,7 @@ function App() {
               )}
 
               {accountManagementTab === 'domains' && (
-                <section className="domain-location-panel">
+                <section className="domain-location-panel domain-location-panel-compact">
                   <div className="domain-location-head">
                     <div>
                       <h4>Domain / Location Management</h4>
