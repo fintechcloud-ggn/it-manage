@@ -763,6 +763,7 @@ function App() {
   const [invoiceSubcategoryFilter, setInvoiceSubcategoryFilter] = useState('all');
   const [invoiceDateFilter, setInvoiceDateFilter] = useState('all');
   const [invoicePreview, setInvoicePreview] = useState(null);
+  const [invoiceDetail, setInvoiceDetail] = useState(null);
   const [invoiceForm, setInvoiceForm] = useState({
     vendor: '',
     billNo: '',
@@ -3696,6 +3697,10 @@ function App() {
     setInvoicePreview(invoice);
   }
 
+  const selectedInvoiceDetail = invoiceDetail
+    ? invoices.find((invoice) => invoice.id === invoiceDetail.id) || invoiceDetail
+    : null;
+
   if (!user) {
     const SelectedMarketingPage = MARKETING_PAGE_COMPONENTS[marketingPath] || null;
     const marketingScreen = SelectedMarketingPage ? (
@@ -6113,135 +6118,28 @@ function App() {
                       <tr>
                         <th>Bill No</th>
                         <th>Vendor</th>
-                        <th>Category</th>
-                        <th>Subcategory</th>
                         <th>Amount</th>
                         <th>Due Date</th>
                         <th>Status</th>
-                        <th>Approval Stage</th>
-                        <th>Approval Status</th>
-                        <th>Notes</th>
-                        <th>Upload Invoice</th>
-                        <th>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredInvoices.length === 0 && (
-                        <tr><td colSpan={12}>No bill details saved yet.</td></tr>
+                        <tr><td colSpan={5}>No bill details saved yet.</td></tr>
                       )}
                       {filteredInvoices.map((invoice) => (
-                        (() => {
-                          const approval = getInvoiceApproval(invoice);
-                          const canApproveHead = approval.statusKey === 'pending_head'
-                            && canUseInvoiceApprovalAction(invoice, hasInvoiceHeadApprovalAccess());
-                          const canApproveAccounts = approval.statusKey === 'pending_accounts'
-                            && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
-                          const canApprove = canApproveHead || canApproveAccounts;
-                          const needsResubmit = ['rejected', 'correction'].includes(approval.statusKey);
-                          const canPay = approval.statusKey === 'payment_pending'
-                            && invoice.status !== 'paid'
-                            && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
-                          const isDomainRaiserView = hasAdminPermission('invoices.manage') && !hasInvoiceHeadApprovalAccess() && !hasInvoiceAccountsApprovalAccess();
-                          const showInvoiceRaised = isDomainRaiserView && ['pending_head', 'pending_accounts', 'payment_pending'].includes(approval.statusKey);
-                          const hasPaidProof = !!(invoice.paidBillScreenshotData || invoice.paidBillScreenshotName);
-                          const canAttachPaidProof = ['pending_accounts', 'payment_pending'].includes(approval.statusKey)
-                            && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
-                          return (
-                            <tr key={invoice.id}>
-                              <td>{invoice.billNo}</td>
-                              <td><span className="invoice-two-line" title={invoice.vendor}>{invoice.vendor}</span></td>
-                              <td><span className="invoice-two-line" title={invoice.category}>{invoice.category}</span></td>
-                              <td><span className="invoice-two-line" title={invoice.subcategory || '-'}>{invoice.subcategory || '-'}</span></td>
-                              <td>{formatCurrency(invoice.amount)}</td>
-                              <td>{invoice.dueDate || '-'}</td>
-                              <td><span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span></td>
-                              <td>{approval.stageLabel}</td>
-                              <td>
-                                <span className={`invoice-approval-badge approval-${approval.statusKey}`}>{approval.statusLabel}</span>
-                                {invoice.approvalAssignee && (
-                                  <small className="invoice-rejection-reason">Approver: {invoice.approvalAssignee}</small>
-                                )}
-                                {invoice.rejectionReason && (
-                                  <small className="invoice-rejection-reason">Reason: {invoice.rejectionReason}</small>
-                                )}
-                              </td>
-                              <td>
-                                <span className="invoice-notes-preview" title={invoice.notes || '-'}>
-                                  {invoice.notes || '-'}
-                                </span>
-                              </td>
-                              <td>
-                                <label className="invoice-table-upload">
-                                  <span>Upload Invoice</span>
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.png,.jpg,.jpeg,.webp"
-                                    onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
-                                  />
-                                </label>
-                              </td>
-                              <td>
-                                <div className="invoice-actions">
-                                  {canApprove && (
-                                    <>
-                                      <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Approve')}>Approve</button>
-                                      <button type="button" className="small outline" onClick={() => updateInvoiceApproval(invoice.id, 'Reject')}>Reject</button>
-                                    </>
-                                  )}
-                                  {canPay && (
-                                    <button
-                                      type="button"
-                                      className="small"
-                                      disabled={!invoice.paidBillScreenshotData}
-                                      onClick={() => markInvoicePaid(invoice.id)}
-                                      title={invoice.paidBillScreenshotData ? 'Mark this bill as paid' : 'Upload paid bill proof first'}
-                                    >
-                                      {invoice.paidBillScreenshotData ? 'Mark Paid' : 'Upload Proof First'}
-                                    </button>
-                                  )}
-                                  {showInvoiceRaised && (
-                                    <span className="invoice-raised-text">Invoice Raised</span>
-                                  )}
-                                  {needsResubmit && (
-                                    <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Resubmit')}>Resubmit</button>
-                                  )}
-                                  {approval.statusKey === 'completed' && (
-                                    <span className="invoice-done-text">Done</span>
-                                  )}
-                                  {canDeleteInvoices() && (
-                                    <button type="button" className="small danger" onClick={() => deleteInvoice(invoice.id)}>Delete</button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="small invoice-show-btn"
-                                    disabled={!invoice.invoiceFileData}
-                                    onClick={() => showInvoice(invoice)}
-                                  >
-                                    Show
-                                  </button>
-                                  {canAttachPaidProof && (
-                                    <label className="small invoice-action-upload">
-                                      <span>{invoice.paidBillScreenshotName ? 'Change' : 'Upload'}</span>
-                                      <input
-                                        type="file"
-                                        accept=".png,.jpg,.jpeg,.webp"
-                                        onChange={(e) => updatePaidBillScreenshot(invoice.id, e.target.files?.[0])}
-                                      />
-                                    </label>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="small outline"
-                                    disabled={!hasPaidProof}
-                                    onClick={() => showPaidBillScreenshot(invoice)}
-                                  >
-                                    Proof
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })()
+                        <tr key={invoice.id}>
+                          <td>{invoice.billNo}</td>
+                          <td><span className="invoice-two-line" title={invoice.vendor}>{invoice.vendor}</span></td>
+                          <td>{formatCurrency(invoice.amount)}</td>
+                          <td>{invoice.dueDate || '-'}</td>
+                          <td>
+                            <div className="invoice-status-actions">
+                              <span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span>
+                              <button type="button" className="small" onClick={() => setInvoiceDetail(invoice)}>View</button>
+                            </div>
+                          </td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -6340,6 +6238,154 @@ function App() {
               </section>
             </section>
           </section>
+        )}
+
+        {selectedInvoiceDetail && (
+          (() => {
+            const invoice = selectedInvoiceDetail;
+            const approval = getInvoiceApproval(invoice);
+            const canApproveHead = approval.statusKey === 'pending_head'
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceHeadApprovalAccess());
+            const canApproveAccounts = approval.statusKey === 'pending_accounts'
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
+            const canApprove = canApproveHead || canApproveAccounts;
+            const needsResubmit = ['rejected', 'correction'].includes(approval.statusKey);
+            const canPay = approval.statusKey === 'payment_pending'
+              && invoice.status !== 'paid'
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
+            const canAttachPaidProof = ['pending_accounts', 'payment_pending'].includes(approval.statusKey)
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
+            const hasPaidProof = !!(invoice.paidBillScreenshotData || invoice.paidBillScreenshotName);
+            const approvalHistory = Array.isArray(invoice.approvalHistory) ? invoice.approvalHistory : [];
+            return (
+              <div className="invoice-detail-overlay" role="dialog" aria-modal="true" aria-label="Invoice details">
+                <div className="invoice-detail-modal">
+                  <div className="invoice-detail-hero">
+                    <div>
+                      <h3>{invoice.billNo || 'Bill Details'}</h3>
+                      <p>{invoice.vendor || '-'} | {formatCurrency(invoice.amount)}</p>
+                      <div className="employee-modal-pill-row">
+                        <span className={`status invoice-status ${invoice.status}`}>{invoice.status}</span>
+                        <span className={`invoice-approval-badge approval-${approval.statusKey}`}>{approval.statusLabel}</span>
+                        <span className="soft-pill">Stage: {approval.stageLabel}</span>
+                      </div>
+                    </div>
+                    <div className="employee-modal-actions invoice-detail-actions">
+                      <button type="button" onClick={() => showInvoice(invoice)}>Invoice</button>
+                      <button type="button" className="outline" disabled={!hasPaidProof} onClick={() => showPaidBillScreenshot(invoice)}>Proof</button>
+                      <button type="button" onClick={() => setInvoiceDetail(null)}>Close</button>
+                    </div>
+                  </div>
+
+                  <div className="invoice-detail-grid">
+                    <article><span>Bill No</span><strong>{invoice.billNo || '-'}</strong></article>
+                    <article><span>Vendor</span><strong>{invoice.vendor || '-'}</strong></article>
+                    <article><span>Amount</span><strong>{formatCurrency(invoice.amount)}</strong></article>
+                    <article><span>Due Date</span><strong>{invoice.dueDate || '-'}</strong></article>
+                    <article><span>Category</span><strong>{invoice.category || '-'}</strong></article>
+                    <article><span>Subcategory</span><strong>{invoice.subcategory || '-'}</strong></article>
+                    <article><span>Payment Status</span><strong>{invoice.status || '-'}</strong></article>
+                    <article><span>Approver</span><strong>{invoice.approvalAssignee || '-'}</strong></article>
+                  </div>
+
+                  <div className="invoice-detail-panels">
+                    <section>
+                      <h4>Notes</h4>
+                      <p>{invoice.notes || '-'}</p>
+                      {invoice.rejectionReason && (
+                        <p><strong>Rejection Reason:</strong> {invoice.rejectionReason}</p>
+                      )}
+                    </section>
+                    <section>
+                      <h4>Documents</h4>
+                      <div className="invoice-document-list">
+                        <span>Invoice: {invoice.invoiceFileName || (invoice.invoiceFileData ? 'Uploaded' : 'Not uploaded')}</span>
+                        <span>Paid proof: {invoice.paidBillScreenshotName || (invoice.paidBillScreenshotData ? 'Uploaded' : 'Not uploaded')}</span>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="invoice-detail-action-panel">
+                    <h4>Actions</h4>
+                    <div className="invoice-actions">
+                      {canApprove && (
+                        <>
+                          <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Approve')}>Approve</button>
+                          <button type="button" className="small outline" onClick={() => updateInvoiceApproval(invoice.id, 'Reject')}>Reject</button>
+                        </>
+                      )}
+                      {needsResubmit && (
+                        <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Resubmit')}>Resubmit</button>
+                      )}
+                      {canPay && (
+                        <button
+                          type="button"
+                          className="small"
+                          disabled={!invoice.paidBillScreenshotData}
+                          onClick={() => markInvoicePaid(invoice.id)}
+                          title={invoice.paidBillScreenshotData ? 'Mark this bill as paid' : 'Upload paid bill proof first'}
+                        >
+                          {invoice.paidBillScreenshotData ? 'Mark Paid' : 'Upload Proof First'}
+                        </button>
+                      )}
+                      <label className="small invoice-action-upload">
+                        <span>Upload Invoice</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp"
+                          onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
+                        />
+                      </label>
+                      {canAttachPaidProof && (
+                        <label className="small invoice-action-upload">
+                          <span>{invoice.paidBillScreenshotName ? 'Change Proof' : 'Upload Proof'}</span>
+                          <input
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.webp"
+                            onChange={(e) => updatePaidBillScreenshot(invoice.id, e.target.files?.[0])}
+                          />
+                        </label>
+                      )}
+                      {canDeleteInvoices() && (
+                        <button
+                          type="button"
+                          className="small danger"
+                          onClick={() => {
+                            deleteInvoice(invoice.id);
+                            setInvoiceDetail(null);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="employee-modal-assets invoice-detail-history">
+                    <h4>Approval History</h4>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Action</th><th>Stage</th><th>Time</th><th>Reason</th></tr></thead>
+                        <tbody>
+                          {approvalHistory.length === 0 && (
+                            <tr><td colSpan={4}>No approval history yet.</td></tr>
+                          )}
+                          {approvalHistory.map((entry, index) => (
+                            <tr key={`${entry.action || 'entry'}-${index}`}>
+                              <td>{entry.action || '-'}</td>
+                              <td>{entry.stage || '-'}</td>
+                              <td>{entry.at ? new Date(entry.at).toLocaleString() : '-'}</td>
+                              <td>{entry.reason || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()
         )}
 
         {invoicePreview && (
