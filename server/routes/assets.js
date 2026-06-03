@@ -4,6 +4,16 @@ const { query } = require('../db');
 const { requireAuth, requirePermission, isSuperAdmin, normalizeDomain, getUserDomain, canAccessDomain, canAccessDomainRecord } = require('../middleware/auth');
 const { writeAuditLog } = require('../audit');
 
+function getAssetStatusFromPayload(type, notes, fallbackStatus = 'available') {
+  if (String(type || '').trim().toLowerCase() !== 'sim') return fallbackStatus || 'available';
+  try {
+    const details = notes ? JSON.parse(notes) : {};
+    return String(details.sim_status || '').trim().toLowerCase() === 'active' ? 'allocated' : 'available';
+  } catch (_err) {
+    return 'available';
+  }
+}
+
 router.get('/', requireAuth, async (req, res) => {
   try {
     let rows = await query(`
@@ -67,14 +77,15 @@ router.get('/:id', requireAuth, async (req, res) => {
 router.post('/', requirePermission('inventory.manage'), async (req, res) => {
   try {
     const { name, type, serial, store_id, vendor, notes, brand_id, model_id, domain_name } = req.body;
+    const assetStatus = getAssetStatusFromPayload(type, notes, 'available');
     const requestedDomain = isSuperAdmin(req.user)
       ? normalizeDomain(domain_name)
       : getUserDomain(req.user);
     if (!requestedDomain) return res.status(400).json({ error: 'Domain is required' });
     const result = await query(
       `INSERT INTO assets (name, type, domain_name, serial, status, store_id, vendor, notes, brand_id, model_id)
-       VALUES (?, ?, ?, ?, 'available', ?, ?, ?, ?, ?)`,
-      [name, type, requestedDomain, serial, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null],
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, type, requestedDomain, serial, assetStatus, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null],
     );
     const created = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [result.insertId]);
     await writeAuditLog({
@@ -101,11 +112,12 @@ router.put('/:id', requirePermission('inventory.manage'), async (req, res) => {
     const requestedDomain = isSuperAdmin(req.user)
       ? (normalizeDomain(domain_name) || normalizeDomain(existing.domain_name))
       : getUserDomain(req.user);
+    const nextStatus = getAssetStatusFromPayload(type, notes, status);
     await query(
       `UPDATE assets
        SET name = ?, type = ?, domain_name = ?, serial = ?, status = ?, store_id = ?, vendor = ?, notes = ?, brand_id = ?, model_id = ?
        WHERE id = ?`,
-      [name, type, requestedDomain, serial, status, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null, id],
+      [name, type, requestedDomain, serial, nextStatus, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null, id],
     );
     const updated = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [id]);
     await writeAuditLog({

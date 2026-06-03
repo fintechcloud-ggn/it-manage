@@ -276,6 +276,15 @@ async function init() {
   if (!assetVendorCol.length) {
     await query('ALTER TABLE assets ADD COLUMN vendor VARCHAR(180) NULL AFTER store_id');
   }
+  await query(`
+    UPDATE assets
+    SET status = CASE
+      WHEN LOWER(REPLACE(COALESCE(notes, ''), ' ', '')) LIKE '%"sim_status":"active"%'
+        THEN 'allocated'
+      ELSE 'available'
+    END
+    WHERE LOWER(TRIM(type)) = 'sim'
+  `);
 
   await query(`
     INSERT IGNORE INTO domains (name)
