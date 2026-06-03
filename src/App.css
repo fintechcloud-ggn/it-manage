@@ -4018,6 +4018,13 @@ body {
   box-shadow: 0 16px 28px rgba(35, 167, 136, 0.18);
 }
 
+.dashboard-shell .create-actions .outline {
+  background: rgba(255, 255, 255, 0.92);
+  color: #31546f;
+  border-color: #c8d8e7;
+  box-shadow: 0 10px 24px rgba(113, 135, 160, 0.08);
+}
+
 .dashboard-shell .create-box {
   padding: 20px;
 }
@@ -4835,6 +4842,14 @@ body {
 .create-actions small {
   color: #5b6b7a;
   font-size: 12px;
+}
+
+.create-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .account-management-panel {

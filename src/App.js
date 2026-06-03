@@ -3374,6 +3374,39 @@ function App() {
     setSection('inventory');
   }
 
+  function exportInventoryCsv() {
+    const header = isSimInventoryView
+      ? ['S. No.', 'CONNECTION NUMBER', 'CONNECTION TYPE', 'STATUS', 'SIM NUMBER', 'NAME', 'SOURCE']
+      : ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
+    const rows = isSimInventoryView
+      ? filteredSortedAssets.map((a, index) => {
+        const sim = getSimAssetDetails(a);
+        return [sim.sNo || index + 1, sim.connectionNumber, sim.connectionType, sim.simStatus, sim.simNumber, sim.assignedName, sim.source];
+      })
+      : filteredSortedAssets.map((a) => [
+        a.name || '',
+        a.type || '',
+        a.brand_name || '',
+        a.model_name || '',
+        a.assigned_to_name || '',
+        a.assigned_to_employee_code || '',
+        a.domain_name || '',
+        a.vendor || '',
+        a.serial || '',
+        a.status || ''
+      ]);
+    const csv = buildExcelCsv([header, ...rows]);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'inventory_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
   const navItems = [
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
@@ -4118,44 +4151,6 @@ function App() {
                 </div>
                 <div className="inventory-head-actions">
                   <button type="button" className="outline" onClick={resetInventoryFilters}>Reset Filters</button>
-                  <button
-                    type="button"
-                    className="outline"
-                    onClick={() => {
-                      const header = isSimInventoryView
-                        ? ['S. No.', 'CONNECTION NUMBER', 'CONNECTION TYPE', 'STATUS', 'SIM NUMBER', 'NAME', 'SOURCE']
-                        : ['Asset', 'Type', 'Brand', 'Model', 'Assigned To', 'Employee Code', 'Domain', 'Vendor', 'Serial', 'Status'];
-                      const rows = isSimInventoryView
-                        ? filteredSortedAssets.map((a, index) => {
-                          const sim = getSimAssetDetails(a);
-                          return [sim.sNo || index + 1, sim.connectionNumber, sim.connectionType, sim.simStatus, sim.simNumber, sim.assignedName, sim.source];
-                        })
-                        : filteredSortedAssets.map((a) => [
-                          a.name || '',
-                          a.type || '',
-                          a.brand_name || '',
-                          a.model_name || '',
-                          a.assigned_to_name || '',
-                          a.assigned_to_employee_code || '',
-                          a.domain_name || '',
-                          a.vendor || '',
-                          a.serial || '',
-                          a.status || ''
-                        ]);
-                      const csv = buildExcelCsv([header, ...rows]);
-                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                      const url = URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.setAttribute('download', 'inventory_export.csv');
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      URL.revokeObjectURL(url);
-                    }}
-                  >
-                    Export CSV
-                  </button>
                 </div>
               </div>
 
@@ -4323,7 +4318,10 @@ function App() {
                         ? `Adding ${displayedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
                         : `Choose any ${displayedAssetType || 'asset'} model or narrow by brand`}
                     </small>
-                    <button type="submit">Add Asset</button>
+                    <div className="create-action-buttons">
+                      <button type="button" className="outline" onClick={exportInventoryCsv}>Export CSV</button>
+                      <button type="submit">Add Asset</button>
+                    </div>
                   </div>
                 </form>
               </div>
