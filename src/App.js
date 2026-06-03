@@ -4768,6 +4768,24 @@ function App() {
 
         {section === 'accounts' && (
           <section className="panel wide account-management-panel">
+            {isSuperAdmin && (
+              <div className="account-tabs account-tabs-top">
+                <button
+                  type="button"
+                  className={accountManagementTab === 'roles' ? 'active' : ''}
+                  onClick={() => setAccountManagementTab('roles')}
+                >
+                  Role Accounts
+                </button>
+                <button
+                  type="button"
+                  className={accountManagementTab === 'domains' ? 'active' : ''}
+                  onClick={() => setAccountManagementTab('domains')}
+                >
+                  Domain / Location Management
+                </button>
+              </div>
+            )}
 
             {/* ── Hero Banner ── */}
             <div className="acct-hero-banner">
@@ -4862,23 +4880,6 @@ function App() {
               </div>
             ) : (
               <>
-              <div className="account-tabs">
-                <button
-                  type="button"
-                  className={accountManagementTab === 'roles' ? 'active' : ''}
-                  onClick={() => setAccountManagementTab('roles')}
-                >
-                  Role Accounts
-                </button>
-                <button
-                  type="button"
-                  className={accountManagementTab === 'domains' ? 'active' : ''}
-                  onClick={() => setAccountManagementTab('domains')}
-                >
-                  Domain / Location Management
-                </button>
-              </div>
-
               {accountManagementTab === 'roles' && (
                 <section className="acct-table-section">
                 <div className="acct-table-header">

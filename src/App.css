@@ -6270,10 +6270,10 @@ body {
 /* Hero Banner */
 .acct-hero-banner {
   position: relative;
-  border-radius: 20px;
+  border-radius: 18px;
   overflow: hidden;
   background: linear-gradient(135deg, #0b1f2e 0%, #0d3349 45%, #0f4566 100%);
-  padding: 18px 24px 0;
+  padding: 14px 20px 0;
   display: grid;
   gap: 0;
   box-shadow: 0 12px 40px rgba(8, 25, 40, 0.25);
@@ -6307,8 +6307,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 20px;
-  margin-bottom: 8px;
+  gap: 16px;
+  margin-bottom: 6px;
 }
 
 .acct-hero-badge {
@@ -6319,17 +6319,17 @@ body {
   border: 1px solid rgba(56, 189, 248, 0.25);
   color: #7dd3fc;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
+  padding: 3px 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .acct-hero-title {
-  margin: 0 0 4px;
-  font-size: 26px;
+  margin: 0 0 3px;
+  font-size: 22px;
   font-weight: 800;
   color: #ffffff;
   letter-spacing: -0.03em;
@@ -6340,21 +6340,21 @@ body {
   margin: 0;
   padding: 0;
   color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .acct-hero-cta {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 18px;
-  min-height: 40px;
+  gap: 6px;
+  padding: 0 14px;
+  min-height: 34px;
   border: 1px solid rgba(56, 189, 248, 0.4);
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(56, 189, 248, 0.14);
   color: #7dd3fc;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
@@ -6376,15 +6376,15 @@ body {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  margin: 0 -28px;
-  padding: 0 28px;
+  margin: 0 -22px;
+  padding: 0 22px;
 }
 
 .acct-metric-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 14px;
+  gap: 10px;
+  padding: 12px 12px;
   border-right: 1px solid rgba(255, 255, 255, 0.07);
   transition: background 0.2s;
 }
@@ -6398,9 +6398,9 @@ body {
 }
 
 .acct-metric-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -6440,7 +6440,7 @@ body {
 }
 
 .acct-metric-body span {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -6450,7 +6450,7 @@ body {
 }
 
 .acct-metric-body strong {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 800;
   color: #ffffff;
   line-height: 1.1;
