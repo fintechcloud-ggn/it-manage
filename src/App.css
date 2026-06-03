@@ -3429,6 +3429,23 @@ p {
   margin-top: 14px;
 }
 
+.invoice-detail-action-panel .invoice-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.invoice-detail-action-panel .invoice-actions .small {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
 .invoice-detail-history .table-wrap {
   max-height: 230px;
 }
