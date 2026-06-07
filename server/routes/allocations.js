@@ -5,15 +5,38 @@ const { query } = require('../db');
 const { requireAuth, hasPermission, isSuperAdmin, normalizeDomain, getUserDomain, canAccessDomainRecord } = require('../middleware/auth');
 const { writeAuditLog } = require('../audit');
 
-async function ensureAssignmentUser({ user_id, employee_code, employee_name, employee_email, domain_name }) {
+async function ensureAssignmentUser({ user_id, employee_code, employee_name, employee_email, employee_mobile, employee_department, employee_designation, domain_name }) {
+  async function syncEmployeeDetails(id) {
+    if (!id) return;
+    await query(
+      `UPDATE users
+       SET email = COALESCE(NULLIF(?, ''), email),
+           personal_mobile_no = COALESCE(NULLIF(?, ''), personal_mobile_no),
+           department = COALESCE(NULLIF(?, ''), department),
+           designation = COALESCE(NULLIF(?, ''), designation)
+       WHERE id = ?`,
+      [
+        String(employee_email || '').trim(),
+        String(employee_mobile || '').trim(),
+        String(employee_department || '').trim(),
+        String(employee_designation || '').trim(),
+        Number(id)
+      ]
+    );
+  }
+
   if (Number(user_id)) {
     const rows = await query('SELECT id, domain_name, employee_code FROM users WHERE id = ? LIMIT 1', [Number(user_id)]);
+    if (rows[0]) await syncEmployeeDetails(rows[0].id);
     return rows[0] || null;
   }
 
   const normalizedCode = String(employee_code || '').trim();
   const normalizedName = String(employee_name || '').trim();
   const normalizedEmail = String(employee_email || '').trim();
+  const normalizedMobile = String(employee_mobile || '').trim();
+  const normalizedDepartment = String(employee_department || '').trim();
+  const normalizedDesignation = String(employee_designation || '').trim();
   if (!normalizedCode && !normalizedName) return null;
 
   let existing = null;
@@ -31,15 +54,27 @@ async function ensureAssignmentUser({ user_id, employee_code, employee_name, emp
     );
     existing = byName[0] || null;
   }
-  if (existing) return existing;
+  if (existing) {
+    await syncEmployeeDetails(existing.id);
+    return existing;
+  }
 
   const safeCode = normalizedCode || `EMP-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   const email = normalizedEmail || `${safeCode.toLowerCase()}@import.local`;
   const password = bcrypt.hashSync('password', 8);
   const result = await query(
-    `INSERT INTO users (name, email, role, domain_name, password, employee_code)
-     VALUES (?, ?, 'user', ?, ?, ?)`,
-    [normalizedName || safeCode, email, normalizeDomain(domain_name) || null, password, normalizedCode || safeCode]
+    `INSERT INTO users (name, email, role, domain_name, password, employee_code, personal_mobile_no, department, designation)
+     VALUES (?, ?, 'user', ?, ?, ?, ?, ?, ?)`,
+    [
+      normalizedName || safeCode,
+      email,
+      normalizeDomain(domain_name) || null,
+      password,
+      normalizedCode || safeCode,
+      normalizedMobile || null,
+      normalizedDepartment || null,
+      normalizedDesignation || null
+    ]
   );
   const createdRows = await query(
     'SELECT id, domain_name, employee_code FROM users WHERE id = ? LIMIT 1',
@@ -109,7 +144,17 @@ router.get('/', requireAuth, async (req, res) => {
 
 router.post('/', requireAuth, async (req, res) => {
   try {
-    const { asset_id, user_id, notes, employee_code, employee_name, employee_email } = req.body;
+    const {
+      asset_id,
+      user_id,
+      notes,
+      employee_code,
+      employee_name,
+      employee_email,
+      employee_mobile,
+      employee_department,
+      employee_designation
+    } = req.body;
     const allocatedAtMs = Date.now();
     const assetRows = await query('SELECT id, status, domain_name FROM assets WHERE id = ? LIMIT 1', [Number(asset_id)]);
     const asset = assetRows[0];
@@ -120,18 +165,18 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     const allocator = req.user;
-    if (isSuperAdmin(allocator)) {
-      return res.status(403).json({ error: 'Super admin can send assets to domains only. Domain users can assign assets to employees.' });
-    }
-    if ((allocator.role || '').toLowerCase() !== 'user' && !hasPermission(allocator, 'assignments.manage')) {
+    if (!isSuperAdmin(allocator) && (allocator.role || '').toLowerCase() !== 'user' && !hasPermission(allocator, 'assignments.manage')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    const managedUser = hasPermission(allocator, 'assignments.manage')
+    const managedUser = (isSuperAdmin(allocator) || hasPermission(allocator, 'assignments.manage'))
       ? await ensureAssignmentUser({
         user_id,
         employee_code,
         employee_name,
         employee_email,
+        employee_mobile,
+        employee_department,
+        employee_designation,
         domain_name: asset.domain_name || getUserDomain(req.user)
       })
       : allocator;

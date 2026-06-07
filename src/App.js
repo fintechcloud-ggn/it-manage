@@ -16,6 +16,7 @@ import importedTrackerInvoices from './data/importedInvoices.json';
 
 const DEV_API_PORTS = Array.from({ length: 20 }, (_, index) => 4000 + index);
 const API_BASE_STORAGE_KEY = 'itmanage.apiBase';
+const VISITING_CARDS_STORAGE_KEY = 'itmanage.visitingCards';
 const EMPLOYEE_PHOTO_BUCKET = process.env.REACT_APP_EMPLOYEE_PHOTO_BUCKET || 'it-manage-145023120812-ap-south-1-an';
 const EMPLOYEE_PHOTO_REGION = process.env.REACT_APP_EMPLOYEE_PHOTO_REGION || 'ap-south-1';
 const EMPLOYEE_PHOTO_BASE_URL = process.env.REACT_APP_EMPLOYEE_PHOTO_BASE_URL
@@ -777,6 +778,20 @@ function App() {
     invoiceFileName: '',
     invoiceFileData: ''
   });
+  const [visitingCards, setVisitingCards] = useState(() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(VISITING_CARDS_STORAGE_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [visitingCardForm, setVisitingCardForm] = useState({
+    name: '',
+    mobile: '',
+    designation: '',
+    officeAddress: ''
+  });
   const invoiceAttachmentsLoadedRef = useRef(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -807,6 +822,12 @@ function App() {
   const [quickAssignForm, setQuickAssignForm] = useState({
     userId: '',
     domainName: '',
+    employeeName: '',
+    employeeCode: '',
+    employeeEmail: '',
+    employeeMobile: '',
+    employeeDepartment: '',
+    employeeDesignation: '',
     assetId: '',
     assetType: 'all',
     assetSearch: '',
@@ -825,6 +846,13 @@ function App() {
     const timeoutId = setTimeout(() => setMessage(''), 5000);
     return () => clearTimeout(timeoutId);
   }, [message]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(VISITING_CARDS_STORAGE_KEY, JSON.stringify(visitingCards));
+    } catch {
+      setMessage('Could not save visiting cards in this browser.');
+    }
+  }, [visitingCards]);
   useEffect(() => () => {
     if (selfieStreamRef.current) {
       selfieStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -865,6 +893,7 @@ function App() {
   const [adminDetailDrafts, setAdminDetailDrafts] = useState({});
   const [roleAccountPasswords, setRoleAccountPasswords] = useState(() => readRoleAccountPasswords());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [selectedReplacementEmployeeId, setSelectedReplacementEmployeeId] = useState(null);
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [employeeEditForm, setEmployeeEditForm] = useState({
     name: '',
@@ -880,6 +909,13 @@ function App() {
     newAssetId: '',
     reason: 'Damaged',
     reasonDetail: ''
+  });
+  const [returnForm, setReturnForm] = useState({
+    allocationId: '',
+    assetName: '',
+    serial: '',
+    reason: 'Damaged',
+    notes: ''
   });
   const [selectedAssetType, setSelectedAssetType] = useState('');
   const [customAssetType, setCustomAssetType] = useState('');
@@ -1316,64 +1352,74 @@ function App() {
     setMessage('');
   }
 
+  function getQuickAssignEmployeeDetails(option) {
+    if (!option) {
+      return {
+        employeeName: '',
+        employeeCode: '',
+        employeeEmail: '',
+        employeeMobile: '',
+        employeeDepartment: '',
+        employeeDesignation: ''
+      };
+    }
+    return {
+      employeeName: option.name || '',
+      employeeCode: option.employee_code || '',
+      employeeEmail: option.employee_email || option.email || '',
+      employeeMobile: option.personal_mobile_no || option.mobile_no || option.mobile || '',
+      employeeDepartment: option.department || '',
+      employeeDesignation: option.designation || ''
+    };
+  }
+
+  function updateQuickAssignEmployeeField(field, value) {
+    setQuickAssignForm((prev) => {
+      const next = { ...prev, [field]: value };
+      const trimmed = String(value || '').trim().toLowerCase();
+      const matched = trimmed
+        ? quickAssignUsers.find((item) => {
+          if (field === 'employeeCode') return String(item.employee_code || '').trim().toLowerCase() === trimmed;
+          if (field === 'employeeEmail') return String(item.employee_email || item.email || '').trim().toLowerCase() === trimmed;
+          if (field === 'employeeName') return String(item.name || '').trim().toLowerCase() === trimmed;
+          return false;
+        })
+        : null;
+      if (!matched && ['employeeName', 'employeeCode', 'employeeEmail'].includes(field)) {
+        return { ...next, userId: '' };
+      }
+      if (!matched) return next;
+      return {
+        ...next,
+        userId: String(matched.selection_value || matched.local_user_id || matched.id),
+        ...getQuickAssignEmployeeDetails(matched),
+        [field]: value
+      };
+    });
+  }
+
   async function allocate(e) {
     e.preventDefault();
     const asset_id = Number(quickAssignForm.assetId);
     const notes = quickAssignForm.notes.trim();
-    if (isSuperAdmin) {
-      const domainName = String(quickAssignForm.domainName || '').trim().toLowerCase();
-      const selectedAsset = assetById[asset_id];
-      if (!asset_id || !selectedAsset || !domainName) {
-        setMessage('Select domain and available asset to send.');
-        return;
-      }
-      const nextNotes = notes
-        ? `${selectedAsset.notes ? `${selectedAsset.notes} | ` : ''}Domain transfer: ${notes}`
-        : (selectedAsset.notes || '');
-      const res = await apiFetch(`/api/assets/${asset_id}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          name: selectedAsset.name,
-          type: selectedAsset.type,
-          serial: selectedAsset.serial,
-          status: selectedAsset.status || 'available',
-          store_id: selectedAsset.store_id || null,
-          vendor: selectedAsset.vendor || '',
-          notes: nextNotes,
-          brand_id: selectedAsset.brand_id || null,
-          model_id: selectedAsset.model_id || null,
-          domain_name: domainName
-        })
-      });
-      const body = await res.json().catch(() => ({}));
-      setMessage(res.ok ? 'Asset sent to domain successfully.' : body.error || 'Domain assignment failed');
-      if (res.ok) {
-        fetchAssets();
-        fetchAuditLogs();
-        setQuickAssignForm((prev) => ({
-          ...prev,
-          assetId: '',
-          assetType: 'all',
-          assetSearch: '',
-          notes: ''
-        }));
-      }
-      return;
-    }
-
     const selectedEmployeeOption = quickAssignUsers.find((item) => String(item.selection_value || item.local_user_id || item.id) === String(quickAssignForm.userId));
-    if (!asset_id || !selectedEmployeeOption) {
-      setMessage('Select employee and available asset to assign');
+    const employeeName = quickAssignForm.employeeName.trim() || selectedEmployeeOption?.name || '';
+    const employeeCode = quickAssignForm.employeeCode.trim() || selectedEmployeeOption?.employee_code || '';
+    const employeeEmail = quickAssignForm.employeeEmail.trim() || selectedEmployeeOption?.employee_email || selectedEmployeeOption?.email || '';
+    if (!asset_id || (!selectedEmployeeOption && !employeeName && !employeeCode)) {
+      setMessage('Enter employee details and select available asset to assign');
       return;
     }
     const payload = {
       asset_id,
       notes,
-      user_id: selectedEmployeeOption.local_user_id ? Number(selectedEmployeeOption.local_user_id) : null,
-      employee_code: selectedEmployeeOption.employee_code || null,
-      employee_name: selectedEmployeeOption.name || null,
-      employee_email: selectedEmployeeOption.employee_email || null
+      user_id: selectedEmployeeOption?.local_user_id ? Number(selectedEmployeeOption.local_user_id) : null,
+      employee_code: employeeCode || null,
+      employee_name: employeeName || null,
+      employee_email: employeeEmail || null,
+      employee_mobile: quickAssignForm.employeeMobile.trim() || selectedEmployeeOption?.personal_mobile_no || selectedEmployeeOption?.mobile_no || selectedEmployeeOption?.mobile || null,
+      employee_department: quickAssignForm.employeeDepartment.trim() || selectedEmployeeOption?.department || null,
+      employee_designation: quickAssignForm.employeeDesignation.trim() || selectedEmployeeOption?.designation || null
     };
     const res = await apiFetch('/api/allocations', {
       method: 'POST',
@@ -1391,6 +1437,13 @@ function App() {
         assetId: '',
         assetType: 'all',
         assetSearch: '',
+        userId: '',
+        employeeName: '',
+        employeeCode: '',
+        employeeEmail: '',
+        employeeMobile: '',
+        employeeDepartment: '',
+        employeeDesignation: '',
         notes: ''
       }));
     }
@@ -1497,9 +1550,44 @@ function App() {
     }
   }
 
+  function openReturnAssetDialog(asset) {
+    setReturnForm({
+      allocationId: asset.id,
+      assetName: asset.assetName || '',
+      serial: asset.serial || '',
+      reason: 'Damaged',
+      notes: ''
+    });
+  }
+
+  function closeReturnAssetDialog() {
+    setReturnForm({
+      allocationId: '',
+      assetName: '',
+      serial: '',
+      reason: 'Damaged',
+      notes: ''
+    });
+  }
+
+  async function submitReturnAsset(e) {
+    e.preventDefault();
+    if (!returnForm.allocationId) return;
+    const notes = returnForm.notes.trim();
+    if (returnForm.reason === 'Other' && !notes) {
+      setMessage('Please provide return notes for Other reason');
+      return;
+    }
+    await returnAsset(returnForm.allocationId, {
+      reason: returnForm.reason,
+      reason_detail: notes || null
+    });
+    closeReturnAssetDialog();
+  }
+
   async function replaceEmployeeAsset(e) {
     e.preventDefault();
-    if (!selectedEmployee) return;
+    if (!selectedReplacementEmployee) return;
     if (!replacementForm.allocationId || !replacementForm.newAssetId) {
       setMessage('Select current and replacement assets');
       return;
@@ -1523,8 +1611,10 @@ function App() {
       fetchAssets();
       fetchAllocations();
       fetchAuditLogs();
+      setSelectedReplacementEmployeeId(null);
       setReplacementForm((prev) => ({
         ...prev,
+        allocationId: '',
         replacementType: 'all',
         newAssetId: '',
         reason: 'Damaged',
@@ -1842,6 +1932,58 @@ function App() {
 
   function getQrImageUrl(data) {
     return `https://api.qrserver.com/v1/create-qr-code/?size=128x128&margin=6&data=${encodeURIComponent(data)}`;
+  }
+
+  function escapeVCardValue(value) {
+    return String(value || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\n/g, '\\n')
+      .replace(/,/g, '\\,')
+      .replace(/;/g, '\\;');
+  }
+
+  function buildVisitingCardVCard(card) {
+    const name = escapeVCardValue(card.name);
+    return [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${name}`,
+      `N:${name};;;;`,
+      card.designation ? `TITLE:${escapeVCardValue(card.designation)}` : '',
+      card.mobile ? `TEL;TYPE=CELL:${escapeVCardValue(card.mobile)}` : '',
+      card.officeAddress ? `ADR;TYPE=WORK:;;${escapeVCardValue(card.officeAddress)};;;;` : '',
+      'ORG:NEXTGEN Rentals & Trading Private Limited',
+      'END:VCARD'
+    ].filter(Boolean).join('\n');
+  }
+
+  function createVisitingCard(e) {
+    e.preventDefault();
+    const nextCard = {
+      id: `vc-${Date.now()}`,
+      name: visitingCardForm.name.trim(),
+      mobile: visitingCardForm.mobile.trim(),
+      designation: visitingCardForm.designation.trim(),
+      officeAddress: visitingCardForm.officeAddress.trim(),
+      createdAt: new Date().toISOString()
+    };
+    if (!nextCard.name || !nextCard.mobile) {
+      setMessage('Name and mobile number are required for visiting card.');
+      return;
+    }
+    setVisitingCards((prev) => [nextCard, ...prev]);
+    setVisitingCardForm({
+      name: '',
+      mobile: '',
+      designation: '',
+      officeAddress: ''
+    });
+    setMessage('Visiting card created successfully.');
+  }
+
+  function deleteVisitingCard(cardId) {
+    setVisitingCards((prev) => prev.filter((card) => card.id !== cardId));
+    setMessage('Visiting card deleted.');
   }
 
   function printAssetQr(asset) {
@@ -2298,7 +2440,10 @@ function App() {
     const events = [];
     allocations.forEach((a) => {
       const assetName = assetById[a.asset_id]?.name || `Asset ${a.asset_id}`;
-      const userName = userById[a.user_id]?.name || `User ${a.user_id}`;
+      const employee = userById[a.user_id] || {};
+      const userName = employee.name || `User ${a.user_id}`;
+      const employeeCode = employee.employee_code || '';
+      const employeeEmail = employee.email || '';
       const allocatedMs = toMs(a.allocated_at_ms, a.allocated_at);
       if (allocatedMs > 0) {
         events.push({
@@ -2307,6 +2452,8 @@ function App() {
           allocationId: a.id,
           assetName,
           userName,
+          employeeCode,
+          employeeEmail,
           timestampMs: allocatedMs
         });
       }
@@ -2318,6 +2465,8 @@ function App() {
           allocationId: a.id,
           assetName,
           userName,
+          employeeCode,
+          employeeEmail,
           timestampMs: returnedMs
         });
       }
@@ -2590,26 +2739,26 @@ function App() {
   }, [assets, brands]);
   const brandDropdownOptions = useMemo(
     () => [
-      ...brands.map((brand) => ({
+      ...brandsBySelectedType.map((brand) => ({
         value: String(brand.id),
         label: brand.name,
         searchText: brand.name,
       })),
       { value: OTHER_BRAND_VALUE, label: 'Other Brand', searchText: 'Other Brand' },
     ],
-    [brands]
+    [brandsBySelectedType]
   );
   useEffect(() => {
     if (!selectedBrandId) return;
     if (selectedBrandId === OTHER_BRAND_VALUE) return;
-    const exists = brands.some((b) => String(b.id) === String(selectedBrandId));
+    const exists = brandsBySelectedType.some((b) => String(b.id) === String(selectedBrandId));
     if (!exists) {
       setSelectedBrandId('');
       setCustomBrandName('');
       setSelectedModelId('');
       setCustomModelName('');
     }
-  }, [brands, selectedBrandId]);
+  }, [brandsBySelectedType, selectedBrandId]);
   useEffect(() => {
     setSelectedModelId((prev) => (
       prev === OTHER_MODEL_VALUE ? prev :
@@ -2627,15 +2776,6 @@ function App() {
   const employeeDropdownOptions = useMemo(
     () => quickAssignUsers,
     [quickAssignUsers]
-  );
-  const quickAssignEmployeeOptions = useMemo(
-    () => employeeDropdownOptions
-      .map((user) => ({
-        value: buildAssignmentSelectionValue(user),
-        label: user.label || user.name,
-        searchText: `${user.name || ''} ${user.employee_code || ''} ${user.employee_email || ''}`,
-      })),
-    [employeeDropdownOptions]
   );
   const modelDropdownOptions = useMemo(
     () => [
@@ -2866,6 +3006,14 @@ function App() {
     () => employeeDirectory.find((emp) => emp.id === selectedEmployeeId) || null,
     [employeeDirectory, selectedEmployeeId]
   );
+  const selectedReplacementEmployee = useMemo(
+    () => employeeDirectory.find((emp) => emp.id === selectedReplacementEmployeeId) || null,
+    [employeeDirectory, selectedReplacementEmployeeId]
+  );
+  const employeeDirectoryRenderKey = useMemo(
+    () => `${assignmentSearch}|${assignmentUserFilter}|${employeeDirectory.map((emp) => emp.id).join(',')}`,
+    [assignmentSearch, assignmentUserFilter, employeeDirectory]
+  );
   const selectedEmployeeHistory = useMemo(() => {
     if (!selectedEmployee) return [];
     const selectedLocalUserId = selectedEmployee.local_user_id || selectedEmployee.id;
@@ -2960,11 +3108,15 @@ function App() {
     setSelectedAdminPermissionId(adminUser.id);
   }
   function startQuickAssignForEmployee(employeeId) {
-    setQuickAssignForm((prev) => ({ ...prev, userId: String(employeeId) }));
-    const quickAssignPanel = document.getElementById('assignment-quick-form');
-    if (quickAssignPanel) {
-      quickAssignPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    const employee = employeeDirectory.find((emp) => String(emp.id) === String(employeeId));
+    setSelectedReplacementEmployeeId(employeeId);
+    setReplacementForm({
+      allocationId: employee?.assignedAssets[0]?.id ? String(employee.assignedAssets[0].id) : '',
+      replacementType: 'all',
+      newAssetId: '',
+      reason: 'Damaged',
+      reasonDetail: ''
+    });
   }
   const selectedEmployeeAssetBreakdown = useMemo(() => {
     if (!selectedEmployee) return [];
@@ -2983,22 +3135,6 @@ function App() {
     () => selectedEmployeeHistory.filter((item) => item.returned_at),
     [selectedEmployeeHistory]
   );
-  const selectedEmployeeReasonBreakdown = useMemo(() => {
-    const bucket = {
-      damaged: 0,
-      notWorking: 0,
-      userLeaving: 0,
-      other: 0
-    };
-    selectedEmployeeReturnHistory.forEach((item) => {
-      const note = (item.notes || '').toLowerCase();
-      if (note.includes('damaged')) bucket.damaged += 1;
-      else if (note.includes('not working')) bucket.notWorking += 1;
-      else if (note.includes('user leaving')) bucket.userLeaving += 1;
-      else bucket.other += 1;
-    });
-    return bucket;
-  }, [selectedEmployeeReturnHistory]);
   const selectedEmployeeReplacementCount = useMemo(
     () => selectedEmployeeHistory.filter((item) => (item.notes || '').includes('Replacement for allocation')).length,
     [selectedEmployeeHistory]
@@ -3413,6 +3549,7 @@ function App() {
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
+    { key: 'visitingCards', label: 'Visiting Card', icon: 'VC' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
     { key: 'accounts', label: 'Account Management', icon: 'AM' }
   ].filter((item) => canAccessSection(item.key));
@@ -3670,6 +3807,8 @@ function App() {
       setMessage('You do not have permission to update invoices.');
       return;
     }
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    const hadInvoiceFile = !!(targetInvoice?.invoiceFileData || targetInvoice?.invoiceFileName);
     readInvoiceFile(file, (filePayload) => {
       saveInvoiceAttachment(getInvoiceAttachmentKey(invoiceId, 'invoice'), filePayload.invoiceFileData)
         .catch(() => setMessage('Invoice file could not be stored in this browser.'));
@@ -3678,6 +3817,7 @@ function App() {
           ? { ...invoice, ...filePayload }
           : invoice
       )));
+      setMessage(hadInvoiceFile ? 'Invoice changed successfully.' : 'Invoice uploaded successfully.');
     });
   }
 
@@ -4149,9 +4289,6 @@ function App() {
                   <h3>Asset Inventory</h3>
                   <p className="hint">Structured registry for all devices across brand, model, and lifecycle state.</p>
                 </div>
-                <div className="inventory-head-actions">
-                  <button type="button" className="outline" onClick={resetInventoryFilters}>Reset Filters</button>
-                </div>
               </div>
 
             {hasAdminPermission('inventory.manage') && (
@@ -4386,6 +4523,7 @@ function App() {
                   {type}
                 </button>
               ))}
+              <button type="button" className="outline inventory-reset-inline" onClick={resetInventoryFilters}>Reset Filters</button>
             </div>
 
             <div className="inventory-mini-stats inventory-mini-stats-strong">
@@ -4438,9 +4576,11 @@ function App() {
                 )}
               </div>
               <div className="inventory-pager">
-                <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
                 <span>Page {page} of {totalPages} | Showing {paginatedAssets.length} items</span>
-                <button type="button" className="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+                <div className="inventory-pager-actions">
+                  <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+                  <button type="button" className="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+                </div>
               </div>
             </div>
             </div>
@@ -4480,7 +4620,11 @@ function App() {
                   className="inventory-search"
                   placeholder="Search by employee, email, asset, serial"
                   value={assignmentSearchDraft}
-                  onChange={(e) => setAssignmentSearchDraft(e.target.value)}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    setAssignmentSearchDraft(nextValue);
+                    if (!nextValue.trim()) setAssignmentSearch('');
+                  }}
                 />
                 <SearchableSelect
                   value={assignmentUserFilter}
@@ -4495,51 +4639,112 @@ function App() {
 
               {hasAdminPermission('assignments.manage') && (
                 <div className="create-box assignment-quick-assign">
-                  <h4>{isSuperAdmin ? 'Send Asset To Domain' : 'Quick Assign Asset'}</h4>
+                  <h4>Assign Asset To Employee</h4>
                   <form id="assignment-quick-form" onSubmit={allocate} className="form assignment-inline-form">
-                    {isSuperAdmin ? (
+                    <label className="assignment-field">
+                      <span>Employee Name</span>
+                      <input
+                        list="quick-assign-employee-names"
+                        value={quickAssignForm.employeeName}
+                        onChange={(e) => updateQuickAssignEmployeeField('employeeName', e.target.value)}
+                        placeholder="Type employee name"
+                      />
+                      <datalist id="quick-assign-employee-names">
+                        {quickAssignUsers.map((employee, index) => (
+                          <option key={`employee-name-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.name || ''}>
+                            {employee.employee_code || employee.employee_email || ''}
+                          </option>
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="assignment-field">
+                      <span>Employee Code</span>
+                      <input
+                        list="quick-assign-employee-codes"
+                        value={quickAssignForm.employeeCode}
+                        onChange={(e) => updateQuickAssignEmployeeField('employeeCode', e.target.value)}
+                        placeholder="Type employee code"
+                      />
+                      <datalist id="quick-assign-employee-codes">
+                        {quickAssignUsers.map((employee, index) => (
+                          <option key={`employee-code-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.employee_code || ''}>
+                            {employee.name || employee.employee_email || ''}
+                          </option>
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="assignment-field">
+                      <span>Email</span>
+                      <input
+                        list="quick-assign-employee-emails"
+                        value={quickAssignForm.employeeEmail}
+                        onChange={(e) => updateQuickAssignEmployeeField('employeeEmail', e.target.value)}
+                        placeholder="Type email"
+                      />
+                      <datalist id="quick-assign-employee-emails">
+                        {quickAssignUsers.map((employee, index) => (
+                          <option key={`employee-email-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.employee_email || employee.email || ''}>
+                            {employee.name || employee.employee_code || ''}
+                          </option>
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="assignment-field">
+                      <span>Mobile</span>
+                      <input
+                        value={quickAssignForm.employeeMobile}
+                        onChange={(e) => updateQuickAssignEmployeeField('employeeMobile', e.target.value)}
+                        placeholder="Type mobile"
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Department</span>
+                      <input
+                        value={quickAssignForm.employeeDepartment}
+                        onChange={(e) => updateQuickAssignEmployeeField('employeeDepartment', e.target.value)}
+                        placeholder="Type department"
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Designation</span>
+                      <input
+                        value={quickAssignForm.employeeDesignation}
+                        onChange={(e) => updateQuickAssignEmployeeField('employeeDesignation', e.target.value)}
+                        placeholder="Type designation"
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Asset Type</span>
                       <select
-                        value={quickAssignForm.domainName}
-                        onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, domainName: e.target.value }))}
+                        value={quickAssignForm.assetType}
+                        onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
                       >
-                        <option value="">Select domain</option>
-                        {inventoryDomains.map((domain) => (
-                          <option key={domain} value={domain}>{domain}</option>
+                        <option value="all">All asset types</option>
+                        {quickAssignTypeOptions.map((type) => (
+                          <option key={type} value={type}>{type}</option>
                         ))}
                       </select>
-                    ) : (
+                    </label>
+                    <label className="assignment-field">
+                      <span>Available Asset</span>
                       <SearchableSelect
-                        value={quickAssignForm.userId}
-                        onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, userId: nextValue }))}
-                        options={quickAssignEmployeeOptions}
-                        placeholder={quickAssignEmployeeOptions.length ? 'Select employee' : 'No employees available'}
-                        searchPlaceholder="Search employee..."
-                        emptyMessage="No employee found"
+                        value={quickAssignForm.assetId}
+                        onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
+                        options={quickAssignAssetSelectOptions}
+                        placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
+                        searchPlaceholder="Search asset by name, serial, brand..."
+                        emptyMessage="No asset found"
                       />
-                    )}
-                    <select
-                      value={quickAssignForm.assetType}
-                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
-                    >
-                      <option value="all">All asset types</option>
-                      {quickAssignTypeOptions.map((type) => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                    <SearchableSelect
-                      value={quickAssignForm.assetId}
-                      onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
-                      options={quickAssignAssetSelectOptions}
-                      placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
-                      searchPlaceholder="Search asset by name, serial, brand..."
-                      emptyMessage="No asset found"
-                    />
-                    <input
-                      name="notes"
-                      value={quickAssignForm.notes}
-                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      placeholder={isSuperAdmin ? 'Transfer note...' : 'Reason, team, project, ticket...'}
-                    />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Notes</span>
+                      <input
+                        name="notes"
+                        value={quickAssignForm.notes}
+                        onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Reason, team, project, ticket..."
+                      />
+                    </label>
                     {!isSuperAdmin && (
                       <button
                         type="button"
@@ -4552,9 +4757,9 @@ function App() {
                     )}
                     <button
                       type="submit"
-                      disabled={isSuperAdmin ? (!quickAssignForm.domainName || !quickAssignForm.assetId) : (!quickAssignForm.userId || !quickAssignForm.assetId)}
+                      disabled={(!quickAssignForm.employeeName.trim() && !quickAssignForm.employeeCode.trim()) || !quickAssignForm.assetId}
                     >
-                      {isSuperAdmin ? 'Send To Domain' : 'Assign Asset'}
+                      Assign To Employee
                     </button>
                   </form>
                   {selfieCameraOpen && (
@@ -4574,13 +4779,12 @@ function App() {
                   <p className="assignment-inline-meta">
                     {quickAssignAssetOptions.length} matching available assets
                     {quickAssignForm.assetType !== 'all' ? ` in ${quickAssignForm.assetType}` : ''}
-                    {isSuperAdmin ? ' | domains can assign these assets to employees after transfer' : ''}
                   </p>
                 </div>
               )}
 
               <div className="table-wrap assignment-employee-table">
-                <table>
+                <table key={employeeDirectoryRenderKey}>
                   <thead>
                     <tr>
                       <th>Employee</th>
@@ -4597,7 +4801,9 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {employeeDirectory.map((emp) => (
+                    {employeeDirectory.length === 0 ? (
+                      <tr><td colSpan={11}>No employees matched this search.</td></tr>
+                    ) : employeeDirectory.map((emp) => (
                       <tr key={emp.id}>
                         <td className="employee-cell">
                           <span className="employee-avatar">{(emp.name || 'U').slice(0, 1).toUpperCase()}</span>
@@ -4624,8 +4830,8 @@ function App() {
                         <td>
                           <div className="assignment-row-actions">
                             <button type="button" className="small assignment-view-btn" onClick={() => setSelectedEmployeeId(emp.id)}>View</button>
-                            {hasAdminPermission('assignments.manage') && (
-                              <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Assign</button>
+                            {hasAdminPermission('assignments.manage') && emp.assignedCount > 0 && (
+                              <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Replace</button>
                             )}
                           </div>
                         </td>
@@ -5512,19 +5718,7 @@ function App() {
                 </section>
 
                 <section className="employee-info-card">
-                  <h4>Return Cause Breakdown</h4>
-                  <div className="cause-grid">
-                    <article><span>Damaged</span><strong>{selectedEmployeeReasonBreakdown.damaged}</strong></article>
-                    <article><span>Not Working</span><strong>{selectedEmployeeReasonBreakdown.notWorking}</strong></article>
-                    <article><span>User Leaving</span><strong>{selectedEmployeeReasonBreakdown.userLeaving}</strong></article>
-                    <article><span>Other</span><strong>{selectedEmployeeReasonBreakdown.other}</strong></article>
-                  </div>
-                </section>
-              </div>
-
-              <div className="employee-modal-detail-grid">
-                <section className="employee-info-card">
-                  <h4>Client Details</h4>
+                  <h4>Employee Details</h4>
                   {isEditingEmployee && hasAdminPermission('assignments.manage') ? (
                     <form className="employee-edit-form" onSubmit={updateEmployee}>
                       <label>
@@ -5611,28 +5805,6 @@ function App() {
                     </div>
                   )}
                 </section>
-
-                <section className="employee-info-card">
-                  <h4>Assignment Insights</h4>
-                  <div className="employee-type-list">
-                    {selectedEmployeeAssetBreakdown.length === 0 ? (
-                      <p className="hint">No active assignments yet.</p>
-                    ) : (
-                      selectedEmployeeAssetBreakdown.map(([type, count]) => {
-                        const pct = selectedEmployee.assignedCount ? Math.round((count / selectedEmployee.assignedCount) * 100) : 0;
-                        return (
-                          <div key={type} className="employee-type-row">
-                            <div className="employee-type-meta">
-                              <span>{type}</span>
-                              <strong>{count} ({pct}%)</strong>
-                            </div>
-                            <div className="meter"><span style={{ width: `${Math.max(pct, 5)}%` }} /></div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </section>
               </div>
 
               <section className="employee-modal-assets">
@@ -5670,7 +5842,7 @@ function App() {
                             </td>
                             <td>
                               {hasAdminPermission('assignments.manage')
-                                ? <button type="button" className="small" onClick={() => returnAsset(asset.id)}>Return</button>
+                                ? <button type="button" className="small" onClick={() => openReturnAssetDialog(asset)}>Return</button>
                                 : '-'}
                             </td>
                           </tr>
@@ -5680,79 +5852,6 @@ function App() {
                   </table>
                 </div>
               </section>
-
-              {hasAdminPermission('assignments.manage') && (
-                <section className="employee-info-card">
-                  <h4>Replace Assigned Asset</h4>
-                  <form className="replacement-form" onSubmit={replaceEmployeeAsset}>
-                    <label>
-                      <span>Current Assigned Asset</span>
-                      <select
-                        value={replacementForm.allocationId}
-                        onChange={(e) => setReplacementForm((prev) => ({ ...prev, allocationId: e.target.value }))}
-                        required
-                      >
-                        <option value="">Select active allocation</option>
-                        {selectedEmployee.assignedAssets.map((asset) => (
-                          <option key={asset.id} value={asset.id}>{asset.assetName} ({asset.serial})</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Replacement Asset Type</span>
-                      <select
-                        value={replacementForm.replacementType}
-                        onChange={(e) => setReplacementForm((prev) => ({ ...prev, replacementType: e.target.value, newAssetId: '' }))}
-                      >
-                        <option value="all">All Types</option>
-                        {TYPE_OPTIONS.map((type) => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Replacement Asset</span>
-                      <select
-                        value={replacementForm.newAssetId}
-                        onChange={(e) => setReplacementForm((prev) => ({ ...prev, newAssetId: e.target.value }))}
-                        required
-                      >
-                        <option value="">Select available asset</option>
-                        {replacementAssetOptions.map((asset) => (
-                          <option key={asset.id} value={asset.id}>{asset.name} ({asset.serial})</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Reason</span>
-                      <select
-                        value={replacementForm.reason}
-                        onChange={(e) => setReplacementForm((prev) => ({ ...prev, reason: e.target.value }))}
-                        required
-                      >
-                        <option value="Damaged">Damaged Product</option>
-                        <option value="Not Working">Not Working Product</option>
-                        <option value="User Leaving">User Leaving</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </label>
-                    {replacementForm.reason === 'Other' && (
-                      <label className="replacement-wide">
-                        <span>Reason Detail</span>
-                        <input
-                          value={replacementForm.reasonDetail}
-                          onChange={(e) => setReplacementForm((prev) => ({ ...prev, reasonDetail: e.target.value }))}
-                          placeholder="Explain why asset is being replaced"
-                          required
-                        />
-                      </label>
-                    )}
-                    <div className="employee-edit-actions">
-                      <button type="submit" className="small">Replace Asset</button>
-                    </div>
-                  </form>
-                </section>
-              )}
 
               <section className="employee-modal-assets">
                 <h4>Allocation History</h4>
@@ -5780,6 +5879,126 @@ function App() {
                   </table>
                 </div>
               </section>
+            </section>
+          </div>
+        )}
+
+        {returnForm.allocationId && (
+          <div className="employee-modal-overlay return-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="return-modal-title" onClick={closeReturnAssetDialog}>
+            <section className="employee-modal return-modal" onClick={(e) => e.stopPropagation()}>
+              <header className="replacement-modal-head">
+                <div>
+                  <h3 id="return-modal-title">Return Asset</h3>
+                  <p>{returnForm.assetName || '-'} | {returnForm.serial || '-'}</p>
+                </div>
+                <button type="button" className="small outline" onClick={closeReturnAssetDialog}>Close</button>
+              </header>
+              <form className="return-reason-form" onSubmit={submitReturnAsset}>
+                <label>
+                  <span>Reason</span>
+                  <select
+                    value={returnForm.reason}
+                    onChange={(e) => setReturnForm((prev) => ({ ...prev, reason: e.target.value }))}
+                  >
+                    <option value="Damaged">Damaged</option>
+                    <option value="Not Working">Not Working</option>
+                    <option value="User Leaving">User Leaving</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Notes</span>
+                  <textarea
+                    value={returnForm.notes}
+                    onChange={(e) => setReturnForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    placeholder={returnForm.reason === 'Other' ? 'Type return reason detail' : 'Return notes...'}
+                    rows={3}
+                  />
+                </label>
+                <div className="return-reason-actions">
+                  <button type="submit" className="small">Return Asset</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
+        {selectedReplacementEmployee && (
+          <div className="employee-modal-overlay replacement-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="replacement-modal-title" onClick={() => setSelectedReplacementEmployeeId(null)}>
+            <section className="employee-modal replacement-modal" onClick={(e) => e.stopPropagation()}>
+              <header className="replacement-modal-head">
+                <div>
+                  <h3 id="replacement-modal-title">Replace Assigned Asset</h3>
+                  <p>{selectedReplacementEmployee.name || '-'} | {selectedReplacementEmployee.employee_code || '-'} | {selectedReplacementEmployee.domain_name || '-'}</p>
+                </div>
+                <button type="button" className="small outline" onClick={() => setSelectedReplacementEmployeeId(null)}>Close</button>
+              </header>
+              <form className="replacement-form" onSubmit={replaceEmployeeAsset}>
+                <label className="replacement-current-field">
+                  <span>Current Assigned Asset</span>
+                  <select
+                    value={replacementForm.allocationId}
+                    onChange={(e) => setReplacementForm((prev) => ({ ...prev, allocationId: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select active allocation</option>
+                    {selectedReplacementEmployee.assignedAssets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.assetName} ({asset.serial})</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="replacement-type-field">
+                  <span>Replacement Asset Type</span>
+                  <select
+                    value={replacementForm.replacementType}
+                    onChange={(e) => setReplacementForm((prev) => ({ ...prev, replacementType: e.target.value, newAssetId: '' }))}
+                  >
+                    <option value="all">All Types</option>
+                    {TYPE_OPTIONS.map((type) => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="replacement-asset-field">
+                  <span>Replacement Asset</span>
+                  <select
+                    value={replacementForm.newAssetId}
+                    onChange={(e) => setReplacementForm((prev) => ({ ...prev, newAssetId: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select available asset</option>
+                    {replacementAssetOptions.map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.name} ({asset.serial})</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="replacement-reason-field">
+                  <span>Reason</span>
+                  <select
+                    value={replacementForm.reason}
+                    onChange={(e) => setReplacementForm((prev) => ({ ...prev, reason: e.target.value }))}
+                    required
+                  >
+                    <option value="Damaged">Damaged Product</option>
+                    <option value="Not Working">Not Working Product</option>
+                    <option value="User Leaving">User Leaving</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+                <label className="replacement-wide">
+                  <span>Reason Detail</span>
+                  <input
+                    value={replacementForm.reasonDetail}
+                    onChange={(e) => setReplacementForm((prev) => ({ ...prev, reasonDetail: e.target.value }))}
+                    placeholder="Select Other to type reason detail"
+                    disabled={replacementForm.reason !== 'Other'}
+                    required={replacementForm.reason === 'Other'}
+                  />
+                </label>
+                <div className="employee-edit-actions replacement-actions">
+                  <button type="submit" className="small">Replace Asset</button>
+                </div>
+              </form>
             </section>
           </div>
         )}
@@ -5841,7 +6060,7 @@ function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h3>Recent Allocation Events</h3><span>Latest 8</span></div>
+              <div className="panel-head"><h3>Recent Allocation Events</h3><span>Latest 12</span></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Asset</th><th>Employee</th><th>Event Time</th><th>Action</th></tr></thead>
@@ -5849,7 +6068,12 @@ function App() {
                     {recentActivity.map((a) => (
                       <tr key={a.id}>
                         <td>{a.assetName}</td>
-                        <td>{a.userName}</td>
+                        <td>
+                          <strong>{a.userName}</strong>
+                          <small className="table-subtext">
+                            {[a.employeeCode, a.employeeEmail].filter(Boolean).join(' | ') || '-'}
+                          </small>
+                        </td>
                         <td>{new Date(a.timestampMs).toLocaleString()}</td>
                         <td><span className={`status-pill ${a.action === 'Returned' ? 'returned' : 'allocated'}`}>{a.action}</span></td>
                       </tr>
@@ -5861,13 +6085,95 @@ function App() {
           </section>
         )}
 
+        {section === 'visitingCards' && (
+          <section className="panel wide visiting-card-page">
+            <section className="visiting-card-hero">
+              <div>
+                <h3>Visiting Cards</h3>
+                <p className="hint">Create multiple visiting cards with QR codes that save contact details on scan.</p>
+              </div>
+              <span>{visitingCards.length} cards saved</span>
+            </section>
+
+            <section className="create-box visiting-card-builder">
+              <div className="create-head">
+                <div>
+                  <h4>Create Visiting Card</h4>
+                  <p className="hint">QR uses vCard format, so phone scanners can add the contact directly.</p>
+                </div>
+              </div>
+              <form className="form visiting-card-form" onSubmit={createVisitingCard}>
+                <label className="field">
+                  <span>Name</span>
+                  <input
+                    value={visitingCardForm.name}
+                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Employee name"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Mobile Number</span>
+                  <input
+                    value={visitingCardForm.mobile}
+                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, mobile: e.target.value }))}
+                    placeholder="+91 98765 43210"
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Designation</span>
+                  <input
+                    value={visitingCardForm.designation}
+                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, designation: e.target.value }))}
+                    placeholder="Designation"
+                  />
+                </label>
+                <label className="field visiting-card-address-field">
+                  <span>Office Address</span>
+                  <input
+                    value={visitingCardForm.officeAddress}
+                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, officeAddress: e.target.value }))}
+                    placeholder="Office address"
+                  />
+                </label>
+                <div className="create-actions visiting-card-actions">
+                  <button type="submit">Create Card</button>
+                </div>
+              </form>
+            </section>
+
+            <section className="visiting-card-grid">
+              {visitingCards.length === 0 ? (
+                <div className="empty-state">No visiting cards created yet.</div>
+              ) : (
+                visitingCards.map((card) => (
+                  <article className="visiting-card-preview" key={card.id}>
+                    <div className="visiting-card-info">
+                      <p>NEXTGEN</p>
+                      <h4>{card.name}</h4>
+                      <span>{card.designation || 'Team Member'}</span>
+                      <strong>{card.mobile}</strong>
+                      <small>{card.officeAddress || 'Office address not added'}</small>
+                    </div>
+                    <div className="visiting-card-qr">
+                      <img src={getQrImageUrl(buildVisitingCardVCard(card))} alt={`${card.name} contact QR`} />
+                      <span>Scan to save contact</span>
+                    </div>
+                    <button type="button" className="small danger" onClick={() => deleteVisitingCard(card.id)}>Delete</button>
+                  </article>
+                ))
+              )}
+            </section>
+          </section>
+        )}
+
         {section === 'invoices' && (
           <section className="panel wide invoice-page">
             <section className="expense-hero">
               <div className="expense-nav-pills" aria-label="Invoice tools">
-                <button type="button" className="active">View All Bills</button>
+                <button type="button" className="active" onClick={() => document.querySelector('.expense-filter-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>View All Bills</button>
                 <button type="button" onClick={() => document.querySelector('.invoice-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Add Bill</button>
-                <button type="button" onClick={() => setInvoiceStatusFilter('unpaid')}>Approval Stage 1</button>
               </div>
               <div>
                 <p className="expense-eyebrow">Tracker Bill-Invoice Payment Record All</p>
@@ -5875,81 +6181,145 @@ function App() {
               </div>
             </section>
 
-            <section className="expense-filter-card">
-              <div className="panel-head">
-                <h3>Filters</h3>
-                <button
-                  type="button"
-                  className="outline"
-                  onClick={() => {
-                    setInvoiceVendorFilter('all');
-                    setInvoiceStatusFilter('all');
-                    setInvoiceCategoryFilter('all');
-                    setInvoiceSubcategoryFilter('all');
-                    setInvoiceDateFilter('all');
-                    setInvoiceQuery('');
-                  }}
-                >
-                  Reset Filters
-                </button>
-              </div>
-              <div className="expense-filter-grid">
-                <label>
-                  <span>Brand / Vendor</span>
-                  <select value={invoiceVendorFilter} onChange={(e) => setInvoiceVendorFilter(e.target.value)}>
-                    <option value="all">All</option>
-                    {invoiceVendorOptions.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span>Status</span>
-                  <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)}>
-                    <option value="all">All</option>
-                    <option value="unpaid">Unpaid</option>
-                    <option value="paid">Paid</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Category</span>
-                  <select
-                    value={invoiceCategoryFilter}
-                    onChange={(e) => {
-                      setInvoiceCategoryFilter(e.target.value);
-                      setInvoiceSubcategoryFilter('all');
-                    }}
-                  >
-                    <option value="all">All</option>
-                    {invoiceCategoryOptions.map((category) => (
-                      <option key={category} value={category}>{category}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Subcategory</span>
-                  <select value={invoiceSubcategoryFilter} onChange={(e) => setInvoiceSubcategoryFilter(e.target.value)}>
-                    <option value="all">All</option>
-                    {invoiceSubcategoryOptions.map((subcategory) => (
-                      <option key={subcategory} value={subcategory}>{subcategory}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Date Range</span>
-                  <select value={invoiceDateFilter} onChange={(e) => setInvoiceDateFilter(e.target.value)}>
-                    <option value="all">All Time</option>
-                    <option value="this_month">This Month</option>
-                    <option value="last_30">Last 30 Days</option>
-                    <option value="overdue">Overdue</option>
-                  </select>
-                </label>
-              </div>
-              <input
-                className="expense-wide-search"
-                value={invoiceQuery}
-                onChange={(e) => setInvoiceQuery(e.target.value)}
-                placeholder="Search vendor, bill number, category, subcategory, approval..."
-              />
-            </section>
+            {hasAdminPermission('invoices.manage') && (
+              <section className="create-box invoice-form-card">
+                <div className="create-head">
+                  <div>
+                    <h4>Add Bill</h4>
+                    <p className="hint">Record vendor, amount, due date, and payment state.</p>
+                  </div>
+                </div>
+                <form className="form invoice-form" onSubmit={createInvoice}>
+                  <label className="field">
+                    <span>Vendor</span>
+                    <SearchableSelect
+                      value={invoiceForm.vendor}
+                      onChange={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
+                      options={invoiceVendorDropdownOptions}
+                      placeholder="Select bill description"
+                      searchPlaceholder="Search or type vendor..."
+                      emptyMessage="No vendor found"
+                      allowCreate
+                      createLabel="Add vendor"
+                      selectedLabel={invoiceForm.vendor}
+                      onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Bill Number</span>
+                    <input
+                      value={invoiceForm.billNo}
+                      onChange={(e) => setInvoiceForm((prev) => ({ ...prev, billNo: e.target.value }))}
+                      placeholder="e.g. INV-2026-001"
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Category</span>
+                    <SearchableSelect
+                      value={invoiceForm.category}
+                      onChange={(nextCategory) => {
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          category: nextCategory,
+                          subcategory: INVOICE_SUBCATEGORIES_BY_CATEGORY[nextCategory]?.[0] || ''
+                        }));
+                      }}
+                      options={invoiceCategoryDropdownOptions}
+                      placeholder="Select category"
+                      searchPlaceholder="Search or type category..."
+                      emptyMessage="No category found"
+                      allowCreate
+                      createLabel="Add category"
+                      selectedLabel={invoiceForm.category}
+                      onCreate={(nextCategory) => {
+                        setInvoiceForm((prev) => ({
+                          ...prev,
+                          category: nextCategory,
+                          subcategory: ''
+                        }));
+                      }}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Subcategory</span>
+                    <SearchableSelect
+                      value={invoiceForm.subcategory}
+                      onChange={(value) => setInvoiceForm((prev) => ({ ...prev, subcategory: value }))}
+                      options={invoiceFormSubcategoryDropdownOptions}
+                      placeholder="Select subcategory"
+                      searchPlaceholder="Search or type subcategory..."
+                      emptyMessage="No subcategory found"
+                      allowCreate
+                      createLabel="Add subcategory"
+                      selectedLabel={invoiceForm.subcategory}
+                      onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, subcategory: value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Amount</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={invoiceForm.amount}
+                      onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
+                      placeholder="50000"
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Due Date</span>
+                    <input
+                      type="date"
+                      value={invoiceForm.dueDate}
+                      onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Approval</span>
+                    <SearchableSelect
+                      value={invoiceForm.approvalAssignee}
+                      onChange={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
+                      options={invoiceApproverDropdownOptions}
+                      placeholder="Approver name"
+                      searchPlaceholder="Search or type approver name..."
+                      emptyMessage="No approver found"
+                      allowCreate
+                      createLabel="Add approver"
+                      selectedLabel={invoiceForm.approvalAssignee}
+                      onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
+                    />
+                  </label>
+                  <label className="field invoice-notes">
+                    <span>Notes</span>
+                    <input
+                      value={invoiceForm.notes}
+                      onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
+                      placeholder="PO, branch, renewal, warranty..."
+                    />
+                  </label>
+                  <label className="field invoice-upload-field">
+                    <span>Upload Invoice</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
+                      onChange={(e) => readInvoiceFile(e.target.files?.[0], (filePayload) => {
+                        setInvoiceForm((prev) => {
+                          const hadInvoiceFile = !!(prev.invoiceFileData || prev.invoiceFileName);
+                          setMessage(hadInvoiceFile ? 'Invoice changed successfully.' : 'Invoice uploaded successfully.');
+                          return { ...prev, ...filePayload };
+                        });
+                      })}
+                    />
+                  </label>
+                  <div className="create-actions">
+                    <small>{invoiceStats.unpaid} unpaid bills in tracker</small>
+                    <button type="submit">Save Bill</button>
+                  </div>
+                </form>
+              </section>
+            )}
 
             <section className="expense-summary-row">
               <article><span>Total</span><strong>{formatCurrency(filteredInvoiceStats.totalAmount)}</strong></article>
@@ -5975,141 +6345,81 @@ function App() {
             </section>
 
             <section className="invoice-layout">
-              {hasAdminPermission('invoices.manage') && (
-                <section className="create-box invoice-form-card">
-                  <div className="create-head">
-                    <div>
-                      <h4>Add Bill</h4>
-                      <p className="hint">Record vendor, amount, due date, and payment state.</p>
-                    </div>
-                  </div>
-                  <form className="form invoice-form" onSubmit={createInvoice}>
-                    <label className="field">
-                      <span>Vendor</span>
-                      <SearchableSelect
-                        value={invoiceForm.vendor}
-                        onChange={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
-                        options={invoiceVendorDropdownOptions}
-                        placeholder="Select bill description"
-                        searchPlaceholder="Search or type vendor..."
-                        emptyMessage="No vendor found"
-                        allowCreate
-                        createLabel="Add vendor"
-                        selectedLabel={invoiceForm.vendor}
-                        onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Bill Number</span>
-                      <input
-                        value={invoiceForm.billNo}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, billNo: e.target.value }))}
-                        placeholder="e.g. INV-2026-001"
-                        required
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Category</span>
-                      <SearchableSelect
-                        value={invoiceForm.category}
-                        onChange={(nextCategory) => {
-                          setInvoiceForm((prev) => ({
-                            ...prev,
-                            category: nextCategory,
-                            subcategory: INVOICE_SUBCATEGORIES_BY_CATEGORY[nextCategory]?.[0] || ''
-                          }));
-                        }}
-                        options={invoiceCategoryDropdownOptions}
-                        placeholder="Select category"
-                        searchPlaceholder="Search or type category..."
-                        emptyMessage="No category found"
-                        allowCreate
-                        createLabel="Add category"
-                        selectedLabel={invoiceForm.category}
-                        onCreate={(nextCategory) => {
-                          setInvoiceForm((prev) => ({
-                            ...prev,
-                            category: nextCategory,
-                            subcategory: ''
-                          }));
-                        }}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Subcategory</span>
-                      <SearchableSelect
-                        value={invoiceForm.subcategory}
-                        onChange={(value) => setInvoiceForm((prev) => ({ ...prev, subcategory: value }))}
-                        options={invoiceFormSubcategoryDropdownOptions}
-                        placeholder="Select subcategory"
-                        searchPlaceholder="Search or type subcategory..."
-                        emptyMessage="No subcategory found"
-                        allowCreate
-                        createLabel="Add subcategory"
-                        selectedLabel={invoiceForm.subcategory}
-                        onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, subcategory: value }))}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Amount</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={invoiceForm.amount}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
-                        placeholder="50000"
-                        required
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Due Date</span>
-                      <input
-                        type="date"
-                        value={invoiceForm.dueDate}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Approval</span>
-                      <SearchableSelect
-                        value={invoiceForm.approvalAssignee}
-                        onChange={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
-                        options={invoiceApproverDropdownOptions}
-                        placeholder="Approver name"
-                        searchPlaceholder="Search or type approver name..."
-                        emptyMessage="No approver found"
-                        allowCreate
-                        createLabel="Add approver"
-                        selectedLabel={invoiceForm.approvalAssignee}
-                        onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
-                      />
-                    </label>
-                    <label className="field invoice-notes">
-                      <span>Notes</span>
-                      <input
-                        value={invoiceForm.notes}
-                        onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
-                        placeholder="PO, branch, renewal, warranty..."
-                      />
-                    </label>
-                    <label className="field invoice-upload-field">
-                      <span>Upload Invoice</span>
-                      <input
-                        type="file"
-                        accept=".pdf,.png,.jpg,.jpeg,.webp"
-                        onChange={(e) => readInvoiceFile(e.target.files?.[0], (filePayload) => {
-                          setInvoiceForm((prev) => ({ ...prev, ...filePayload }));
-                        })}
-                      />
-                    </label>
-                    <div className="create-actions">
-                      <small>{invoiceStats.unpaid} unpaid bills in tracker</small>
-                      <button type="submit">Save Bill</button>
-                    </div>
-                  </form>
-                </section>
-              )}
+              <section className="expense-filter-card">
+                <div className="panel-head">
+                  <h3>Filters</h3>
+                  <button
+                    type="button"
+                    className="outline"
+                    onClick={() => {
+                      setInvoiceVendorFilter('all');
+                      setInvoiceStatusFilter('all');
+                      setInvoiceCategoryFilter('all');
+                      setInvoiceSubcategoryFilter('all');
+                      setInvoiceDateFilter('all');
+                      setInvoiceQuery('');
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+                <div className="expense-filter-grid">
+                  <label>
+                    <span>Brand / Vendor</span>
+                    <select value={invoiceVendorFilter} onChange={(e) => setInvoiceVendorFilter(e.target.value)}>
+                      <option value="all">All</option>
+                      {invoiceVendorOptions.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Status</span>
+                    <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)}>
+                      <option value="all">All</option>
+                      <option value="unpaid">Unpaid</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Category</span>
+                    <select
+                      value={invoiceCategoryFilter}
+                      onChange={(e) => {
+                        setInvoiceCategoryFilter(e.target.value);
+                        setInvoiceSubcategoryFilter('all');
+                      }}
+                    >
+                      <option value="all">All</option>
+                      {invoiceCategoryOptions.map((category) => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Subcategory</span>
+                    <select value={invoiceSubcategoryFilter} onChange={(e) => setInvoiceSubcategoryFilter(e.target.value)}>
+                      <option value="all">All</option>
+                      {invoiceSubcategoryOptions.map((subcategory) => (
+                        <option key={subcategory} value={subcategory}>{subcategory}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Date Range</span>
+                    <select value={invoiceDateFilter} onChange={(e) => setInvoiceDateFilter(e.target.value)}>
+                      <option value="all">All Time</option>
+                      <option value="this_month">This Month</option>
+                      <option value="last_30">Last 30 Days</option>
+                      <option value="overdue">Overdue</option>
+                    </select>
+                  </label>
+                </div>
+                <input
+                  className="expense-wide-search"
+                  value={invoiceQuery}
+                  onChange={(e) => setInvoiceQuery(e.target.value)}
+                  placeholder="Search vendor, bill number, category, subcategory, approval..."
+                />
+              </section>
 
               <section className="inventory-table-shell invoice-table-card">
                 <div className="expense-record-head">
@@ -6262,6 +6572,8 @@ function App() {
               && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
             const canAttachPaidProof = ['pending_accounts', 'payment_pending'].includes(approval.statusKey)
               && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
+            const isAccountantUser = !isSuperAdmin && hasInvoiceAccountsApprovalAccess();
+            const canShowPaidProofUpload = isAccountantUser || canAttachPaidProof;
             const hasPaidProof = !!(invoice.paidBillScreenshotData || invoice.paidBillScreenshotName);
             const approvalHistory = Array.isArray(invoice.approvalHistory) ? invoice.approvalHistory : [];
             return (
@@ -6332,20 +6644,22 @@ function App() {
                           onClick={() => markInvoicePaid(invoice.id)}
                           title={invoice.paidBillScreenshotData ? 'Mark this bill as paid' : 'Upload paid bill proof first'}
                         >
-                          {invoice.paidBillScreenshotData ? 'Mark Paid' : 'Upload Proof First'}
+                          {invoice.paidBillScreenshotData ? 'Mark Paid' : 'Upload Payment Proof First'}
                         </button>
                       )}
-                      <label className="small invoice-action-upload">
-                        <span>Upload Invoice</span>
-                        <input
-                          type="file"
-                          accept=".pdf,.png,.jpg,.jpeg,.webp"
-                          onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
-                        />
-                      </label>
-                      {canAttachPaidProof && (
+                      {!isAccountantUser && (
                         <label className="small invoice-action-upload">
-                          <span>{invoice.paidBillScreenshotName ? 'Change Proof' : 'Upload Proof'}</span>
+                          <span>Upload Invoice</span>
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,.webp"
+                            onChange={(e) => updateInvoiceUpload(invoice.id, e.target.files?.[0])}
+                          />
+                        </label>
+                      )}
+                      {canShowPaidProofUpload && (
+                        <label className="small invoice-action-upload">
+                          <span>{invoice.paidBillScreenshotName ? 'Change Payment Proof' : 'Payment Proof'}</span>
                           <input
                             type="file"
                             accept=".png,.jpg,.jpeg,.webp"

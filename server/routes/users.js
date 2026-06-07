@@ -56,8 +56,11 @@ async function getAssignmentEmployeeRows() {
   ]);
 
   const selectEmployeeCode = localUserColumns.includes('employee_code') ? 'employee_code' : 'NULL AS employee_code';
+  const selectPersonalMobile = localUserColumns.includes('personal_mobile_no') ? 'personal_mobile_no' : 'NULL AS personal_mobile_no';
+  const selectDepartment = localUserColumns.includes('department') ? 'department' : 'NULL AS department';
+  const selectDesignation = localUserColumns.includes('designation') ? 'designation' : 'NULL AS designation';
   const localUsers = await query(
-    `SELECT id, name, email, role, domain_name, employee_code_prefix, ${selectEmployeeCode}
+    `SELECT id, name, email, role, domain_name, employee_code_prefix, ${selectEmployeeCode}, ${selectPersonalMobile}, ${selectDepartment}, ${selectDesignation}
      FROM users
      WHERE LOWER(role) = 'user'
      ORDER BY name ASC`
@@ -75,6 +78,7 @@ async function getAssignmentEmployeeRows() {
   const employeeIdColumn = pickFirst(employeeColumns, ['id', 'employee_id', 'emp_id', 'employeeid']);
   const employeeCodeColumn = pickFirst(employeeColumns, ['employee_code', 'employeecode', 'emp_code', 'empcode', 'employee_id', 'code']);
   const employeeEmailColumn = pickFirst(employeeColumns, ['email', 'email_id', 'official_email', 'work_email', 'mail']);
+  const employeeMobileColumn = pickFirst(employeeColumns, ['mobile_no', 'mobile', 'phone', 'phone_no', 'contact_no']);
   const companyColumn = pickFirst(employeeColumns, ['company', 'company_name']);
   const departmentColumn = pickFirst(employeeColumns, ['department', 'dept']);
   const designationColumn = pickFirst(employeeColumns, ['designation', 'title', 'job_title']);
@@ -88,6 +92,7 @@ async function getAssignmentEmployeeRows() {
         \`${employeeNameColumn}\` AS employee_name,
         ${employeeCodeColumn ? `\`${employeeCodeColumn}\`` : 'NULL'} AS employee_code,
         ${employeeEmailColumn ? `\`${employeeEmailColumn}\`` : 'NULL'} AS employee_email,
+        ${employeeMobileColumn ? `\`${employeeMobileColumn}\`` : 'NULL'} AS mobile_no,
         ${companyColumn ? `\`${companyColumn}\`` : 'NULL'} AS company,
         ${departmentColumn ? `\`${departmentColumn}\`` : 'NULL'} AS department,
         ${designationColumn ? `\`${designationColumn}\`` : 'NULL'} AS designation,
@@ -129,6 +134,9 @@ async function getAssignmentOptionRows() {
       name: employeeName || matchedUser?.name || '',
       employee_code: employeeCode || matchedUser?.employee_code || null,
       employee_email: normalizeValue(employeeRow.employee_email) || matchedUser?.email || null,
+      personal_mobile_no: normalizeValue(employeeRow.mobile_no) || matchedUser?.personal_mobile_no || null,
+      department: normalizeValue(employeeRow.department) || matchedUser?.department || null,
+      designation: normalizeValue(employeeRow.designation) || matchedUser?.designation || null,
       label: buildEmployeeLabel(employeeName || matchedUser?.name || '', employeeCode || matchedUser?.employee_code),
       is_assignable: !!matchedUser,
       source: 'it_admin.employees',
@@ -153,6 +161,9 @@ async function getAssignmentOptionRows() {
       name: userRow.name || '',
       employee_code: userRow.employee_code || null,
       employee_email: userRow.email || null,
+      personal_mobile_no: userRow.personal_mobile_no || null,
+      department: userRow.department || null,
+      designation: userRow.designation || null,
       label: buildEmployeeLabel(userRow.name || '', userRow.employee_code || null),
       is_assignable: true,
       source: 'users',
