@@ -16,7 +16,6 @@ import importedTrackerInvoices from './data/importedInvoices.json';
 
 const DEV_API_PORTS = Array.from({ length: 20 }, (_, index) => 4000 + index);
 const API_BASE_STORAGE_KEY = 'itmanage.apiBase';
-const VISITING_CARDS_STORAGE_KEY = 'itmanage.visitingCards';
 const EMPLOYEE_PHOTO_BUCKET = process.env.REACT_APP_EMPLOYEE_PHOTO_BUCKET || 'it-manage-145023120812-ap-south-1-an';
 const EMPLOYEE_PHOTO_REGION = process.env.REACT_APP_EMPLOYEE_PHOTO_REGION || 'ap-south-1';
 const EMPLOYEE_PHOTO_BASE_URL = process.env.REACT_APP_EMPLOYEE_PHOTO_BASE_URL
@@ -778,20 +777,6 @@ function App() {
     invoiceFileName: '',
     invoiceFileData: ''
   });
-  const [visitingCards, setVisitingCards] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(VISITING_CARDS_STORAGE_KEY) || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
-  const [visitingCardForm, setVisitingCardForm] = useState({
-    name: '',
-    mobile: '',
-    designation: '',
-    officeAddress: ''
-  });
   const invoiceAttachmentsLoadedRef = useRef(false);
   const [stores, setStores] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -846,13 +831,6 @@ function App() {
     const timeoutId = setTimeout(() => setMessage(''), 5000);
     return () => clearTimeout(timeoutId);
   }, [message]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(VISITING_CARDS_STORAGE_KEY, JSON.stringify(visitingCards));
-    } catch {
-      setMessage('Could not save visiting cards in this browser.');
-    }
-  }, [visitingCards]);
   useEffect(() => () => {
     if (selfieStreamRef.current) {
       selfieStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -1932,58 +1910,6 @@ function App() {
 
   function getQrImageUrl(data) {
     return `https://api.qrserver.com/v1/create-qr-code/?size=128x128&margin=6&data=${encodeURIComponent(data)}`;
-  }
-
-  function escapeVCardValue(value) {
-    return String(value || '')
-      .replace(/\\/g, '\\\\')
-      .replace(/\n/g, '\\n')
-      .replace(/,/g, '\\,')
-      .replace(/;/g, '\\;');
-  }
-
-  function buildVisitingCardVCard(card) {
-    const name = escapeVCardValue(card.name);
-    return [
-      'BEGIN:VCARD',
-      'VERSION:3.0',
-      `FN:${name}`,
-      `N:${name};;;;`,
-      card.designation ? `TITLE:${escapeVCardValue(card.designation)}` : '',
-      card.mobile ? `TEL;TYPE=CELL:${escapeVCardValue(card.mobile)}` : '',
-      card.officeAddress ? `ADR;TYPE=WORK:;;${escapeVCardValue(card.officeAddress)};;;;` : '',
-      'ORG:NEXTGEN Rentals & Trading Private Limited',
-      'END:VCARD'
-    ].filter(Boolean).join('\n');
-  }
-
-  function createVisitingCard(e) {
-    e.preventDefault();
-    const nextCard = {
-      id: `vc-${Date.now()}`,
-      name: visitingCardForm.name.trim(),
-      mobile: visitingCardForm.mobile.trim(),
-      designation: visitingCardForm.designation.trim(),
-      officeAddress: visitingCardForm.officeAddress.trim(),
-      createdAt: new Date().toISOString()
-    };
-    if (!nextCard.name || !nextCard.mobile) {
-      setMessage('Name and mobile number are required for visiting card.');
-      return;
-    }
-    setVisitingCards((prev) => [nextCard, ...prev]);
-    setVisitingCardForm({
-      name: '',
-      mobile: '',
-      designation: '',
-      officeAddress: ''
-    });
-    setMessage('Visiting card created successfully.');
-  }
-
-  function deleteVisitingCard(cardId) {
-    setVisitingCards((prev) => prev.filter((card) => card.id !== cardId));
-    setMessage('Visiting card deleted.');
   }
 
   function printAssetQr(asset) {
@@ -3549,7 +3475,6 @@ function App() {
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
-    { key: 'visitingCards', label: 'Visiting Card', icon: 'VC' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
     { key: 'accounts', label: 'Account Management', icon: 'AM' }
   ].filter((item) => canAccessSection(item.key));
@@ -6081,89 +6006,6 @@ function App() {
                   </tbody>
                 </table>
               </div>
-            </section>
-          </section>
-        )}
-
-        {section === 'visitingCards' && (
-          <section className="panel wide visiting-card-page">
-            <section className="visiting-card-hero">
-              <div>
-                <h3>Visiting Cards</h3>
-                <p className="hint">Create multiple visiting cards with QR codes that save contact details on scan.</p>
-              </div>
-              <span>{visitingCards.length} cards saved</span>
-            </section>
-
-            <section className="create-box visiting-card-builder">
-              <div className="create-head">
-                <div>
-                  <h4>Create Visiting Card</h4>
-                  <p className="hint">QR uses vCard format, so phone scanners can add the contact directly.</p>
-                </div>
-              </div>
-              <form className="form visiting-card-form" onSubmit={createVisitingCard}>
-                <label className="field">
-                  <span>Name</span>
-                  <input
-                    value={visitingCardForm.name}
-                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, name: e.target.value }))}
-                    placeholder="Employee name"
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span>Mobile Number</span>
-                  <input
-                    value={visitingCardForm.mobile}
-                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, mobile: e.target.value }))}
-                    placeholder="+91 98765 43210"
-                    required
-                  />
-                </label>
-                <label className="field">
-                  <span>Designation</span>
-                  <input
-                    value={visitingCardForm.designation}
-                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, designation: e.target.value }))}
-                    placeholder="Designation"
-                  />
-                </label>
-                <label className="field visiting-card-address-field">
-                  <span>Office Address</span>
-                  <input
-                    value={visitingCardForm.officeAddress}
-                    onChange={(e) => setVisitingCardForm((prev) => ({ ...prev, officeAddress: e.target.value }))}
-                    placeholder="Office address"
-                  />
-                </label>
-                <div className="create-actions visiting-card-actions">
-                  <button type="submit">Create Card</button>
-                </div>
-              </form>
-            </section>
-
-            <section className="visiting-card-grid">
-              {visitingCards.length === 0 ? (
-                <div className="empty-state">No visiting cards created yet.</div>
-              ) : (
-                visitingCards.map((card) => (
-                  <article className="visiting-card-preview" key={card.id}>
-                    <div className="visiting-card-info">
-                      <p>NEXTGEN</p>
-                      <h4>{card.name}</h4>
-                      <span>{card.designation || 'Team Member'}</span>
-                      <strong>{card.mobile}</strong>
-                      <small>{card.officeAddress || 'Office address not added'}</small>
-                    </div>
-                    <div className="visiting-card-qr">
-                      <img src={getQrImageUrl(buildVisitingCardVCard(card))} alt={`${card.name} contact QR`} />
-                      <span>Scan to save contact</span>
-                    </div>
-                    <button type="button" className="small danger" onClick={() => deleteVisitingCard(card.id)}>Delete</button>
-                  </article>
-                ))
-              )}
             </section>
           </section>
         )}
