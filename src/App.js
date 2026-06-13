@@ -968,6 +968,28 @@ function App() {
     return Boolean(normalizeApprovalIdentity(invoice?.approvalAssignee));
   }
 
+  function getInvoiceRaisedDomain(invoice) {
+    const rawDomain =
+      invoice?.domain_name
+      || invoice?.domain
+      || invoice?.raisedDomain
+      || invoice?.sourceDomain
+      || '';
+    if (rawDomain) return normalizeApprovalIdentity(rawDomain);
+
+    const notes = String(invoice?.notes || '');
+    const domainMatch = notes.match(/\bdomain\s*:\s*([^|]+?)(?:\s*\||$)/i);
+    if (domainMatch?.[1]) {
+      return normalizeApprovalIdentity(domainMatch[1]);
+    }
+
+    return '';
+  }
+
+  function isZaptoRaisedInvoice(invoice) {
+    return getInvoiceRaisedDomain(invoice) === 'zapto';
+  }
+
   function isInvoiceApprovalAssignee(invoice) {
     const assignee = normalizeApprovalIdentity(invoice?.approvalAssignee);
     if (!assignee) return true;
@@ -980,7 +1002,10 @@ function App() {
     ));
   }
 
-  function canUseInvoiceApprovalAction(invoice, fallbackAccess) {
+  function canUseInvoiceApprovalAction(invoice, fallbackAccess, allowFallbackOverride = false) {
+    if (allowFallbackOverride && fallbackAccess) {
+      return true;
+    }
     return hasInvoiceApprovalAssignee(invoice)
       ? isInvoiceApprovalAssignee(invoice)
       : fallbackAccess;
@@ -3536,6 +3561,7 @@ function App() {
         invoiceFileData: invoiceForm.invoiceFileData,
         paidBillScreenshotName: '',
         paidBillScreenshotData: '',
+        raisedDomain: currentUserDomain || '',
         approvalStage: 'head',
         approvalStatus: 'pending_head',
         approvalHistory: [{ action: 'Invoice Raised', stage: 'Domain', at: new Date().toISOString() }],
@@ -3570,14 +3596,14 @@ function App() {
   }
 
   function getInvoiceApproval(invoice) {
-    const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
-    const approvalStage = invoice.approvalStage || (invoice.status === 'paid' ? 'payment' : 'domain');
+    const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_head');
+    const approvalStage = invoice.approvalStage || (invoice.status === 'paid' ? 'payment' : 'head');
     const stage = INVOICE_APPROVAL_STAGES.find((item) => item.key === approvalStage);
     const fallbackStageLabel = approvalStage === 'archived'
       ? 'Archived'
       : approvalStage === 'correction'
         ? 'Correction'
-        : 'Domain Approval';
+        : 'Admin Approval';
     return {
       stageKey: approvalStage,
       statusKey: approvalStatus,
@@ -3590,10 +3616,15 @@ function App() {
     const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
     if (!targetInvoice) return;
     const targetApproval = getInvoiceApproval(targetInvoice);
+    const isCurrentUserAdmin = String(user?.role || '').trim().toLowerCase() === 'admin';
     const canActOnHeadStage = targetApproval.stageKey === 'head'
-      && canUseInvoiceApprovalAction(targetInvoice, hasInvoiceHeadApprovalAccess());
+      && canUseInvoiceApprovalAction(
+        targetInvoice,
+        hasInvoiceHeadApprovalAccess(),
+        isSuperAdmin || (isCurrentUserAdmin && isZaptoRaisedInvoice(targetInvoice))
+      );
     const canActOnAccountsStage = targetApproval.stageKey === 'accounts'
-      && canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess());
+      && canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
     const canResubmitBill = action === 'Resubmit' && hasAdminPermission('invoices.manage');
     if (!canActOnHeadStage && !canActOnAccountsStage && !canResubmitBill) {
       setMessage(hasInvoiceApprovalAssignee(targetInvoice)
@@ -3682,34 +3713,6 @@ function App() {
     }));
   }
 
-  function markInvoicePaid(invoiceId) {
-    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
-    if (!canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess())) {
-      setMessage(hasInvoiceApprovalAssignee(targetInvoice)
-        ? `Only ${targetInvoice.approvalAssignee} can update this bill payment.`
-        : 'You do not have permission to update invoice payment.');
-      return;
-    }
-    if (!targetInvoice?.paidBillScreenshotData) {
-      setMessage('Upload paid bill screenshot before marking the bill paid.');
-      return;
-    }
-    setInvoices((prev) => prev.map((invoice) => (
-      invoice.id === invoiceId
-        ? {
-          ...invoice,
-          status: 'paid',
-          approvalStage: 'payment',
-          approvalStatus: 'completed',
-          approvalHistory: [
-            ...(Array.isArray(invoice.approvalHistory) ? invoice.approvalHistory : []),
-            { action: 'Marked Paid', stage: 'Payment', at: new Date().toISOString() }
-          ]
-        }
-        : invoice
-    )));
-  }
-
   function deleteInvoice(invoiceId) {
     if (!canDeleteInvoices()) {
       setMessage('Only admin can delete bill records.');
@@ -3772,6 +3775,38 @@ function App() {
       setMessage('Paid bill screenshot attached.');
     };
     reader.readAsDataURL(file);
+  }
+
+  function updateInvoicePaymentStatus(invoiceId, nextStatus) {
+    const targetInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    if (!targetInvoice) return;
+    const targetApproval = getInvoiceApproval(targetInvoice);
+    const canManagePayment = targetApproval.stageKey === 'payment'
+      && canUseInvoiceApprovalAction(targetInvoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
+    if (!canManagePayment) {
+      setMessage(hasInvoiceApprovalAssignee(targetInvoice)
+        ? `Only ${targetInvoice.approvalAssignee} can update payment status.`
+        : 'You do not have permission to update payment status.');
+      return;
+    }
+
+    const normalizedStatus = nextStatus === 'paid' ? 'paid' : 'unpaid';
+    const actionLabel = normalizedStatus === 'paid' ? 'Marked Paid' : 'Marked Unpaid';
+    setInvoices((prev) => prev.map((invoice) => {
+      if (invoice.id !== invoiceId) return invoice;
+      const history = Array.isArray(invoice.approvalHistory) ? invoice.approvalHistory : [];
+      return {
+        ...invoice,
+        status: normalizedStatus,
+        approvalStage: 'payment',
+        approvalStatus: normalizedStatus === 'paid' ? 'completed' : 'payment_pending',
+        approvalHistory: [
+          ...history,
+          { action: actionLabel, stage: 'Payment', at: new Date().toISOString() }
+        ]
+      };
+    }));
+    setMessage(`Payment status updated to ${normalizedStatus}.`);
   }
 
   async function showPaidBillScreenshot(invoice) {
@@ -6404,16 +6439,19 @@ function App() {
             const invoice = selectedInvoiceDetail;
             const approval = getInvoiceApproval(invoice);
             const canApproveHead = approval.statusKey === 'pending_head'
-              && canUseInvoiceApprovalAction(invoice, hasInvoiceHeadApprovalAccess());
+              && canUseInvoiceApprovalAction(
+                invoice,
+                hasInvoiceHeadApprovalAccess(),
+                isSuperAdmin || (String(user?.role || '').trim().toLowerCase() === 'admin' && isZaptoRaisedInvoice(invoice))
+              );
             const canApproveAccounts = approval.statusKey === 'pending_accounts'
-              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
             const canApprove = canApproveHead || canApproveAccounts;
             const needsResubmit = ['rejected', 'correction'].includes(approval.statusKey);
-            const canPay = approval.statusKey === 'payment_pending'
-              && invoice.status !== 'paid'
-              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
-            const canAttachPaidProof = ['pending_accounts', 'payment_pending'].includes(approval.statusKey)
-              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess());
+            const canAttachPaidProof = ['pending_accounts', 'payment_pending', 'completed'].includes(approval.statusKey)
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
+            const canUpdatePaymentStatus = approval.stageKey === 'payment'
+              && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
             const isAccountantUser = !isSuperAdmin && hasInvoiceAccountsApprovalAccess();
             const canShowPaidProofUpload = isAccountantUser || canAttachPaidProof;
             const hasPaidProof = !!(invoice.paidBillScreenshotData || invoice.paidBillScreenshotName);
@@ -6478,17 +6516,6 @@ function App() {
                       {needsResubmit && (
                         <button type="button" className="small" onClick={() => updateInvoiceApproval(invoice.id, 'Resubmit')}>Resubmit</button>
                       )}
-                      {canPay && (
-                        <button
-                          type="button"
-                          className="small"
-                          disabled={!invoice.paidBillScreenshotData}
-                          onClick={() => markInvoicePaid(invoice.id)}
-                          title={invoice.paidBillScreenshotData ? 'Mark this bill as paid' : 'Upload paid bill proof first'}
-                        >
-                          {invoice.paidBillScreenshotData ? 'Mark Paid' : 'Upload Payment Proof First'}
-                        </button>
-                      )}
                       {!isAccountantUser && (
                         <label className="small invoice-action-upload">
                           <span>Upload Invoice</span>
@@ -6508,6 +6535,24 @@ function App() {
                             onChange={(e) => updatePaidBillScreenshot(invoice.id, e.target.files?.[0])}
                           />
                         </label>
+                      )}
+                      {canUpdatePaymentStatus && (
+                        <>
+                          <button
+                            type="button"
+                            className="small"
+                            onClick={() => updateInvoicePaymentStatus(invoice.id, 'paid')}
+                          >
+                            Mark Paid
+                          </button>
+                          <button
+                            type="button"
+                            className="small outline"
+                            onClick={() => updateInvoicePaymentStatus(invoice.id, 'unpaid')}
+                          >
+                            Mark Unpaid
+                          </button>
+                        </>
                       )}
                       {canDeleteInvoices() && (
                         <button
