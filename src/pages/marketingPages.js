@@ -10,9 +10,8 @@ export const HEADER_NAV_ITEMS = [
 ];
 
 export const PLATFORM_DROPDOWN_ITEMS = [
-  { label: 'Asset Tracking', path: '/platform/asset-tracking' },
-  { label: 'Global Fleet', path: '/platform/global-fleet' },
-  { label: 'Security Ops', path: '/platform/security-ops' }
+  { label: 'IT Manage', path: 'https://it-manage.vercel.app', external: true },
+  { label: 'Visiting Cards', path: 'https://visiting-card-swart.vercel.app/', external: true }
 ];
 
 export const MARKETING_PATHS = [

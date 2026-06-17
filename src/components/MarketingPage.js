@@ -23,10 +23,12 @@ const MarketingPage = ({ page, currentPath, navigate, onLogin }) => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [currentPath]);
 
-  const handleNavigate = (event, path) => {
-    event.preventDefault();
+  const handleNavigate = (event, path, external = false) => {
+    if (!external) {
+      event.preventDefault();
+    }
     setPlatformOpen(false);
-    navigate(path);
+    if (!external) navigate(path);
   };
 
   return (
@@ -59,7 +61,13 @@ const MarketingPage = ({ page, currentPath, navigate, onLogin }) => {
             {platformOpen && (
               <div className="lp-dropdown">
                 {PLATFORM_DROPDOWN_ITEMS.map((item) => (
-                  <a key={item.path} href={item.path} onClick={(event) => handleNavigate(event, item.path)}>
+                  <a
+                    key={item.path}
+                    href={item.path}
+                    onClick={(event) => handleNavigate(event, item.path, item.external)}
+                    target={item.external ? '_blank' : undefined}
+                    rel={item.external ? 'noopener noreferrer' : undefined}
+                  >
                     {item.label}
                   </a>
                 ))}

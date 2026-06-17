@@ -1011,6 +1011,17 @@ function App() {
       : fallbackAccess;
   }
 
+  function hasApprovalForCurrentStage(invoice) {
+    const approval = getInvoiceApproval(invoice);
+    const currentStageLabel = String(approval.stageLabel || '').trim().toLowerCase();
+    if (!currentStageLabel) return false;
+    return Array.isArray(invoice?.approvalHistory)
+      && invoice.approvalHistory.some((entry) => (
+        String(entry?.action || '').trim().toLowerCase() === 'approve'
+        && String(entry?.stage || '').trim().toLowerCase() === currentStageLabel
+      ));
+  }
+
   function canAccessSection(sectionKey) {
     const sectionPermissionMap = {
       overview: 'overview.view',
@@ -3634,10 +3645,10 @@ function App() {
     }
 
     let reason = '';
-    if (action === 'Reject') {
-      reason = window.prompt('Enter rejection reason');
+    if (action === 'Reject' || action === 'Approve') {
+      reason = window.prompt(action === 'Reject' ? 'Enter rejection reason' : 'Enter approval reason');
       if (!reason || !reason.trim()) {
-        setMessage('Rejection reason is required.');
+        setMessage(action === 'Reject' ? 'Rejection reason is required.' : 'Approval reason is required.');
         return;
       }
       reason = reason.trim();
@@ -6446,7 +6457,7 @@ function App() {
               );
             const canApproveAccounts = approval.statusKey === 'pending_accounts'
               && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
-            const canApprove = canApproveHead || canApproveAccounts;
+            const canApprove = (canApproveHead || canApproveAccounts) && !hasApprovalForCurrentStage(invoice);
             const needsResubmit = ['rejected', 'correction'].includes(approval.statusKey);
             const canAttachPaidProof = ['pending_accounts', 'payment_pending', 'completed'].includes(approval.statusKey)
               && canUseInvoiceApprovalAction(invoice, hasInvoiceAccountsApprovalAccess(), isSuperAdmin);
