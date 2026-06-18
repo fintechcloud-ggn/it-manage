@@ -113,6 +113,8 @@ html {
 
 .lp-nav-links {
     display: flex;
+    flex: 1;
+    justify-content: center;
     gap: 2.5rem;
     align-items: center;
 }

@@ -49,6 +49,8 @@ const LandingPage = ({ onLogin, navigate, currentPath }) => {
         if (!external && navigate) navigate(path);
     };
 
+    const showAuthActions = String(currentPath || '').trim() !== MARKETING_HOME_PATH;
+
     return (
         <div className="landing-container light-mode">
             <div className="lp-bg-elements">
@@ -103,10 +105,12 @@ const LandingPage = ({ onLogin, navigate, currentPath }) => {
                         </a>
                     ))}
                 </div>
-                <div className="lp-nav-actions">
-                    <button className="btn-ghost" onClick={onLogin}>Log in</button>
-                    <button className="btn-primary" onClick={onLogin}>Get Started</button>
-                </div>
+                {showAuthActions && (
+                    <div className="lp-nav-actions">
+                        <button className="btn-ghost" onClick={onLogin}>Log in</button>
+                        <button className="btn-primary" onClick={onLogin}>Get Started</button>
+                    </div>
+                )}
             </nav>
 
             <section className="lp-hero">
