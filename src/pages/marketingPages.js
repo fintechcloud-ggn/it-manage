@@ -10,7 +10,8 @@ export const HEADER_NAV_ITEMS = [
 ];
 
 export const PLATFORM_DROPDOWN_ITEMS = [
-  { label: 'IT Manage', path: 'https://it-manage.vercel.app', external: true },
+  // Use internal marketing path so header/auth actions appear on navigation
+  { label: 'IT Manage', path: '/platform', external: false },
   { label: 'Visiting Cards', path: 'https://visiting-card-swart.vercel.app/', external: true },
   { label: 'HRMS', path: '#' }
 ];
