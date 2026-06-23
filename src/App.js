@@ -697,6 +697,16 @@ function getGeolocationMapUrl(geolocation) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(value)}`;
 }
 
+function buildQrPlainText(lines) {
+  return lines
+    .map(([label, value]) => {
+      const text = String(value ?? '').trim();
+      return text ? `${label}: ${text}` : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
 function buildAssignmentSelectionValue(userOption) {
   if (userOption?.selection_value) return String(userOption.selection_value);
   if (userOption?.local_user_id) return String(userOption.local_user_id);
@@ -792,7 +802,6 @@ function App() {
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
   const [quickAssetQuery, setQuickAssetQuery] = useState('');
-  const [toUpasanaQuery, setToUpasanaQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterBrand, setFilterBrand] = useState('all');
@@ -900,6 +909,12 @@ function App() {
   const [selectedModelId, setSelectedModelId] = useState('');
   const [customModelName, setCustomModelName] = useState('');
   const [assetDomainName, setAssetDomainName] = useState('');
+  const [assetDraft, setAssetDraft] = useState({
+    serial: '',
+    vendor: '',
+    notes: ''
+  });
+  const [editingAsset, setEditingAsset] = useState(null);
   const [showBulkFormatMenu, setShowBulkFormatMenu] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
@@ -940,6 +955,110 @@ function App() {
   function canDeleteInvoices() {
     if (isSuperAdmin) return true;
     return String(user?.role || '').trim().toLowerCase() === 'admin';
+  }
+
+  function resetAssetForm() {
+    setEditingAsset(null);
+    setSelectedAssetType('');
+    setCustomAssetType('');
+    setSelectedBrandId('');
+    setCustomBrandName('');
+    setSelectedModelId('');
+    setCustomModelName('');
+    setAssetDraft({
+      serial: '',
+      vendor: '',
+      notes: ''
+    });
+    setAssetDomainName(currentUserDomain || '');
+  }
+
+  function startEditAsset(asset) {
+    if (!hasAdminPermission('inventory.manage')) return;
+    const assetType = String(asset?.type || '').trim();
+    const assetBrandId = asset?.brand_id ? String(asset.brand_id) : '';
+    const matchedBrand = assetBrandId
+      ? brands.find((brand) => String(brand.id) === assetBrandId)
+      : brands.find((brand) => normalizeBrandName(brand.name) === normalizeBrandName(asset?.brand_name));
+    const assetModelId = asset?.model_id ? String(asset.model_id) : '';
+    const matchedModel = matchedBrand
+      ? (matchedBrand.models || []).find((model) => String(model.id) === assetModelId)
+      : null;
+    const knownType = assetType && assetTypeDropdownOptions.some((option) => option.value === assetType);
+
+    setEditingAsset(asset || null);
+    setSelectedAssetType(knownType ? assetType : OTHER_ASSET_TYPE_VALUE);
+    setCustomAssetType(knownType ? '' : assetType);
+
+    if (matchedBrand) {
+      setSelectedBrandId(String(matchedBrand.id));
+      setCustomBrandName('');
+    } else {
+      setSelectedBrandId(asset?.brand_name ? OTHER_BRAND_VALUE : '');
+      setCustomBrandName(String(asset?.brand_name || '').trim());
+    }
+
+    if (matchedModel) {
+      setSelectedModelId(String(matchedModel.id));
+      setCustomModelName('');
+    } else {
+      setSelectedModelId(asset?.model_name ? OTHER_MODEL_VALUE : '');
+      setCustomModelName(String(asset?.model_name || '').trim());
+    }
+
+    setAssetDraft({
+      serial: String(asset?.serial || ''),
+      vendor: String(asset?.vendor || ''),
+      notes: String(asset?.notes || '')
+    });
+    setAssetDomainName(String(asset?.domain_name || currentUserDomain || '').trim().toLowerCase());
+    setMessage(`Editing asset ${asset?.name || asset?.serial || asset?.id || ''}`.trim());
+
+    const formAnchor = document.querySelector('.inventory-create-top');
+    if (formAnchor?.scrollIntoView) {
+      formAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  async function deleteAsset(asset) {
+    if (!hasAdminPermission('inventory.manage')) {
+      setMessage('You do not have permission to delete assets.');
+      return;
+    }
+    const assetLabel = asset?.name || asset?.serial || `Asset #${asset?.id}`;
+    const confirmed = window.confirm(`Delete asset "${assetLabel}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const res = await apiFetch(`/api/assets/${asset.id}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    if (res.status === 401) {
+      setToken('');
+      setUser(null);
+      setAuditLogs([]);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setAuthView('login');
+      setMessage('Session expired or unauthorized. Please login again as admin.');
+      return;
+    }
+    if (res.status === 403) {
+      setMessage('You do not have permission to delete this asset.');
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setMessage(body.error || 'Delete asset failed');
+      return;
+    }
+
+    if (editingAsset?.id === asset.id) {
+      resetAssetForm();
+    }
+    setMessage('Asset deleted');
+    fetchAssets();
+    fetchAuditLogs();
   }
 
   function normalizeApprovalIdentity(value) {
@@ -1677,9 +1796,9 @@ function App() {
     const selectedModel = selectedModelId === OTHER_MODEL_VALUE
       ? null
       : modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
-    const serial = e.target.serial.value.trim();
-    const vendor = e.target.vendor.value.trim();
-    const notes = e.target.notes.value.trim();
+    const serial = assetDraft.serial.trim();
+    const vendor = assetDraft.vendor.trim();
+    const notes = assetDraft.notes.trim();
     const domain_name = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
     if (!type) {
       setMessage('Select asset type.');
@@ -1722,10 +1841,21 @@ function App() {
       return;
     }
     const name = (createdModelName || createdBrandName || type || 'Asset').trim();
-    const res = await apiFetch('/api/assets', {
-      method: 'POST',
+    const isEditing = Boolean(editingAsset?.id);
+    const res = await apiFetch(isEditing ? `/api/assets/${editingAsset.id}` : '/api/assets', {
+      method: isEditing ? 'PUT' : 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ name, type, serial, vendor, notes, brand_id, model_id, domain_name })
+      body: JSON.stringify({
+        name,
+        type,
+        serial,
+        vendor,
+        notes,
+        brand_id,
+        model_id,
+        domain_name,
+        status: isEditing ? editingAsset.status : 'available'
+      })
     });
     const body = await res.json().catch(() => ({}));
     if (res.status === 401) {
@@ -1739,21 +1869,14 @@ function App() {
       return;
     }
     if (res.status === 403) {
-      setMessage('You do not have permission to create assets for this domain.');
+      setMessage(isEditing ? 'You do not have permission to edit assets for this domain.' : 'You do not have permission to create assets for this domain.');
       return;
     }
-    setMessage(res.ok ? 'Asset created' : body.error || 'Create asset failed');
+    setMessage(res.ok ? (isEditing ? 'Asset updated' : 'Asset created') : body.error || (isEditing ? 'Update asset failed' : 'Create asset failed'));
     if (res.ok) {
       fetchAssets();
       fetchAuditLogs();
-      e.target.reset();
-      setSelectedBrandId('');
-      setCustomBrandName('');
-      setSelectedAssetType('');
-      setCustomAssetType('');
-      setSelectedModelId('');
-      setCustomModelName('');
-      setAssetDomainName(currentUserDomain || '');
+      resetAssetForm();
       fetchBrands();
     }
   }
@@ -1920,28 +2043,28 @@ function App() {
   }
 
   function buildAssetQrData(asset) {
-    return JSON.stringify({
-      id: asset.id,
-      name: asset.name,
-      type: asset.type,
-      serial: asset.serial
-    });
+    return buildQrPlainText([
+      ['Asset ID', asset.id],
+      ['Name', asset.name],
+      ['Type', asset.type],
+      ['Serial', asset.serial]
+    ]);
   }
 
   function buildAssignedAssetQrData(asset, employee, assignmentAuditLog = null) {
     const assignmentActor = getAllocationAssignmentActor(asset, assignmentAuditLog);
-    return JSON.stringify({
-      allocationId: asset.id,
-      employeeName: employee?.name || '-',
-      employeeEmail: employee?.email || '-',
-      assetName: asset.assetName,
-      assetType: asset.type,
-      serialNumber: asset.serial,
-      assignedAt: asset.allocatedAt ? new Date(asset.allocatedAt).toISOString() : null,
-      assignedByAdmin: assignmentActor.name || 'Unknown',
-      assignedByAdminId: assignmentActor.userId,
-      assignedByRole: assignmentActor.role
-    });
+    return buildQrPlainText([
+      ['Allocation ID', asset.id],
+      ['Employee Name', employee?.name],
+      ['Employee Email', employee?.email],
+      ['Asset Name', asset.assetName],
+      ['Asset Type', asset.type],
+      ['Serial Number', asset.serial],
+      ['Assigned At', asset.allocatedAt ? new Date(asset.allocatedAt).toISOString() : null],
+      ['Assigned By', assignmentActor.name || 'Unknown'],
+      ['Assigned By ID', assignmentActor.userId],
+      ['Assigned By Role', assignmentActor.role]
+    ]);
   }
 
   function getQrImageUrl(data) {
@@ -3196,21 +3319,6 @@ function App() {
     const uniqueBrands = new Set(filteredSortedAssets.map((a) => a.brand_name).filter(Boolean)).size;
     return { total, available, allocated, uniqueBrands };
   }, [filteredSortedAssets]);
-  const filteredToUpasanaRows = useMemo(() => {
-    const q = toUpasanaQuery.trim().toLowerCase();
-    if (!q) return uploadedEmployeeAssets;
-    return uploadedEmployeeAssets.filter((row) => (
-      `${row.source_sheet || ''} ${row.source_row_number || ''} ${row.employee_name || ''} ${row.employee_code || ''} ${row.domain_name || ''} ${row.date_of_joining || ''} ${row.location || ''} ${row.department || ''} ${row.designation || ''} ${row.mobile_no || ''} ${row.email || ''} ${row.laptop_brand || ''} ${row.laptop_product_no || ''} ${row.laptop_serial_no || ''} ${row.mobile_assigned || ''}`
-        .toLowerCase()
-        .includes(q)
-    ));
-  }, [uploadedEmployeeAssets, toUpasanaQuery]);
-  const toUpasanaStats = useMemo(() => {
-    const uniqueEmployees = new Set(filteredToUpasanaRows.map((row) => row.employee_code || row.employee_name).filter(Boolean)).size;
-    const laptops = filteredToUpasanaRows.filter((row) => row.laptop_serial_no || row.laptop_brand).length;
-    const mobiles = filteredToUpasanaRows.filter((row) => row.mobile_no).length;
-    return { rows: filteredToUpasanaRows.length, uniqueEmployees, laptops, mobiles };
-  }, [filteredToUpasanaRows]);
   const assignmentKpiCards = useMemo(() => {
     const totalAssets = Math.max(stats.total, 1);
     const totalEmployees = Math.max(employees.length, 1);
@@ -3499,6 +3607,32 @@ function App() {
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', 'inventory_export.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportAssignmentCsv() {
+    const header = ['Employee', 'Code', 'Email', 'Mobile', 'Department', 'Designation', 'Geolocation', 'Role', 'Assigned Assets', 'Latest Assignment'];
+    const rows = employeeDirectory.map((employee) => ([
+      employee.name || '',
+      employee.employee_code || '',
+      employee.email || '',
+      employee.personal_mobile_no || '',
+      employee.department || '',
+      employee.designation || '',
+      employee.geolocation || employee.location || '',
+      employee.role || '',
+      employee.assignedAssets.map((asset) => `${asset.assetName} (${asset.serial || '-'})`).join(' | '),
+      employee.latestAllocatedAt ? employee.latestAllocatedAt.toLocaleString() : ''
+    ]));
+    const csv = buildExcelCsv([header, ...rows]);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'assignment_directory_export.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -4266,11 +4400,15 @@ function App() {
               <div className="create-box inventory-create-top">
                 <div className="create-head">
                   <div>
-                    <h4>Add New Asset</h4>
-                    <p className="hint">Register device details, brand/model mapping, and serial in one flow.</p>
+                    <h4>{editingAsset ? 'Edit Asset' : 'Add New Asset'}</h4>
+                    <p className="hint">
+                      {editingAsset
+                        ? 'Update asset details, brand/model mapping, serial, and domain in one flow.'
+                        : 'Register device details, brand/model mapping, and serial in one flow.'}
+                    </p>
                   </div>
                   <div className="create-meta">
-                    <span>{displayedAssetType || 'Select asset type'}</span>
+                    <span>{editingAsset ? 'Editing mode' : (displayedAssetType || 'Select asset type')}</span>
                     <span>{brandsBySelectedType.length} brands</span>
                     <span>{modelOptionsByType.length} models</span>
                   </div>
@@ -4354,11 +4492,22 @@ function App() {
                   </label>
                   <label className="field">
                     <span>Serial Number</span>
-                    <input name="serial" placeholder="e.g. SN-AX9-22190" required />
+                    <input
+                      name="serial"
+                      placeholder="e.g. SN-AX9-22190"
+                      value={assetDraft.serial}
+                      onChange={(e) => setAssetDraft((prev) => ({ ...prev, serial: e.target.value }))}
+                      required
+                    />
                   </label>
                   <label className="field">
                     <span>Vendor (optional)</span>
-                    <input name="vendor" placeholder="e.g. Dell Partner, Amazon, Local Supplier" />
+                    <input
+                      name="vendor"
+                      placeholder="e.g. Dell Partner, Amazon, Local Supplier"
+                      value={assetDraft.vendor}
+                      onChange={(e) => setAssetDraft((prev) => ({ ...prev, vendor: e.target.value }))}
+                    />
                   </label>
                   <label className="field">
                     <span>Domain</span>
@@ -4379,7 +4528,12 @@ function App() {
                   </label>
                   <label className="field">
                     <span>Notes</span>
-                    <input name="notes" placeholder="Branch, team, procurement, warranty..." />
+                    <input
+                      name="notes"
+                      placeholder="Branch, team, procurement, warranty..."
+                      value={assetDraft.notes}
+                      onChange={(e) => setAssetDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                    />
                   </label>
                   <div className="field asset-bulk-upload">
                     <span>Bulk Upload Assets</span>
@@ -4423,12 +4577,14 @@ function App() {
                   <div className="create-actions">
                     <small>
                       {selectedBrandId
-                        ? `Adding ${displayedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
+                        ? `${editingAsset ? 'Updating' : 'Adding'} ${displayedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
                         : `Choose any ${displayedAssetType || 'asset'} model or narrow by brand`}
                     </small>
                     <div className="create-action-buttons">
-                      <button type="button" className="outline" onClick={exportInventoryCsv}>Export CSV</button>
-                      <button type="submit">Add Asset</button>
+                      {editingAsset && (
+                        <button type="button" className="outline" onClick={resetAssetForm}>Cancel Edit</button>
+                      )}
+                      <button type="submit">{editingAsset ? 'Save Changes' : 'Add Asset'}</button>
                     </div>
                   </div>
                 </form>
@@ -4494,7 +4650,10 @@ function App() {
                   {type}
                 </button>
               ))}
-              <button type="button" className="outline inventory-reset-inline" onClick={resetInventoryFilters}>Reset Filters</button>
+              <div className="inventory-type-actions">
+                <button type="button" className="outline inventory-export-inline" onClick={exportInventoryCsv}>Export CSV</button>
+                <button type="button" className="outline inventory-reset-inline" onClick={resetInventoryFilters}>Reset Filters</button>
+              </div>
             </div>
 
             <div className="inventory-mini-stats inventory-mini-stats-strong">
@@ -4508,7 +4667,7 @@ function App() {
               <div className="table-wrap">
                 {isSimInventoryView ? (
                   <table>
-                    <thead><tr><th>S. No.</th><th>CONNECTION NUMBER</th><th>CONNECTION TYPE</th><th>STATUS</th><th>SIM NUMBER</th><th>NAME</th><th>SOURCE</th></tr></thead>
+                    <thead><tr><th>S. No.</th><th>CONNECTION NUMBER</th><th>CONNECTION TYPE</th><th>STATUS</th><th>SIM NUMBER</th><th>NAME</th><th>SOURCE</th><th>Action</th></tr></thead>
                     <tbody>
                       {paginatedAssets.map((a, index) => {
                         const sim = getSimAssetDetails(a);
@@ -4521,6 +4680,16 @@ function App() {
                             <td>{sim.simNumber || '-'}</td>
                             <td>{sim.assignedName || '-'}</td>
                             <td>{sim.source || '-'}</td>
+                            <td>
+                              <div className="asset-row-actions">
+                                {hasAdminPermission('inventory.manage') ? (
+                                  <>
+                                    <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
+                                    <button type="button" className="small danger" onClick={() => deleteAsset(a)}>Delete</button>
+                                  </>
+                                ) : '-'}
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
@@ -4528,7 +4697,7 @@ function App() {
                   </table>
                 ) : (
                   <table>
-                    <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Assigned To</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Assigned To</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th><th>Action</th></tr></thead>
                     <tbody>
                       {paginatedAssets.map((a) => (
                         <tr key={a.id}>
@@ -4538,6 +4707,16 @@ function App() {
                             <div className="asset-qr-cell">
                               <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
                               <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="asset-row-actions">
+                              {hasAdminPermission('inventory.manage') ? (
+                                <>
+                                  <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
+                                  <button type="button" className="small danger" onClick={() => deleteAsset(a)}>Delete</button>
+                                </>
+                              ) : '-'}
                             </div>
                           </td>
                         </tr>
@@ -4605,7 +4784,7 @@ function App() {
                   searchPlaceholder="Search employee..."
                   emptyMessage="No employee found"
                 />
-                <button type="submit" className="small">Search</button>
+                <button type="button" className="small" onClick={exportAssignmentCsv}>Export CSV</button>
               </form>
 
               {hasAdminPermission('assignments.manage') && (
@@ -4631,34 +4810,20 @@ function App() {
                     <label className="assignment-field">
                       <span>Employee Code</span>
                       <input
-                        list="quick-assign-employee-codes"
+                        type="text"
                         value={quickAssignForm.employeeCode}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeCode', e.target.value)}
                         placeholder="Type employee code"
                       />
-                      <datalist id="quick-assign-employee-codes">
-                        {quickAssignUsers.map((employee, index) => (
-                          <option key={`employee-code-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.employee_code || ''}>
-                            {employee.name || employee.employee_email || ''}
-                          </option>
-                        ))}
-                      </datalist>
                     </label>
                     <label className="assignment-field">
                       <span>Email</span>
                       <input
-                        list="quick-assign-employee-emails"
+                        type="text"
                         value={quickAssignForm.employeeEmail}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeEmail', e.target.value)}
                         placeholder="Type email"
                       />
-                      <datalist id="quick-assign-employee-emails">
-                        {quickAssignUsers.map((employee, index) => (
-                          <option key={`employee-email-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.employee_email || employee.email || ''}>
-                            {employee.name || employee.employee_code || ''}
-                          </option>
-                        ))}
-                      </datalist>
                     </label>
                     <label className="assignment-field">
                       <span>Mobile</span>
@@ -4713,7 +4878,6 @@ function App() {
                         name="notes"
                         value={quickAssignForm.notes}
                         onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Reason, team, project, ticket..."
                       />
                     </label>
                     {!isSuperAdmin && (
@@ -4726,12 +4890,14 @@ function App() {
                         Live Selfie
                       </button>
                     )}
-                    <button
-                      type="submit"
-                      disabled={(!quickAssignForm.employeeName.trim() && !quickAssignForm.employeeCode.trim()) || !quickAssignForm.assetId}
-                    >
-                      Assign To Employee
-                    </button>
+                    <div className="assignment-submit-row">
+                      <button
+                        type="submit"
+                        className="assignment-submit-btn"
+                      >
+                        Assign To Employee
+                      </button>
+                    </div>
                   </form>
                   {selfieCameraOpen && (
                     <div className="selfie-camera-box quick-selfie-camera">
@@ -4808,132 +4974,6 @@ function App() {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section className="panel wide assignment-directory-panel">
-              <div className="inventory-head">
-                <div>
-                  <h3>Workbook data</h3>
-                  <p className="hint">Uploaded workbook employee, laptop, and mobile records.</p>
-                </div>
-                <div className="inventory-head-actions">
-                  <button
-                    type="button"
-                    className="outline"
-                    onClick={() => {
-                      const header = ['Sheet', 'Row', 'Employee Name', 'Code', 'Domain', 'DOJ', 'Location', 'Department', 'Designation', 'PAN/Aadhaar', 'Biometric', 'Mobile No.', 'Email', 'Photo', 'Gender', 'Status', 'Laptop Brand', 'Product No.', 'Serial No.', 'Mobile Assigned'];
-                      const rows = filteredToUpasanaRows.map((row) => [
-                        row.source_sheet || '',
-                        row.source_row_number || '',
-                        row.employee_name || '',
-                        row.employee_code || '',
-                        row.domain_name || '',
-                        row.date_of_joining || '',
-                        row.location || '',
-                        row.department || '',
-                        row.designation || '',
-                        row.pan_aadhaar || '',
-                        row.biometric_code || '',
-                        row.mobile_no || '',
-                        row.email || '',
-                        row.employee_photo || '',
-                        row.gender || '',
-                        row.employment_status || '',
-                        row.laptop_brand || '',
-                        row.laptop_product_no || '',
-                        row.laptop_serial_no || '',
-                        row.mobile_assigned || ''
-                      ]);
-                      const csv = buildExcelCsv([header, ...rows]);
-                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                      const url = URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.setAttribute('download', 'workbook_data_export.csv');
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      URL.revokeObjectURL(url);
-                    }}
-                  >
-                    Export CSV
-                  </button>
-                </div>
-              </div>
-
-              <div className="inventory-filter-grid">
-                <input
-                  className="inventory-search"
-                  placeholder="Search workbook employees, code, mobile, laptop..."
-                  value={toUpasanaQuery}
-                  onChange={(e) => setToUpasanaQuery(e.target.value)}
-                />
-              </div>
-
-              <div className="inventory-mini-stats inventory-mini-stats-strong">
-                <article><span>Rows</span><strong>{toUpasanaStats.rows}</strong></article>
-                <article><span>Employees</span><strong>{toUpasanaStats.uniqueEmployees}</strong></article>
-                <article><span>Laptop Rows</span><strong>{toUpasanaStats.laptops}</strong></article>
-                <article><span>Mobile Nos.</span><strong>{toUpasanaStats.mobiles}</strong></article>
-              </div>
-
-              <div className="table-wrap assignment-employee-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Sheet</th>
-                      <th>Row</th>
-                      <th>Employee Name</th>
-                      <th>Code</th>
-                      <th>Domain</th>
-                      <th>DOJ</th>
-                      <th>Location</th>
-                      <th>Department</th>
-                      <th>Designation</th>
-                      <th>PAN/Aadhaar</th>
-                      <th>Biometric</th>
-                      <th>Mobile No.</th>
-                      <th>Email</th>
-                      <th>Photo</th>
-                      <th>Gender</th>
-                      <th>Status</th>
-                      <th>Laptop Brand</th>
-                      <th>Product No.</th>
-                      <th>Serial No.</th>
-                      <th>Mobile Assigned</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredToUpasanaRows.length === 0 ? (
-                      <tr><td colSpan={20}>No workbook rows found.</td></tr>
-                    ) : (
-                      filteredToUpasanaRows.map((row) => (
-                        <tr key={row.id}>
-                          <td>{row.source_sheet || '-'}</td>
-                          <td>{row.source_row_number || '-'}</td>
-                          <td>{row.employee_name || '-'}</td>
-                          <td>{row.employee_code || '-'}</td>
-                          <td>{row.domain_name || '-'}</td>
-                          <td>{row.date_of_joining || '-'}</td>
-                          <td>{row.location || '-'}</td>
-                          <td>{row.department || '-'}</td>
-                          <td>{row.designation || '-'}</td>
-                          <td>{row.pan_aadhaar || '-'}</td>
-                          <td>{row.biometric_code || '-'}</td>
-                          <td>{row.mobile_no || '-'}</td>
-                          <td>{row.email || '-'}</td>
-                          <td>{row.employee_photo || '-'}</td>
-                          <td>{row.gender || '-'}</td>
-                          <td>{row.employment_status || '-'}</td>
-                          <td>{row.laptop_brand || '-'}</td>
-                          <td>{row.laptop_product_no || '-'}</td>
-                          <td>{row.laptop_serial_no || '-'}</td>
-                          <td>{row.mobile_assigned || '-'}</td>
-                        </tr>
-                      ))
-                    )}
                   </tbody>
                 </table>
               </div>

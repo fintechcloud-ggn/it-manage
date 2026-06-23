@@ -1788,6 +1788,18 @@ p {
   min-width: 0;
 }
 
+.assignment-submit-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: -2px;
+}
+
+.assignment-submit-btn {
+  min-width: 240px;
+}
+
 .assignment-field {
   display: grid;
   gap: 6px;
@@ -2347,6 +2359,20 @@ p {
   display: grid;
   justify-items: start;
   gap: 6px;
+}
+
+.asset-row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: max-content;
+}
+
+.asset-row-actions .small {
+  min-height: 32px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .asset-qr-cell img {
@@ -4305,6 +4331,15 @@ body {
   white-space: nowrap;
 }
 
+.dashboard-shell .asset-row-actions {
+  flex-wrap: nowrap;
+}
+
+.dashboard-shell .asset-row-actions .small {
+  width: auto;
+  min-width: 72px;
+}
+
 .dashboard-shell .inventory-pager {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -4497,8 +4532,16 @@ body {
   gap: 8px;
 }
 
-.dashboard-shell .inventory-page-stack .inventory-type-buttons .inventory-reset-inline {
+.dashboard-shell .inventory-page-stack .inventory-type-actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.dashboard-shell .inventory-page-stack .inventory-type-actions .inventory-export-inline,
+.dashboard-shell .inventory-page-stack .inventory-type-actions .inventory-reset-inline {
   min-height: 42px;
   padding: 0 18px;
   border-radius: 12px;
