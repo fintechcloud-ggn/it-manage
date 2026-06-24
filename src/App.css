@@ -1686,10 +1686,13 @@ p {
   position: absolute;
   inset: 0;
   z-index: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  gap: 4px;
+  gap: 6px;
+  transform: translateY(2px);
 }
 
 .assignment-stats .metric-center strong {
@@ -4446,12 +4449,14 @@ body {
 .dashboard-shell .assignment-stats .metric-center strong {
   color: #152235;
   font-size: 38px;
+  margin-top: 0;
 }
 
 .dashboard-shell .assignment-stats .metric-center span {
   color: #63758a;
   font-size: 15px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .dashboard-shell .assignment-stats .donut-card > small {
