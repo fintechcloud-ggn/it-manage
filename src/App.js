@@ -813,6 +813,8 @@ function App() {
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [assignmentSearchDraft, setAssignmentSearchDraft] = useState('');
   const [assignmentUserFilter, setAssignmentUserFilter] = useState('all');
+  const [assignmentPage, setAssignmentPage] = useState(1);
+  const [assignmentPageSize, setAssignmentPageSize] = useState('25');
   const [quickAssignForm, setQuickAssignForm] = useState({
     userId: '',
     domainName: '',
@@ -827,6 +829,7 @@ function App() {
     assetSearch: '',
     notes: ''
   });
+  const [assignValidated, setAssignValidated] = useState(false);
   const [selfieEmployeeId, setSelfieEmployeeId] = useState('');
   const [selfieCameraOpen, setSelfieCameraOpen] = useState(false);
   const [selfieSaving, setSelfieSaving] = useState(false);
@@ -881,6 +884,12 @@ function App() {
   const [roleAccountPasswords, setRoleAccountPasswords] = useState(() => readRoleAccountPasswords());
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [selectedReplacementEmployeeId, setSelectedReplacementEmployeeId] = useState(null);
+  const [selectedEmployeeReturnId, setSelectedEmployeeReturnId] = useState(null);
+  const [employeeReturnForm, setEmployeeReturnForm] = useState({
+    allocationId: '',
+    reason: 'Damaged',
+    notes: ''
+  });
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [employeeEditForm, setEmployeeEditForm] = useState({
     name: '',
@@ -916,6 +925,7 @@ function App() {
   });
   const [editingAsset, setEditingAsset] = useState(null);
   const [assetDeleteDialog, setAssetDeleteDialog] = useState(null);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const isSuperAdmin = useMemo(
@@ -1516,6 +1526,7 @@ function App() {
   }
 
   function logout() {
+    setShowLogoutDialog(false);
     setToken('');
     setUser(null);
     setAuditLogs([]);
@@ -1574,14 +1585,19 @@ function App() {
 
   async function allocate(e) {
     e.preventDefault();
+    setAssignValidated(true);
     const asset_id = Number(quickAssignForm.assetId);
     const notes = quickAssignForm.notes.trim();
     const selectedEmployeeOption = quickAssignUsers.find((item) => String(item.selection_value || item.local_user_id || item.id) === String(quickAssignForm.userId));
     const employeeName = quickAssignForm.employeeName.trim() || selectedEmployeeOption?.name || '';
     const employeeCode = quickAssignForm.employeeCode.trim() || selectedEmployeeOption?.employee_code || '';
     const employeeEmail = quickAssignForm.employeeEmail.trim() || selectedEmployeeOption?.employee_email || selectedEmployeeOption?.email || '';
-    if (!asset_id || (!selectedEmployeeOption && !employeeName && !employeeCode)) {
-      setMessage('Enter employee details and select available asset to assign');
+    const employeeMobile = quickAssignForm.employeeMobile.trim() || selectedEmployeeOption?.personal_mobile_no || selectedEmployeeOption?.mobile_no || selectedEmployeeOption?.mobile || '';
+    const employeeDepartment = quickAssignForm.employeeDepartment.trim() || selectedEmployeeOption?.department || '';
+    const employeeDesignation = quickAssignForm.employeeDesignation.trim() || selectedEmployeeOption?.designation || '';
+
+    if (!asset_id || !employeeName || !employeeCode || !employeeEmail || !employeeMobile || !employeeDepartment || !employeeDesignation) {
+      setMessage('Please fill out all required employee details (Name, Code, Email, Mobile, Department, Designation) and select an asset.');
       return;
     }
     const payload = {
@@ -1591,9 +1607,9 @@ function App() {
       employee_code: employeeCode || null,
       employee_name: employeeName || null,
       employee_email: employeeEmail || null,
-      employee_mobile: quickAssignForm.employeeMobile.trim() || selectedEmployeeOption?.personal_mobile_no || selectedEmployeeOption?.mobile_no || selectedEmployeeOption?.mobile || null,
-      employee_department: quickAssignForm.employeeDepartment.trim() || selectedEmployeeOption?.department || null,
-      employee_designation: quickAssignForm.employeeDesignation.trim() || selectedEmployeeOption?.designation || null
+      employee_mobile: employeeMobile || null,
+      employee_department: employeeDepartment || null,
+      employee_designation: employeeDesignation || null
     };
     const res = await apiFetch('/api/allocations', {
       method: 'POST',
@@ -1603,6 +1619,7 @@ function App() {
     const body = await res.json().catch(() => ({}));
     setMessage(res.ok ? 'Asset assigned successfully' : body.error || 'Allocation failed');
     if (res.ok) {
+      setAssignValidated(false);
       fetchAssets();
       fetchAllocations();
       fetchAuditLogs();
@@ -2915,18 +2932,6 @@ function App() {
     ],
     [modelOptionsByType]
   );
-  const assignmentFilterOptions = useMemo(
-    () => [
-      { value: 'all', label: 'All Employees', searchText: 'all employees' },
-      ...employeeDropdownOptions
-        .map((user) => ({
-          value: buildAssignmentSelectionValue(user),
-          label: user.label || user.name,
-          searchText: `${user.name || ''} ${user.employee_code || ''} ${user.employee_email || ''}`,
-        })),
-    ],
-    [employeeDropdownOptions]
-  );
   const quickAssignAssetOptions = useMemo(() => {
     return availableAssets
       .filter((asset) => quickAssignForm.assetType === 'all' || (asset.type || '') === quickAssignForm.assetType)
@@ -3115,12 +3120,13 @@ function App() {
           personal_mobile_no: baseEmployee.personal_mobile_no || uploadedEmployee?.mobile_no || uploadedEmployee?.mobile || '',
           profile_image_url: baseEmployee.profile_image_url || uploadedEmployee?.employee_photo || '',
           geolocation: baseEmployee.location || option.location || uploadedEmployee?.location || '',
+          domain_name: baseEmployee.domain_name || option.domain_name || uploadedEmployee?.domain_name || '',
           assignedAssets,
           assignedCount: assignedAssets.length,
           latestAllocatedAt: latestAllocatedAt ? new Date(latestAllocatedAt) : null
         };
       })
-      .filter((emp) => assignmentUserFilter === 'all' || String(emp.id) === assignmentUserFilter)
+      .filter((emp) => assignmentUserFilter === 'all' || String(emp.domain_name || '').trim().toLowerCase() === assignmentUserFilter)
       .filter((emp) => {
         const q = assignmentSearch.trim().toLowerCase();
         if (!q) return true;
@@ -3141,6 +3147,13 @@ function App() {
     () => `${assignmentSearch}|${assignmentUserFilter}|${employeeDirectory.map((emp) => emp.id).join(',')}`,
     [assignmentSearch, assignmentUserFilter, employeeDirectory]
   );
+
+  const assignmentSize = assignmentPageSize === 'all' ? employeeDirectory.length || 1 : Number(assignmentPageSize);
+  const assignmentTotalPages = Math.max(1, Math.ceil(employeeDirectory.length / assignmentSize));
+  const paginatedEmployeeDirectory = useMemo(() => {
+    const start = (assignmentPage - 1) * assignmentSize;
+    return employeeDirectory.slice(start, start + assignmentSize);
+  }, [employeeDirectory, assignmentPage, assignmentSize]);
   const selectedEmployeeHistory = useMemo(() => {
     if (!selectedEmployee) return [];
     const selectedLocalUserId = selectedEmployee.local_user_id || selectedEmployee.id;
@@ -3245,6 +3258,45 @@ function App() {
       reasonDetail: ''
     });
   }
+
+  function startReturnForEmployee(employeeId) {
+    const employee = employeeDirectory.find((emp) => String(emp.id) === String(employeeId));
+    setSelectedEmployeeReturnId(employeeId);
+    setEmployeeReturnForm({
+      allocationId: employee?.assignedAssets[0]?.id ? String(employee.assignedAssets[0].id) : '',
+      reason: 'Damaged',
+      notes: ''
+    });
+  }
+
+  async function submitEmployeeReturnAsset(e) {
+    e.preventDefault();
+    if (!employeeReturnForm.allocationId) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5001/api/allocations/${employeeReturnForm.allocationId}/return`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          return_reason: employeeReturnForm.reason,
+          return_notes: employeeReturnForm.notes,
+        })
+      });
+      const body = await res.json();
+      setMessage(res.ok ? 'Asset returned successfully' : body.error || 'Return failed');
+      if (res.ok) {
+        setSelectedEmployeeReturnId(null);
+        fetchAssets();
+        fetchAllocations();
+        fetchAuditLogs();
+      }
+    } catch (err) {
+      setMessage('Network error returning asset');
+    } finally {
+      setLoading(false);
+    }
+  }
   const selectedEmployeeAssetBreakdown = useMemo(() => {
     if (!selectedEmployee) return [];
     const grouped = selectedEmployee.assignedAssets.reduce((acc, asset) => {
@@ -3283,6 +3335,18 @@ function App() {
       .filter(Boolean);
     return Array.from(new Set(domainValues)).sort((a, b) => a.localeCompare(b));
   }, [accountManagementDomains, currentUserDomain]);
+  const assignmentFilterOptions = useMemo(
+    () => [
+      { value: 'all', label: 'All Domains', searchText: 'all domains' },
+      ...inventoryDomains
+        .map((domain) => ({
+          value: domain,
+          label: domain,
+          searchText: domain,
+        })),
+    ],
+    [inventoryDomains]
+  );
   function getSimAssetDetails(asset) {
     let details = {};
     try {
@@ -3362,25 +3426,25 @@ function App() {
     return { total, available, allocated, uniqueBrands };
   }, [filteredSortedAssets]);
   const assignmentKpiCards = useMemo(() => {
-    const totalAssets = Math.max(stats.total, 1);
     const totalEmployees = Math.max(employees.length, 1);
     const availableCount = availableAssets.length;
     const activeCount = activeAllocations.length;
     const coveredCount = assignedUsersCount;
+    const assignableBase = Math.max(availableCount + activeCount, 1);
     return [
       {
         key: 'available',
         label: 'Available To Assign',
         value: availableCount.toLocaleString(),
-        pct: Math.round((availableCount / totalAssets) * 100),
-        hint: `${stats.total ? Math.round((availableCount / totalAssets) * 100) : 0}% of assets`
+        pct: Math.round((availableCount / assignableBase) * 100),
+        hint: `${(availableCount + activeCount) > 0 ? Math.round((availableCount / assignableBase) * 100) : 0}% of assignable`
       },
       {
         key: 'active',
         label: 'Active Assignments',
         value: activeCount.toLocaleString(),
-        pct: Math.round((activeCount / totalAssets) * 100),
-        hint: `${stats.total ? Math.round((activeCount / totalAssets) * 100) : 0}% of assets`
+        pct: Math.round((activeCount / assignableBase) * 100),
+        hint: `${(availableCount + activeCount) > 0 ? Math.round((activeCount / assignableBase) * 100) : 0}% of assignable`
       },
       {
         key: 'covered',
@@ -3609,6 +3673,10 @@ function App() {
   useEffect(() => {
     setPage(1);
   }, [inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir, inventoryPageSize]);
+
+  useEffect(() => {
+    setAssignmentPage(1);
+  }, [assignmentSearch, assignmentUserFilter, assignmentPageSize]);
 
   function openAssignedDomainAssets(domain, type = 'all') {
     const normalizedDomain = String(domain || '').trim().toLowerCase();
@@ -4068,37 +4136,22 @@ function App() {
                       aria-label="Close login"
                       onClick={() => setAuthView('landing')}
                     >
-                      Ã—
+                      &times;
                     </button>
                     <h3 id="login-title">Hello!</h3>
                     <p>Sign in to get started.</p>
                     <form onSubmit={login} className="form auth-form-modern" autoComplete="off">
                       <div className="input-shell">
-                        <span>U</span>
                         <input
                           id="email"
                           name="email"
-                          type={showLoginUsername ? 'text' : 'password'}
+                          type="text"
                           placeholder="Username"
                           autoComplete="off"
                           required
                         />
-                        <button
-                          type="button"
-                          className="auth-visibility-toggle"
-                          aria-label={showLoginUsername ? 'Hide username' : 'Show username'}
-                          aria-pressed={showLoginUsername}
-                          onClick={() => setShowLoginUsername((v) => !v)}
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-                            <circle cx="12" cy="12" r="3" />
-                            {!showLoginUsername && <path d="M4 4l16 16" />}
-                          </svg>
-                        </button>
                       </div>
                       <div className="input-shell">
-                        <span>P</span>
                         <input
                           id="password"
                           name="password"
@@ -4179,7 +4232,7 @@ function App() {
           ))}
         </nav>
 
-        <button type="button" className="sidebar-logout" onClick={logout}>
+        <button type="button" className="sidebar-logout" onClick={() => setShowLogoutDialog(true)}>
           {sidebarCollapsed ? 'X' : 'Logout'}
         </button>
       </aside>
@@ -4731,30 +4784,8 @@ function App() {
                             <div className="asset-row-actions">
                               {hasAdminPermission('inventory.manage') ? (
                                 <>
-                                  <button
-                                    type="button"
-                                    className="icon-action-btn icon-action-edit"
-                                    onClick={() => startEditAsset(a)}
-                                    aria-label={`Edit ${a.name || a.serial || 'asset'}`}
-                                    title="Edit"
-                                  >
-                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm2.92 2.33H5v-.92l8.61-8.61.92.92L5.92 19.58ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" />
-                                    </svg>
-                                    <span className="sr-only">Edit</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="icon-action-btn icon-action-delete"
-                                    onClick={() => requestDeleteAsset(a)}
-                                    aria-label={`Delete ${a.name || a.serial || 'asset'}`}
-                                    title="Delete"
-                                  >
-                                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                                      <path d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h4a1 1 0 1 1 0 2h-1.1l-.82 11.09A2.75 2.75 0 0 1 14.34 21H9.66a2.75 2.75 0 0 1-2.74-2.91L6.1 7H5a1 1 0 1 1 0-2h4V3.75ZM11 5h2V4h-2v1Zm-1.92 2 .73 10h5.38l.73-10H9.08Z" />
-                                    </svg>
-                                    <span className="sr-only">Delete</span>
-                                  </button>
+                                  <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
+                                  <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
                                 </>
                               ) : '-'}
                             </div>
@@ -4848,16 +4879,16 @@ function App() {
                   onChange={(e) => {
                     const nextValue = e.target.value;
                     setAssignmentSearchDraft(nextValue);
-                    if (!nextValue.trim()) setAssignmentSearch('');
+                    setAssignmentSearch(nextValue.trim());
                   }}
                 />
                 <SearchableSelect
                   value={assignmentUserFilter}
                   onChange={setAssignmentUserFilter}
                   options={assignmentFilterOptions}
-                  placeholder="All Employees"
-                  searchPlaceholder="Search employee..."
-                  emptyMessage="No employee found"
+                  placeholder="All Domains"
+                  searchPlaceholder="Search domain..."
+                  emptyMessage="No domain found"
                 />
                 <button type="button" className="small" onClick={exportAssignmentCsv}>Export CSV</button>
               </form>
@@ -4873,6 +4904,7 @@ function App() {
                         value={quickAssignForm.employeeName}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeName', e.target.value)}
                         placeholder="Type employee name"
+                        className={assignValidated && !quickAssignForm.employeeName.trim() ? 'input-error' : ''}
                       />
                       <datalist id="quick-assign-employee-names">
                         {quickAssignUsers.map((employee, index) => (
@@ -4889,6 +4921,7 @@ function App() {
                         value={quickAssignForm.employeeCode}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeCode', e.target.value)}
                         placeholder="Type employee code"
+                        className={assignValidated && !quickAssignForm.employeeCode.trim() ? 'input-error' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -4898,6 +4931,7 @@ function App() {
                         value={quickAssignForm.employeeEmail}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeEmail', e.target.value)}
                         placeholder="Type email"
+                        className={assignValidated && !quickAssignForm.employeeEmail.trim() ? 'input-error' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -4906,6 +4940,7 @@ function App() {
                         value={quickAssignForm.employeeMobile}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeMobile', e.target.value)}
                         placeholder="Type mobile"
+                        className={assignValidated && !quickAssignForm.employeeMobile.trim() ? 'input-error' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -4914,6 +4949,7 @@ function App() {
                         value={quickAssignForm.employeeDepartment}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeDepartment', e.target.value)}
                         placeholder="Type department"
+                        className={assignValidated && !quickAssignForm.employeeDepartment.trim() ? 'input-error' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -4922,6 +4958,7 @@ function App() {
                         value={quickAssignForm.employeeDesignation}
                         onChange={(e) => updateQuickAssignEmployeeField('employeeDesignation', e.target.value)}
                         placeholder="Type designation"
+                        className={assignValidated && !quickAssignForm.employeeDesignation.trim() ? 'input-error' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -4945,6 +4982,7 @@ function App() {
                         placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
                         searchPlaceholder="Search asset by name, serial, brand..."
                         emptyMessage="No asset found"
+                        className={assignValidated && !quickAssignForm.assetId ? 'input-error' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -4999,36 +5037,37 @@ function App() {
                 <table key={employeeDirectoryRenderKey}>
                   <thead>
                     <tr>
+                      <th>S.No</th>
                       <th>Employee</th>
+                      <th>ID</th>
                       <th>Code</th>
                       <th>Email</th>
                       <th>Mobile</th>
-                      <th>Department</th>
-                      <th>Designation</th>
+                      <th>Domain</th>
+                      <th>Asset Type</th>
                       <th>Geolocation</th>
-                      <th>Role</th>
                       <th>Assigned Assets</th>
                       <th>Latest Assignment</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {employeeDirectory.length === 0 ? (
-                      <tr><td colSpan={11}>No employees matched this search.</td></tr>
-                    ) : employeeDirectory.map((emp) => (
+                    {paginatedEmployeeDirectory.length === 0 ? (
+                      <tr><td colSpan={12}>No employees matched this search.</td></tr>
+                    ) : paginatedEmployeeDirectory.map((emp, index) => (
                       <tr key={emp.id}>
+                        <td>{(assignmentPage - 1) * assignmentSize + index + 1}</td>
                         <td className="employee-cell">
-                          <span className="employee-avatar">{(emp.name || 'U').slice(0, 1).toUpperCase()}</span>
                           <div>
                             <strong>{emp.name}</strong>
-                            <small>ID: {emp.id}</small>
                           </div>
                         </td>
+                        <td>{emp.id}</td>
                         <td>{emp.employee_code || '-'}</td>
                         <td>{emp.email || '-'}</td>
                         <td>{emp.personal_mobile_no || '-'}</td>
-                        <td>{emp.department || '-'}</td>
-                        <td>{emp.designation || '-'}</td>
+                        <td>{emp.domain_name || '-'}</td>
+                        <td>{[...new Set(emp.assignedAssets.map(a => a.type))].join(', ') || '-'}</td>
                         <td>
                           {emp.geolocation ? (
                             <a className="geolocation-link" href={getGeolocationMapUrl(emp.geolocation)} target="_blank" rel="noreferrer">
@@ -5036,14 +5075,16 @@ function App() {
                             </a>
                           ) : '-'}
                         </td>
-                        <td><span className={`role-pill role-${(emp.role || 'user').toLowerCase()}`}>{emp.role || '-'}</span></td>
                         <td><span className="count-pill">{emp.assignedCount}</span></td>
                         <td>{emp.latestAllocatedAt ? emp.latestAllocatedAt.toLocaleString() : '-'}</td>
                         <td>
                           <div className="assignment-row-actions">
                             <button type="button" className="small assignment-view-btn" onClick={() => setSelectedEmployeeId(emp.id)}>View</button>
                             {hasAdminPermission('assignments.manage') && emp.assignedCount > 0 && (
-                              <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Replace</button>
+                              <>
+                                <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Replace</button>
+                                <button type="button" className="small assignment-return-btn" onClick={() => startReturnForEmployee(emp.id)}>Return</button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -5051,6 +5092,27 @@ function App() {
                     ))}
                   </tbody>
                 </table>
+                {assignmentTotalPages > 1 && (
+                  <div className="inventory-pager">
+                    <span>
+                      Page {assignmentPage} of {assignmentTotalPages} | Showing {paginatedEmployeeDirectory.length} of {employeeDirectory.length} items
+                      <select 
+                        value={assignmentPageSize} 
+                        onChange={(e) => setAssignmentPageSize(e.target.value)}
+                        style={{ marginLeft: '10px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border)' }}
+                      >
+                        <option value="10">10 per page</option>
+                        <option value="25">25 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="all">Show All</option>
+                      </select>
+                    </span>
+                    <div className="inventory-pager-actions">
+                      <button type="button" className="outline" disabled={assignmentPage <= 1} onClick={() => setAssignmentPage((p) => Math.max(1, p - 1))}>Prev</button>
+                      <button type="button" className="outline" disabled={assignmentPage >= assignmentTotalPages} onClick={() => setAssignmentPage((p) => Math.min(assignmentTotalPages, p + 1))}>Next</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           </div>
@@ -5771,12 +5833,6 @@ function App() {
                     </div>
                   </div>
                   <p>{selectedEmployee.email || '-'} | {selectedEmployee.role || 'user'} | Employee ID #{selectedEmployee.id}</p>
-                  <div className="employee-modal-pill-row">
-                    <span className="soft-pill">Status: {selectedEmployee.assignedCount > 0 ? 'Assigned' : 'Available'}</span>
-                    <span className="soft-pill">Top Asset: {selectedEmployeeAssetBreakdown[0]?.[0] || '-'}</span>
-                    <span className="soft-pill">Domain: {selectedEmployee.domain_name || '-'}</span>
-                    <span className="soft-pill">Joined: {selectedEmployee.created_at ? new Date(selectedEmployee.created_at).toLocaleDateString() : '-'}</span>
-                  </div>
                 </div>
               </header>
 
@@ -5824,16 +5880,7 @@ function App() {
                           required
                         />
                       </label>
-                      <label>
-                        <span>Role</span>
-                        <input
-                          type="text"
-                          value={employeeEditForm.role}
-                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, role: e.target.value }))}
-                          placeholder="user / admin / manager"
-                          required
-                        />
-                      </label>
+
                       <label>
                         <span>Domain</span>
                         <input
@@ -5876,17 +5923,17 @@ function App() {
                       <div><label>Last Name</label><p>{(selectedEmployee.name || '').split(' ').slice(1).join(' ') || '-'}</p></div>
                       <div><label>Email</label><p>{selectedEmployee.email || '-'}</p></div>
                       <div><label>Mobile</label><p>{selectedEmployee.personal_mobile_no || '-'}</p></div>
-                      <div><label>Role</label><p>{selectedEmployee.role || '-'}</p></div>
+
                       <div><label>Domain</label><p>{selectedEmployee.domain_name || '-'}</p></div>
                       <div><label>Code</label><p>{selectedEmployee.employee_code || '-'}</p></div>
                       <div><label>Department</label><p>{selectedEmployee.department || '-'}</p></div>
                       <div><label>Designation</label><p>{selectedEmployee.designation || '-'}</p></div>
                       <div><label>Location</label><p>{selectedEmployee.location || '-'}</p></div>
                       <div><label>DOJ</label><p>{selectedEmployee.date_of_joining || '-'}</p></div>
-                      <div><label>Biometric Code</label><p>{selectedEmployee.biometric_code || '-'}</p></div>
+
                       <div><label>Gender</label><p>{selectedEmployee.gender || '-'}</p></div>
                       <div><label>Status</label><p>{selectedEmployee.employment_status || '-'}</p></div>
-                      <div><label>Company</label><p>{selectedEmployee.company || 'NEXTGEN'}</p></div>
+
                       <div><label>Last Note</label><p>{selectedEmployeeLatestNote}</p></div>
                     </div>
                   )}
@@ -5897,10 +5944,10 @@ function App() {
                 <h4>Assigned Assets</h4>
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Assigned At</th><th>Assigned By</th><th>Notes</th><th>QR</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Assigned At</th><th>Assigned By</th><th>Notes</th><th>QR</th></tr></thead>
                     <tbody>
                       {selectedEmployee.assignedAssets.length === 0 ? (
-                        <tr><td colSpan={8}>No active assets assigned.</td></tr>
+                        <tr><td colSpan={7}>No active assets assigned.</td></tr>
                       ) : (
                         selectedEmployee.assignedAssets.map((asset) => (
                           <tr key={asset.id}>
@@ -5925,11 +5972,6 @@ function App() {
                                   Print QR
                                 </button>
                               </div>
-                            </td>
-                            <td>
-                              {hasAdminPermission('assignments.manage')
-                                ? <button type="button" className="small" onClick={() => openReturnAssetDialog(asset)}>Return</button>
-                                : '-'}
                             </td>
                           </tr>
                         ))
@@ -6017,7 +6059,6 @@ function App() {
                   <h3 id="replacement-modal-title">Replace Assigned Asset</h3>
                   <p>{selectedReplacementEmployee.name || '-'} | {selectedReplacementEmployee.employee_code || '-'} | {selectedReplacementEmployee.domain_name || '-'}</p>
                 </div>
-                <button type="button" className="small outline" onClick={() => setSelectedReplacementEmployeeId(null)}>Close</button>
               </header>
               <form className="replacement-form" onSubmit={replaceEmployeeAsset}>
                 <label className="replacement-current-field">
@@ -6082,7 +6123,63 @@ function App() {
                   />
                 </label>
                 <div className="employee-edit-actions replacement-actions">
+                  <button type="button" className="small outline" onClick={() => setSelectedReplacementEmployeeId(null)}>Cancel</button>
                   <button type="submit" className="small">Replace Asset</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        )}
+
+        {selectedEmployeeReturnId && (
+          <div className="employee-modal-overlay return-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="employee-return-modal-title" onClick={() => setSelectedEmployeeReturnId(null)}>
+            <section className="employee-modal replacement-modal" onClick={(e) => e.stopPropagation()}>
+              <header className="replacement-modal-head">
+                <div>
+                  <h3 id="employee-return-modal-title">Return Assigned Asset</h3>
+                  <p>{employeeDirectory.find((emp) => String(emp.id) === String(selectedEmployeeReturnId))?.name || '-'} | {employeeDirectory.find((emp) => String(emp.id) === String(selectedEmployeeReturnId))?.employee_code || '-'}</p>
+                </div>
+              </header>
+              <form className="replacement-form" onSubmit={submitEmployeeReturnAsset}>
+                <label className="replacement-current-field">
+                  <span>Current Assigned Asset</span>
+                  <select
+                    value={employeeReturnForm.allocationId}
+                    onChange={(e) => setEmployeeReturnForm((prev) => ({ ...prev, allocationId: e.target.value }))}
+                    required
+                  >
+                    <option value="">Select active allocation</option>
+                    {(employeeDirectory.find((emp) => String(emp.id) === String(selectedEmployeeReturnId))?.assignedAssets || []).map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.assetName} ({asset.serial})</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="replacement-reason-field">
+                  <span>Reason</span>
+                  <select
+                    value={employeeReturnForm.reason}
+                    onChange={(e) => setEmployeeReturnForm((prev) => ({ ...prev, reason: e.target.value }))}
+                    required
+                  >
+                    <option value="Damaged">Damaged Product</option>
+                    <option value="Not Working">Not Working Product</option>
+                    <option value="User Leaving">User Leaving</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+                <label className="replacement-wide">
+                  <span>Reason Detail</span>
+                  <input
+                    value={employeeReturnForm.notes}
+                    onChange={(e) => setEmployeeReturnForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Type return reason detail"
+                    disabled={employeeReturnForm.reason !== 'Other'}
+                    required={employeeReturnForm.reason === 'Other'}
+                  />
+                </label>
+                <div className="employee-edit-actions replacement-actions">
+                  <button type="button" className="small outline" onClick={() => setSelectedEmployeeReturnId(null)}>Cancel</button>
+                  <button type="submit" className="small">Return Asset</button>
                 </div>
               </form>
             </section>
@@ -6740,6 +6837,19 @@ function App() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {showLogoutDialog && (
+          <div className="asset-delete-overlay" role="dialog" aria-modal="true" onClick={() => setShowLogoutDialog(false)}>
+            <section className="asset-delete-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Confirm Logout</h3>
+              <p>Are you sure you want to log out of your account?</p>
+              <div className="asset-delete-actions">
+                <button type="button" className="outline" onClick={() => setShowLogoutDialog(false)}>Cancel</button>
+                <button type="button" className="danger" onClick={logout}>Logout</button>
+              </div>
+            </section>
           </div>
         )}
 

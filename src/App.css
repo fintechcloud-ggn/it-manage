@@ -25,7 +25,7 @@ html,
 body,
 #root {
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
 }
 
 html,
@@ -484,6 +484,13 @@ p {
 .topbar-actions input:focus {
   outline: 2px solid rgba(31, 122, 140, 0.2);
   border-color: #84b3bd;
+}
+
+.form input.input-error,
+.form select.input-error,
+.searchable-select.input-error .searchable-select__trigger {
+  border-color: #e74c3c !important;
+  background-color: #fdf5f5 !important;
 }
 
 .form button,
@@ -2754,8 +2761,8 @@ p {
   grid-template-columns: minmax(280px, 1fr) 180px minmax(260px, 1fr);
   grid-template-areas:
     "current type asset"
-    "reason actions actions"
-    "detail detail detail";
+    "reason detail detail"
+    ". . actions";
   gap: 12px 14px;
   align-items: end;
 }
@@ -3906,12 +3913,13 @@ th {
 
 /* Dashboard refresh inspired by the soft editorial KPI layout */
 .dashboard-shell {
-  height: auto;
+  height: 100vh;
   min-height: 100vh;
   padding: 0;
   gap: 0;
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: hidden;
+  align-items: stretch;
   background:
     radial-gradient(1400px 520px at 50% 0%, rgba(255, 255, 255, 0.88), transparent 68%),
     linear-gradient(180deg, #dfe8f3 0%, #edf3f8 100%);
@@ -4103,7 +4111,7 @@ body {
 .dashboard-shell .inventory-app {
   position: relative;
   min-width: 0;
-  height: auto;
+  height: 100vh;
   min-height: 0;
   padding: 22px;
   border-radius: 0;
@@ -4115,7 +4123,7 @@ body {
   background-size: 190px 150px, 190px 150px, auto;
   box-shadow: 0 22px 60px rgba(94, 118, 148, 0.16);
   overflow-x: hidden;
-  overflow-y: visible;
+  overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -4603,7 +4611,8 @@ body {
 .dashboard-shell .assignment-selfie-form button,
 .dashboard-shell .selfie-capture-btn,
 .dashboard-shell .assignment-view-btn,
-.dashboard-shell .assignment-assign-btn {
+.dashboard-shell .assignment-assign-btn,
+.dashboard-shell .assignment-return-btn {
   background: linear-gradient(135deg, #2b92c1 0%, #27ba8e 100%);
   color: #fff;
   border: 0;
@@ -4615,7 +4624,8 @@ body {
 .dashboard-shell .assignment-selfie-form button:not(:disabled):hover,
 .dashboard-shell .selfie-capture-btn:not(:disabled):hover,
 .dashboard-shell .assignment-view-btn:hover,
-.dashboard-shell .assignment-assign-btn:hover {
+.dashboard-shell .assignment-assign-btn:hover,
+.dashboard-shell .assignment-return-btn:hover {
   background: linear-gradient(135deg, #2fa4d3 0%, #25b884 100%);
   box-shadow: 0 16px 30px rgba(35, 167, 136, 0.28);
 }
@@ -4763,7 +4773,8 @@ body {
 }
 
 .dashboard-shell .assignment-row-actions .assignment-view-btn,
-.dashboard-shell .assignment-row-actions .assignment-assign-btn {
+.dashboard-shell .assignment-row-actions .assignment-assign-btn,
+.dashboard-shell .assignment-row-actions .assignment-return-btn {
   width: auto;
   min-width: 82px;
   min-height: 42px;
@@ -5011,7 +5022,8 @@ body {
   .assignment-selfie-form button,
   .selfie-capture-btn,
   .assignment-view-btn,
-  .assignment-assign-btn {
+  .assignment-assign-btn,
+  .assignment-return-btn {
     width: 100%;
   }
 
