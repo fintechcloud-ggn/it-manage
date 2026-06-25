@@ -491,7 +491,7 @@ function SearchableSelect({
             onClick={() => setIsOpen((prev) => !prev)}
             aria-label="Open options"
           >
-            <span className="searchable-select__caret" aria-hidden="true">▾</span>
+            <span className="searchable-select__caret" aria-hidden="true" />
           </button>
         </div>
       )}
@@ -504,7 +504,7 @@ function SearchableSelect({
         <span className={`searchable-select__value${selectedOption || selectedLabel ? '' : ' is-placeholder'}`}>
           {selectedOption?.label || selectedLabel || placeholder}
         </span>
-        <span className="searchable-select__caret" aria-hidden="true">▾</span>
+        <span className="searchable-select__caret" aria-hidden="true" />
       </button>
       )}
 
@@ -915,7 +915,7 @@ function App() {
     notes: ''
   });
   const [editingAsset, setEditingAsset] = useState(null);
-  const [showBulkFormatMenu, setShowBulkFormatMenu] = useState(false);
+  const [assetDeleteDialog, setAssetDeleteDialog] = useState(null);
   const [sessionChecked, setSessionChecked] = useState(false);
 
   const isSuperAdmin = useMemo(
@@ -1020,15 +1020,45 @@ function App() {
     }
   }
 
-  async function deleteAsset(asset) {
+  function getAssetAssigneeName(asset) {
+    const directName = String(asset?.assigned_to_name || '').trim();
+    if (directName) return directName;
+
+    const allocation = activeAllocations.find((item) => String(item.asset_id) === String(asset?.id));
+    if (!allocation) return '';
+
+    const allocationUser = userById[allocation.user_id] || null;
+    return String(
+      allocation.employee_name
+      || allocationUser?.name
+      || allocation.employee_email
+      || allocation.employee_code
+      || ''
+    ).trim();
+  }
+
+  function requestDeleteAsset(asset) {
     if (!hasAdminPermission('inventory.manage')) {
       setMessage('You do not have permission to delete assets.');
       return;
     }
-    const assetLabel = asset?.name || asset?.serial || `Asset #${asset?.id}`;
-    const confirmed = window.confirm(`Delete asset "${assetLabel}"? This cannot be undone.`);
-    if (!confirmed) return;
+    const assignedTo = getAssetAssigneeName(asset);
+    if (assignedTo) {
+      setAssetDeleteDialog({
+        mode: 'assigned',
+        asset,
+        assignedTo
+      });
+      return;
+    }
 
+    setAssetDeleteDialog({
+      mode: 'confirm',
+      asset
+    });
+  }
+
+  async function performDeleteAsset(asset) {
     const res = await apiFetch(`/api/assets/${asset.id}`, {
       method: 'DELETE',
       headers: authHeaders()
@@ -1059,6 +1089,17 @@ function App() {
     setMessage('Asset deleted');
     fetchAssets();
     fetchAuditLogs();
+  }
+
+  async function confirmDeleteAsset() {
+    if (!assetDeleteDialog?.asset) return;
+    const targetAsset = assetDeleteDialog.asset;
+    setAssetDeleteDialog(null);
+    await performDeleteAsset(targetAsset);
+  }
+
+  function closeAssetDeleteDialog() {
+    setAssetDeleteDialog(null);
   }
 
   function normalizeApprovalIdentity(value) {
@@ -1793,9 +1834,11 @@ function App() {
   async function createAsset(e) {
     e.preventDefault();
     const type = effectiveAssetType.trim();
+    const brandName = selectedBrandId === OTHER_BRAND_VALUE ? customBrandName.trim() : selectedBrandName.trim();
     const selectedModel = selectedModelId === OTHER_MODEL_VALUE
       ? null
       : modelOptionsByType.find((model) => String(model.id) === String(selectedModelId));
+    const modelName = selectedModelId === OTHER_MODEL_VALUE ? customModelName.trim() : String(selectedModel?.name || '').trim();
     const serial = assetDraft.serial.trim();
     const vendor = assetDraft.vendor.trim();
     const notes = assetDraft.notes.trim();
@@ -1804,12 +1847,16 @@ function App() {
       setMessage('Select asset type.');
       return;
     }
-    if (selectedBrandId === OTHER_BRAND_VALUE && !customBrandName.trim()) {
+    if (!brandName) {
       setMessage('Type asset brand.');
       return;
     }
-    if (selectedModelId === OTHER_MODEL_VALUE && !customModelName.trim()) {
+    if (!modelName) {
       setMessage('Type asset model.');
+      return;
+    }
+    if (!serial) {
+      setMessage('Asset serial number is required.');
       return;
     }
     if (!domain_name) {
@@ -1818,23 +1865,23 @@ function App() {
     }
     let brand_id = selectedBrandId && selectedBrandId !== OTHER_BRAND_VALUE ? Number(selectedBrandId) : null;
     let model_id = selectedModelId && selectedModelId !== OTHER_MODEL_VALUE ? Number(selectedModelId) : null;
-    let createdBrandName = selectedBrandName;
-    let createdModelName = selectedModel?.name || customModelName.trim();
+    let createdBrandName = brandName;
+    let createdModelName = modelName;
     try {
-      if (customBrandName.trim()) {
-        const brand = await ensureBrand(customBrandName);
+      if (!brand_id && brandName) {
+        const brand = await ensureBrand(brandName);
         brand_id = brand?.id ? Number(brand.id) : brand_id;
-        createdBrandName = brand?.name || customBrandName.trim();
+        createdBrandName = brand?.name || brandName;
       }
-      if (customModelName.trim()) {
+      if (!model_id && modelName) {
         if (!brand_id) {
-          const brand = await ensureBrand(customBrandName.trim() || 'Generic');
+          const brand = await ensureBrand(brandName || 'Generic');
           brand_id = brand?.id ? Number(brand.id) : brand_id;
           createdBrandName = brand?.name || createdBrandName;
         }
-        const model = await ensureModel(brand_id, customModelName, type);
+        const model = await ensureModel(brand_id, modelName, type);
         model_id = model?.id ? Number(model.id) : model_id;
-        createdModelName = model?.name || customModelName.trim();
+        createdModelName = model?.name || modelName;
       }
     } catch (error) {
       setMessage(error.message || 'Unable to add brand/model');
@@ -1937,7 +1984,8 @@ function App() {
 
   function downloadBulkAssetTemplate() {
     const headers = ['S.No', 'Asset Type', 'Brand', 'Model', 'Asset Serial Number', 'Vendor', 'Domain'];
-    const csv = buildExcelCsv([headers]);
+    const sampleRow = ['1', 'Laptop', 'Dell', 'Latitude 5440', 'SN-AX9-22190', 'Dell Partner', 'main'];
+    const csv = buildExcelCsv([headers, sampleRow]);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1946,12 +1994,6 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    const preview = window.open(url, '_blank');
-    if (preview) {
-      preview.opener = null;
-    } else {
-      setMessage('Format downloaded. Browser blocked the preview tab.');
-    }
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
 
@@ -4026,7 +4068,7 @@ function App() {
                       aria-label="Close login"
                       onClick={() => setAuthView('landing')}
                     >
-                      ×
+                      Ã—
                     </button>
                     <h3 id="login-title">Hello!</h3>
                     <p>Sign in to get started.</p>
@@ -4392,7 +4434,6 @@ function App() {
               <div className="inventory-head">
                 <div>
                   <h3>Asset Inventory</h3>
-                  <p className="hint">Structured registry for all devices across brand, model, and lifecycle state.</p>
                 </div>
               </div>
 
@@ -4401,11 +4442,6 @@ function App() {
                 <div className="create-head">
                   <div>
                     <h4>{editingAsset ? 'Edit Asset' : 'Add New Asset'}</h4>
-                    <p className="hint">
-                      {editingAsset
-                        ? 'Update asset details, brand/model mapping, serial, and domain in one flow.'
-                        : 'Register device details, brand/model mapping, and serial in one flow.'}
-                    </p>
                   </div>
                   <div className="create-meta">
                     <span>{editingAsset ? 'Editing mode' : (displayedAssetType || 'Select asset type')}</span>
@@ -4414,8 +4450,8 @@ function App() {
                   </div>
                 </div>
                 <form onSubmit={createAsset} className="form asset-create-form">
-                  <label className="field">
-                    <span>Asset Type</span>
+                  <label className="field required-field">
+                    <span>Asset Type <span className="required-indicator">*</span></span>
                     <SearchableSelect
                       value={selectedAssetType}
                       onChange={(value) => {
@@ -4444,8 +4480,8 @@ function App() {
                       }}
                     />
                   </label>
-                  <label className="field">
-                    <span>Brand</span>
+                  <label className="field required-field">
+                    <span>Brand <span className="required-indicator">*</span></span>
                     <SearchableSelect
                       value={selectedBrandId}
                       onChange={(value) => {
@@ -4470,8 +4506,8 @@ function App() {
                       }}
                     />
                   </label>
-                  <label className="field">
-                    <span>Model</span>
+                  <label className="field required-field">
+                    <span>Model <span className="required-indicator">*</span></span>
                     <SearchableSelect
                       value={selectedModelId}
                       onChange={(value) => {
@@ -4490,8 +4526,8 @@ function App() {
                       onCustomChange={setCustomModelName}
                     />
                   </label>
-                  <label className="field">
-                    <span>Serial Number</span>
+                  <label className="field required-field">
+                    <span>Serial Number <span className="required-indicator">*</span></span>
                     <input
                       name="serial"
                       placeholder="e.g. SN-AX9-22190"
@@ -4509,8 +4545,8 @@ function App() {
                       onChange={(e) => setAssetDraft((prev) => ({ ...prev, vendor: e.target.value }))}
                     />
                   </label>
-                  <label className="field">
-                    <span>Domain</span>
+                  <label className="field required-field">
+                    <span>Domain <span className="required-indicator">*</span></span>
                     <select
                       name="domain_name"
                       value={assetDomainName}
@@ -4537,49 +4573,31 @@ function App() {
                   </label>
                   <div className="field asset-bulk-upload">
                     <span>Bulk Upload Assets</span>
-                    <div className="bulk-upload-box">
-                      <input
-                        id="bulk-asset-upload"
-                        className="bulk-upload-input"
-                        type="file"
-                        accept=".csv,text/csv"
-                        onChange={uploadBulkAssets}
-                      />
-                      <label className="bulk-upload-picker" htmlFor="bulk-asset-upload">
-                        Choose file
-                      </label>
-                      <span className="bulk-upload-copy">CSV upload</span>
-                      <div className="bulk-format-menu">
+                    <div className="bulk-upload-actions">
+                      <div className="bulk-upload-file-box">
+                        <input
+                          id="bulk-asset-upload"
+                          className="bulk-upload-input"
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={uploadBulkAssets}
+                        />
+                        <label className="bulk-upload-picker" htmlFor="bulk-asset-upload">
+                          Choose file
+                        </label>
+                      </div>
+                      <div className="bulk-upload-sample-box">
                         <button
                           type="button"
-                          className="bulk-format-button"
-                          aria-expanded={showBulkFormatMenu}
-                          onClick={() => setShowBulkFormatMenu((prev) => !prev)}
+                          className="secondary-link bulk-upload-inline-link"
+                          onClick={downloadBulkAssetTemplate}
                         >
-                          Format
+                          Download Bulk Upload Sample
                         </button>
-                        {showBulkFormatMenu && (
-                          <div className="bulk-format-options">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                downloadBulkAssetTemplate();
-                                setShowBulkFormatMenu(false);
-                              }}
-                            >
-                              Download sample format
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
                   <div className="create-actions">
-                    <small>
-                      {selectedBrandId
-                        ? `${editingAsset ? 'Updating' : 'Adding'} ${displayedAssetType}${selectedBrandName ? ` / ${selectedBrandName}` : ''}`
-                        : `Choose any ${displayedAssetType || 'asset'} model or narrow by brand`}
-                    </small>
                     <div className="create-action-buttons">
                       {editingAsset && (
                         <button type="button" className="outline" onClick={resetAssetForm}>Cancel Edit</button>
@@ -4685,7 +4703,7 @@ function App() {
                                 {hasAdminPermission('inventory.manage') ? (
                                   <>
                                     <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                    <button type="button" className="small danger" onClick={() => deleteAsset(a)}>Delete</button>
+                                    <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
                                   </>
                                 ) : '-'}
                               </div>
@@ -4697,11 +4715,11 @@ function App() {
                   </table>
                 ) : (
                   <table>
-                    <thead><tr><th>Asset</th><th>Type</th><th>Brand</th><th>Model</th><th>Assigned To</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Type</th><th>Brand</th><th>Model</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th><th>Action</th></tr></thead>
                     <tbody>
                       {paginatedAssets.map((a) => (
                         <tr key={a.id}>
-                          <td>{a.name}</td><td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.assigned_to_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
+                          <td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
                           <td><span className={`status ${a.status}`}>{a.status}</span></td>
                           <td>
                             <div className="asset-qr-cell">
@@ -4713,8 +4731,30 @@ function App() {
                             <div className="asset-row-actions">
                               {hasAdminPermission('inventory.manage') ? (
                                 <>
-                                  <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                  <button type="button" className="small danger" onClick={() => deleteAsset(a)}>Delete</button>
+                                  <button
+                                    type="button"
+                                    className="icon-action-btn icon-action-edit"
+                                    onClick={() => startEditAsset(a)}
+                                    aria-label={`Edit ${a.name || a.serial || 'asset'}`}
+                                    title="Edit"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm2.92 2.33H5v-.92l8.61-8.61.92.92L5.92 19.58ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" />
+                                    </svg>
+                                    <span className="sr-only">Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-action-btn icon-action-delete"
+                                    onClick={() => requestDeleteAsset(a)}
+                                    aria-label={`Delete ${a.name || a.serial || 'asset'}`}
+                                    title="Delete"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path d="M9 3.75A1.75 1.75 0 0 1 10.75 2h2.5A1.75 1.75 0 0 1 15 3.75V5h4a1 1 0 1 1 0 2h-1.1l-.82 11.09A2.75 2.75 0 0 1 14.34 21H9.66a2.75 2.75 0 0 1-2.74-2.91L6.1 7H5a1 1 0 1 1 0-2h4V3.75ZM11 5h2V4h-2v1Zm-1.92 2 .73 10h5.38l.73-10H9.08Z" />
+                                    </svg>
+                                    <span className="sr-only">Delete</span>
+                                  </button>
                                 </>
                               ) : '-'}
                             </div>
@@ -4735,6 +4775,41 @@ function App() {
             </div>
             </div>
           </section>
+        )}
+
+        {assetDeleteDialog && (
+          <div
+            className="asset-delete-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="asset-delete-title"
+            onClick={closeAssetDeleteDialog}
+          >
+            <section className="asset-delete-modal" onClick={(e) => e.stopPropagation()}>
+              {assetDeleteDialog.mode === 'assigned' ? (
+                <>
+                  <h3 id="asset-delete-title">Asset Deletion Validation</h3>
+                  <div className="asset-delete-detail">
+                    <strong>Assigned To:</strong>
+                    <span>{assetDeleteDialog.assignedTo || '-'}</span>
+                  </div>
+                  <p>This asset is currently assigned to an assignee. Please unassign the asset before deleting it.</p>
+                  <div className="asset-delete-actions">
+                    <button type="button" className="outline" onClick={closeAssetDeleteDialog}>OK</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 id="asset-delete-title">Delete Asset</h3>
+                  <p>Are you sure you want to delete this asset?</p>
+                  <div className="asset-delete-actions">
+                    <button type="button" className="outline" onClick={closeAssetDeleteDialog}>Cancel</button>
+                    <button type="button" className="danger" onClick={confirmDeleteAsset}>Delete</button>
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
         )}
 
         {section === 'assignments' && (
@@ -5002,7 +5077,7 @@ function App() {
               </div>
             )}
 
-            {/* ── Hero Banner ── */}
+            {/* â”€â”€ Hero Banner â”€â”€ */}
             <div className="acct-hero-banner">
               <div className="acct-hero-glow acct-hero-glow-1" />
               <div className="acct-hero-glow acct-hero-glow-2" />
@@ -5031,7 +5106,7 @@ function App() {
                 )}
               </div>
 
-              {/* ── Metric Cards inside hero ── */}
+              {/* â”€â”€ Metric Cards inside hero â”€â”€ */}
               <div className="acct-metric-row">
                 <div className="acct-metric-card">
                   <div className="acct-metric-icon acct-icon-blue">
@@ -5081,7 +5156,7 @@ function App() {
               </div>
             </div>
 
-            {/* ── Content ── */}
+            {/* â”€â”€ Content â”€â”€ */}
 
             {!isSuperAdmin ? (
               <div className="acct-restricted">
@@ -5106,7 +5181,7 @@ function App() {
                     <svg className="acct-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
                     <input
                       className="acct-search-input"
-                      placeholder="Search by name or email…"
+                      placeholder="Search by name or emailâ€¦"
                       value={accountSearch}
                       onChange={(e) => setAccountSearch(e.target.value)}
                     />
@@ -5153,7 +5228,7 @@ function App() {
                                     <span className="acct-perm-fraction">{permissionCount}/{ADMIN_PERMISSION_OPTIONS.length}</span>
                                   </div>
                                   <span className={`acct-access-chip ${hasFullAccess ? 'chip-full' : 'chip-limited'}`}>
-                                    {hasFullAccess ? '✦ Full Access' : 'Limited'}
+                                    {hasFullAccess ? 'âœ¦ Full Access' : 'Limited'}
                                   </span>
                                 </div>
                               </td>
@@ -6423,7 +6498,7 @@ function App() {
                 <span>Latest Event</span>
                 <strong>
                   {activitySummary.latestEvent
-                    ? `${activitySummary.latestEvent.action} • ${activitySummary.latestEvent.assetName}`
+                    ? `${activitySummary.latestEvent.action} â€¢ ${activitySummary.latestEvent.assetName}`
                     : 'No activity yet'}
                 </strong>
               </div>
@@ -6439,7 +6514,7 @@ function App() {
                       <div className="dot" />
                       <div>
                         <strong>{a.assetName} {a.action.toLowerCase()} for {a.userName}</strong>
-                        <small>{new Date(a.timestampMs).toLocaleString()} • Allocation #{a.allocationId}</small>
+                        <small>{new Date(a.timestampMs).toLocaleString()} â€¢ Allocation #{a.allocationId}</small>
                       </div>
                     </li>
                   ))}
@@ -6675,3 +6750,4 @@ function App() {
 }
 
 export default App;
+

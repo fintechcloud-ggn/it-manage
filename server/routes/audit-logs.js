@@ -4,7 +4,14 @@ const { query } = require('../db');
 const { requireAuth, hasPermission } = require('../middleware/auth');
 
 async function hasColumn(tableName, columnName) {
-  const rows = await query(`SHOW COLUMNS FROM \`${tableName}\` LIKE ?`, [columnName]);
+  const rows = await query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?`,
+    [tableName, columnName]
+  );
   return rows.length > 0;
 }
 

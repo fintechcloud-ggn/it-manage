@@ -1900,9 +1900,23 @@ p {
 }
 
 .searchable-select__caret {
+  position: relative;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
   flex-shrink: 0;
-  color: #6f8194;
-  font-size: 12px;
+}
+
+.searchable-select__caret::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid #6f8194;
+  border-bottom: 2px solid #6f8194;
+  transform: rotate(45deg);
 }
 
 .searchable-select__menu {
@@ -2378,6 +2392,54 @@ p {
   white-space: nowrap;
 }
 
+.icon-action-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cfdbe7;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #4f6275;
+  box-shadow: 0 8px 18px rgba(96, 120, 148, 0.08);
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.icon-action-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.icon-action-btn:hover {
+  border-color: #9fb8cc;
+  color: #17344a;
+  background: #f8fbfe;
+}
+
+.icon-action-edit:hover {
+  color: #2563eb;
+}
+
+.icon-action-delete:hover {
+  color: #c24141;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .asset-qr-cell img {
   width: 44px;
   height: 44px;
@@ -2465,6 +2527,73 @@ p {
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
+}
+
+.asset-delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  background: rgba(14, 23, 40, 0.56);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.asset-delete-modal {
+  width: min(560px, 96vw);
+  border: 1px solid #c9d9e7;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 28px 64px rgba(10, 24, 38, 0.28);
+  padding: 22px 24px 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.asset-delete-modal h3 {
+  margin: 0;
+  color: #162f44;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+}
+
+.asset-delete-modal p {
+  margin: 0;
+  color: #5e7387;
+  line-height: 1.5;
+}
+
+.asset-delete-detail {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  border: 1px solid #d8e5f0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fbfdff;
+}
+
+.asset-delete-detail strong {
+  color: #31475b;
+}
+
+.asset-delete-detail span {
+  color: #18344c;
+  font-weight: 700;
+}
+
+.asset-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.asset-delete-actions .outline,
+.asset-delete-actions .danger {
+  min-width: 112px;
 }
 
 .employee-modal-actions {
@@ -2922,8 +3051,9 @@ p {
 
 .inventory-panel .inventory-table-shell .table-wrap {
   min-height: 0;
-  flex: 1;
-  max-height: none;
+  flex: 0 0 auto;
+  max-height: 320px;
+  overflow: auto;
 }
 
 .invoice-page {
@@ -3763,6 +3893,8 @@ th {
   border: 1px solid #dce6ef;
   border-radius: 12px;
   background: linear-gradient(180deg, #fbfdff 0%, #f5f9fd 100%);
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .inventory-create-top {
@@ -3774,11 +3906,12 @@ th {
 
 /* Dashboard refresh inspired by the soft editorial KPI layout */
 .dashboard-shell {
-  height: 100vh;
+  height: auto;
   min-height: 100vh;
   padding: 0;
   gap: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   background:
     radial-gradient(1400px 520px at 50% 0%, rgba(255, 255, 255, 0.88), transparent 68%),
     linear-gradient(180deg, #dfe8f3 0%, #edf3f8 100%);
@@ -3792,7 +3925,7 @@ body {
 
 .dashboard-shell .sidebar,
 .dashboard-shell .inventory-app {
-  min-height: 100vh;
+  min-height: auto;
 }
 
 .dashboard-shell .sidebar {
@@ -3970,7 +4103,8 @@ body {
 .dashboard-shell .inventory-app {
   position: relative;
   min-width: 0;
-  height: 100vh;
+  height: auto;
+  min-height: 0;
   padding: 22px;
   border-radius: 0;
   border: 1px solid rgba(208, 220, 233, 0.95);
@@ -3981,7 +4115,7 @@ body {
   background-size: 190px 150px, 190px 150px, auto;
   box-shadow: 0 22px 60px rgba(94, 118, 148, 0.16);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: visible;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -4864,6 +4998,14 @@ body {
     border-radius: 16px;
   }
 
+  .asset-create-form .asset-bulk-upload {
+    grid-column: auto;
+  }
+
+  .bulk-upload-actions {
+    grid-template-columns: 1fr;
+  }
+
   .assignment-search-top .small,
   .assignment-inline-form button,
   .assignment-selfie-form button,
@@ -4963,24 +5105,50 @@ body {
 }
 
 .asset-create-form .field input,
-.asset-create-form .field select {
+.asset-create-form .field select,
+.asset-create-form .searchable-select__trigger {
   border: 1px solid #cfdbe7;
   border-radius: 10px;
   background: #fff;
   min-height: 42px;
 }
 
-.bulk-upload-box {
+.required-field {
   position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+}
+
+.required-indicator {
+  color: #d34141;
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
+.bulk-upload-sample-link {
+  display: flex;
   align-items: center;
-  min-height: 48px;
-  border: 1px solid #c7dae9;
-  border-radius: 12px;
-  padding: 6px;
-  background: #f8fbfe;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bulk-upload-inline-link {
+  margin-left: auto;
+}
+
+.secondary-link {
+  border: 0;
+  background: transparent;
+  color: #1d63a7;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.secondary-link:hover {
+  color: #124678;
 }
 
 .bulk-upload-input {
@@ -4991,14 +5159,44 @@ body {
   pointer-events: none;
 }
 
+.bulk-upload-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.bulk-upload-file-box,
+.bulk-upload-sample-box {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  border: 1px solid #c7dae9;
+  border-radius: 16px;
+  padding: 6px 12px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.bulk-upload-file-box {
+  min-width: 0;
+}
+
+.bulk-upload-sample-box {
+  justify-content: center;
+}
+
 .bulk-upload-picker {
   display: inline-flex;
+  width: 100%;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 42px;
   border: 1px solid #b9c9d8;
-  border-radius: 8px;
-  padding: 7px 12px;
+  border-radius: 12px;
+  padding: 8px 14px;
   background: #ffffff;
   color: #213547;
   font-weight: 700;
@@ -5020,57 +5218,24 @@ body {
   white-space: nowrap;
 }
 
-.bulk-format-menu {
-  position: relative;
-}
-
-.bulk-format-button,
-.dashboard-shell .form .bulk-format-button {
-  min-height: 36px;
-  border: 1px solid #c7dae9;
-  border-radius: 8px;
-  padding: 7px 12px;
-  background: #ffffff !important;
-  color: #274459 !important;
-  box-shadow: none !important;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.bulk-format-button::after {
-  content: '▾';
-  margin-left: 6px;
-  font-size: 10px;
-}
-
-.bulk-format-options {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  z-index: 35;
-  min-width: 190px;
-  border: 1px solid #d5e3f0;
-  border-radius: 10px;
-  padding: 6px;
-  background: #ffffff;
-  box-shadow: 0 16px 34px rgba(20, 54, 82, 0.16);
-}
-
-.bulk-format-options button,
-.dashboard-shell .form .bulk-format-options button {
+.bulk-upload-sample-box .secondary-link {
   width: 100%;
-  border: 0;
-  border-radius: 8px;
-  padding: 9px 10px;
-  background: #ffffff !important;
-  color: #213547 !important;
-  box-shadow: none !important;
-  text-align: left;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
 }
 
-.bulk-format-options button:hover {
-  background: #f4f7fb !important;
+.bulk-upload-sample-box .secondary-link:hover {
+  background: transparent;
+}
+
+.asset-create-form .asset-bulk-upload {
+  grid-column: 2 / -1;
 }
 
 .create-actions {
@@ -7092,3 +7257,4 @@ body {
     padding: 0 16px;
   }
 }
+
