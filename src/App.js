@@ -1022,7 +1022,6 @@ function App() {
       notes: String(asset?.notes || '')
     });
     setAssetDomainName(String(asset?.domain_name || currentUserDomain || '').trim().toLowerCase());
-    setMessage(`Editing asset ${asset?.name || asset?.serial || asset?.id || ''}`.trim());
 
     const formAnchor = document.querySelector('.inventory-create-top');
     if (formAnchor?.scrollIntoView) {
@@ -4905,7 +4904,7 @@ function App() {
                   <p>Are you sure you want to delete this asset?</p>
                   <div className="asset-delete-actions">
                     <button type="button" className="outline" onClick={closeAssetDeleteDialog}>Cancel</button>
-                    <button type="button" className="danger" onClick={confirmDeleteAsset}>Delete</button>
+                    <button type="button" className="outline" onClick={confirmDeleteAsset}>Delete</button>
                   </div>
                 </>
               )}
@@ -6917,7 +6916,7 @@ function App() {
               <p>Are you sure you want to log out of your account?</p>
               <div className="asset-delete-actions">
                 <button type="button" className="outline" onClick={() => setShowLogoutDialog(false)}>Cancel</button>
-                <button type="button" className="danger" onClick={logout}>Logout</button>
+                <button type="button" className="outline" onClick={logout}>Logout</button>
               </div>
             </section>
           </div>
