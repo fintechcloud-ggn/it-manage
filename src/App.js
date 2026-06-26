@@ -2854,22 +2854,7 @@ function App() {
     () => weeklyAssignments.reduce((sum, day) => sum + day.count, 0),
     [weeklyAssignments]
   );
-  const previousSevenDayAssignments = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const prevWindowStart = new Date(today);
-    prevWindowStart.setDate(prevWindowStart.getDate() - 14);
-    const prevWindowEnd = new Date(today);
-    prevWindowEnd.setDate(prevWindowEnd.getDate() - 7);
-    return allocations.filter((a) => {
-      const allocatedAt = new Date(a.allocated_at || '');
-      if (Number.isNaN(allocatedAt.getTime())) return false;
-      return allocatedAt >= prevWindowStart && allocatedAt < prevWindowEnd;
-    }).length;
-  }, [allocations]);
-  const weeklyDeltaPct = previousSevenDayAssignments
-    ? Math.round(((sevenDayAssignments - previousSevenDayAssignments) / previousSevenDayAssignments) * 100)
-    : (sevenDayAssignments > 0 ? 100 : 0);
+
   const averageDailyAssignments = Math.round((sevenDayAssignments / 7) * 10) / 10;
   const allocationCompletionRate = allocations.length
     ? Math.round((allocations.filter((a) => a.returned_at).length / allocations.length) * 100)
