@@ -796,7 +796,6 @@ function App() {
   const [customBrandName, setCustomBrandName] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showLoginUsername, setShowLoginUsername] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
@@ -1739,16 +1738,6 @@ function App() {
       fetchAllocations();
       fetchAuditLogs();
     }
-  }
-
-  function openReturnAssetDialog(asset) {
-    setReturnForm({
-      allocationId: asset.id,
-      assetName: asset.assetName || '',
-      serial: asset.serial || '',
-      reason: 'Damaged',
-      notes: ''
-    });
   }
 
   function closeReturnAssetDialog() {
@@ -2917,10 +2906,6 @@ function App() {
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [availableAssets]
   );
-  const employeeDropdownOptions = useMemo(
-    () => quickAssignUsers,
-    [quickAssignUsers]
-  );
   const modelDropdownOptions = useMemo(
     () => [
       ...modelOptionsByType.map((model) => ({
@@ -3461,7 +3446,7 @@ function App() {
         hint: 'Directory baseline'
       }
     ];
-  }, [stats.total, availableAssets.length, activeAllocations.length, assignedUsersCount, employees.length]);
+  }, [availableAssets.length, activeAllocations.length, assignedUsersCount, employees.length]);
   const filteredInvoices = useMemo(() => {
     const q = invoiceQuery.trim().toLowerCase();
     const now = Date.now();
