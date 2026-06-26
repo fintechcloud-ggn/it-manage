@@ -2151,9 +2151,16 @@ function App() {
   function printAssetQr(asset) {
     const qrData = buildAssetQrData(asset);
     const qrUrl = getQrImageUrl(qrData);
-    const popup = window.open('', '_blank', 'width=420,height=520');
-    if (!popup) return;
-    popup.document.write(`
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
       <html>
         <head>
           <title>Asset QR Label</title>
@@ -2173,11 +2180,18 @@ function App() {
             <p><strong>Asset ID:</strong> ${asset.id}</p>
             <img src="${qrUrl}" alt="Asset QR code" />
           </div>
-          <script>window.onload = () => window.print();</script>
+          <script>
+            window.onload = () => window.print();
+            window.onafterprint = () => {
+              setTimeout(() => {
+                window.frameElement.remove();
+              }, 100);
+            };
+          </script>
         </body>
       </html>
     `);
-    popup.document.close();
+    doc.close();
   }
 
   function printAssignedAssetQr(asset, employee, assignmentAuditLog = null) {
@@ -2185,9 +2199,16 @@ function App() {
     const qrUrl = getQrImageUrl(qrData);
     const assignedAtText = asset.allocatedAt ? new Date(asset.allocatedAt).toLocaleString() : '-';
     const assignedBy = getAllocationAssignmentActor(asset, assignmentAuditLog).name || 'Unknown';
-    const popup = window.open('', '_blank', 'width=780,height=360');
-    if (!popup) return;
-    popup.document.write(`
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
       <html>
         <head>
           <title>Assigned Asset QR</title>
@@ -2224,21 +2245,35 @@ function App() {
               <p><strong>Assigned By:</strong> ${assignedBy}</p>
             </div>
           </div>
-          <script>window.onload = () => window.print();</script>
+          <script>
+            window.onload = () => window.print();
+            window.onafterprint = () => {
+              setTimeout(() => {
+                window.frameElement.remove();
+              }, 100);
+            };
+          </script>
         </body>
       </html>
     `);
-    popup.document.close();
+    doc.close();
   }
 
   function printEmployeeDetails() {
     if (!selectedEmployee) return;
-    const popup = window.open('', '_blank', 'width=960,height=760');
-    if (!popup) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
     const assetRows = selectedEmployee.assignedAssets
       .map((asset) => `<tr><td>${asset.assetName}</td><td>${asset.type}</td><td>${asset.serial}</td><td>${asset.allocatedAt ? new Date(asset.allocatedAt).toLocaleString() : '-'}</td><td>${asset.notes || '-'}</td></tr>`)
       .join('');
-    popup.document.write(`
+    doc.open();
+    doc.write(`
       <html>
         <head>
           <title>Employee Assignment Summary</title>
@@ -2266,11 +2301,18 @@ function App() {
             <thead><tr><th>Asset</th><th>Type</th><th>Serial</th><th>Assigned At</th><th>Notes</th></tr></thead>
             <tbody>${assetRows || '<tr><td colspan="5">No active assets assigned.</td></tr>'}</tbody>
           </table>
-          <script>window.onload = () => window.print();</script>
+          <script>
+            window.onload = () => window.print();
+            window.onafterprint = () => {
+              setTimeout(() => {
+                window.frameElement.remove();
+              }, 100);
+            };
+          </script>
         </body>
       </html>
     `);
-    popup.document.close();
+    doc.close();
   }
 
   async function updateEmployee(e) {
