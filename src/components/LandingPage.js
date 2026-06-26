@@ -138,6 +138,10 @@ const LandingPage = ({ onLogin, navigate, currentPath }) => {
                             <strong>SOC2</strong>
                             <span>Verified</span>
                         </div>
+                        {/* <div className="lp-stat-item">
+                            <strong>SOC2</strong>
+                            <span>Verified</span>
+                        </div> */}
                     </div>
                 </div>
                 <div className="lp-hero-visual reveal-on-scroll">
