@@ -4365,21 +4365,20 @@ function App() {
                 <small className="kpi-trend neutral">{topAssetType[0]} is top category</small>
               </article>
               <article>
-                <span>Active assignments</span>
-                <strong>{stats.active.toLocaleString()}</strong>
-                <small className={`kpi-trend ${weeklyDeltaPct >= 0 ? 'up' : 'down'}`}>
-                  {weeklyDeltaPct >= 0 ? '+' : ''}{weeklyDeltaPct}% vs previous 7d
-                </small>
+                <span>Total employees</span>
+                <strong>{employees.length.toLocaleString()}</strong>
+                <small className="kpi-trend neutral">registered in system</small>
+              </article>
+
+              <article>
+                <span>Allotted Assets</span>
+                <strong>{stats.allocated.toLocaleString()}</strong>
+                <small className="kpi-trend neutral">{stats.utilization}% utilization</small>
               </article>
               <article>
-                <span>Utilization</span>
-                <strong>{stats.utilization}%</strong>
-                <small className="kpi-trend neutral">{stats.allocated} of {stats.total} allocated</small>
-              </article>
-              <article>
-                <span>Availability</span>
-                <strong>{availabilityRate}%</strong>
-                <small className="kpi-trend neutral">{stats.available} assets ready</small>
+                <span>Ready Assets</span>
+                <strong>{stats.available.toLocaleString()}</strong>
+                <small className="kpi-trend neutral">{availabilityRate}% availability</small>
               </article>
               <article>
                 <span>Avg/day assignments</span>
