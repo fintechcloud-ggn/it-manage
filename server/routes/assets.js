@@ -16,7 +16,7 @@ function getAssetStatusFromPayload(type, notes, fallbackStatus = 'available') {
 
 router.get('/', requireAuth, async (req, res) => {
   try {
-    let rows = await query(`
+    let sql = `
       SELECT a.id, a.name, a.type, a.domain_name, a.serial, a.status, a.store_id, a.vendor, a.notes, a.brand_id, a.model_id,
              b.name AS brand_name, m.name AS model_name,
              assigned_user.name AS assigned_to_name,
@@ -33,8 +33,14 @@ router.get('/', requireAuth, async (req, res) => {
       ) current_allocation ON current_allocation.asset_id = a.id
       LEFT JOIN allocations active_allocation ON active_allocation.id = current_allocation.allocation_id
       LEFT JOIN users assigned_user ON assigned_user.id = active_allocation.user_id
-      ORDER BY a.id DESC
-    `);
+    `;
+    const params = [];
+    if (req.query.type && req.query.type !== 'all') {
+      sql += ' WHERE a.type = ?';
+      params.push(req.query.type);
+    }
+    sql += ' ORDER BY a.id DESC';
+    let rows = await query(sql, params);
     if (!isSuperAdmin(req.user)) {
       rows = rows.filter((row) => canAccessDomainRecord(req.user, row));
     }

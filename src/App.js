@@ -805,6 +805,7 @@ function App() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterBrand, setFilterBrand] = useState('all');
   const [filterType, setFilterType] = useState('all');
+  const [inventoryTypes, setInventoryTypes] = useState([]);
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
@@ -1370,8 +1371,9 @@ function App() {
     return true;
   }
 
-  function fetchAssets() {
-    apiFetch('/api/assets', { headers: authHeaders() })
+  function fetchAssets(type = 'all') {
+    const queryParam = type !== 'all' ? `?type=${encodeURIComponent(type)}` : '';
+    apiFetch(`/api/assets${queryParam}`, { headers: authHeaders() })
       .then((r) => {
         if (handleUnauthorized(r.status)) throw new Error('unauthorized');
         if (!r.ok) throw new Error(`assets_${r.status}`);
@@ -3335,8 +3337,21 @@ function App() {
     const noted = selectedEmployee.assignedAssets.find((asset) => asset.notes);
     return noted?.notes || '-';
   }, [selectedEmployee]);
-  const inventoryTypes = useMemo(() => {
-    return Array.from(new Set(assets.map((a) => a.type).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  useEffect(() => {
+    setInventoryTypes((prev) => {
+      const newTypes = new Set(prev);
+      let changed = false;
+      for (const a of assets) {
+        if (a.type && !newTypes.has(a.type)) {
+          newTypes.add(a.type);
+          changed = true;
+        }
+      }
+      if (changed) {
+        return Array.from(newTypes).sort((a, b) => a.localeCompare(b));
+      }
+      return prev;
+    });
   }, [assets]);
   const inventoryBrands = useMemo(() => {
     return Array.from(new Set(assets.map((a) => a.brand_name).filter(Boolean))).sort((a, b) => a.localeCompare(b));
@@ -3783,6 +3798,7 @@ function App() {
     setFilterStatus('all');
     setFilterBrand('all');
     setFilterType('all');
+    fetchAssets('all');
     setSortBy('name');
     setSortDir('asc');
     setInventoryPageSize('25');
@@ -4719,7 +4735,7 @@ function App() {
               <button
                 type="button"
                 className={filterType === 'all' ? 'active' : ''}
-                onClick={() => setFilterType('all')}
+                onClick={() => { setFilterType('all'); fetchAssets('all'); }}
               >
                 All Types
               </button>
@@ -4728,7 +4744,7 @@ function App() {
                   key={type}
                   type="button"
                   className={filterType === type ? 'active' : ''}
-                  onClick={() => setFilterType(type)}
+                  onClick={() => { setFilterType(type); fetchAssets(type); }}
                 >
                   {type}
                 </button>
