@@ -1256,15 +1256,42 @@ function App() {
 
   useEffect(() => {
     if (!token || !sessionChecked || authView !== 'app') return;
-    fetchAssets();
-    fetchQuickAssignUsers();
-    fetchUploadedEmployeeAssets();
-    fetchAllocations();
-    fetchStores();
-    fetchBrands();
-    fetchDomains();
+
+    switch (section) {
+      case 'overview':
+        fetchAssets();
+        fetchAllocations();
+        fetchDomains();
+        break;
+      case 'inventory':
+        fetchAssets();
+        fetchQuickAssignUsers();
+        fetchAllocations();
+        fetchStores();
+        fetchBrands();
+        fetchDomains();
+        break;
+      case 'assignments':
+        fetchAssets();
+        fetchAllocations();
+        fetchQuickAssignUsers();
+        fetchUploadedEmployeeAssets();
+        break;
+      case 'accounts':
+        fetchDomains();
+        break;
+      case 'insights':
+        fetchAssets();
+        fetchAllocations();
+        break;
+      case 'invoices':
+        // No initial fetch needed
+        break;
+      default:
+        break;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, sessionChecked, authView]);
+  }, [token, sessionChecked, authView, section]);
 
   useEffect(() => {
     if (!currentUserDomain) return;
