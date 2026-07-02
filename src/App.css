@@ -1745,14 +1745,14 @@ p {
 }
 
 .assignment-directory-panel .panel-head {
-  order: 2;
+  order: 1;
   margin-bottom: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid #d7e5f2;
 }
 
 .assignment-search-top {
-  order: 3;
+  order: 2;
   display: grid;
   grid-template-columns: 2fr minmax(180px, 0.7fr) auto;
   gap: 8px;
@@ -1788,15 +1788,10 @@ p {
 }
 
 .assignment-quick-assign {
-  order: 1;
   margin-top: 0;
   border-color: #d2e2f0;
   background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%);
   box-shadow: 0 8px 20px rgba(20, 54, 82, 0.06);
-}
-
-.assignment-directory-panel .assignment-employee-table {
-  order: 4;
 }
 
 .assignment-inline-form {
@@ -4748,14 +4743,6 @@ body {
   width: 100%;
 }
 
-.dashboard-shell .assignments-page-stack > .assignment-quick-assign {
-  order: 1;
-}
-
-.dashboard-shell .assignments-page-stack > .assignment-employee-table {
-  order: 2;
-}
-
 .dashboard-shell .assignment-directory-panel,
 .dashboard-shell .assignment-quick-assign,
 .dashboard-shell .assignment-search-top,
@@ -4793,6 +4780,13 @@ body {
 
 .dashboard-shell .assignment-employee-table table {
   min-width: 1180px;
+}
+
+.dashboard-shell .assignment-directory-table-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
 }
 
 .dashboard-shell .assignment-row-actions {

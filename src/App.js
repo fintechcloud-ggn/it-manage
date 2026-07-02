@@ -5095,6 +5095,145 @@ function App() {
                 </article>
               ))}
             </section>
+            {hasAdminPermission('assignments.manage') && (
+              <div className="create-box assignment-quick-assign">
+                <h4>Assign Asset To Employee</h4>
+                <form id="assignment-quick-form" onSubmit={allocate} className="form assignment-inline-form">
+                  <label className="assignment-field">
+                    <span>Employee Name</span>
+                    <input
+                      list="quick-assign-employee-names"
+                      value={quickAssignForm.employeeName}
+                      onChange={(e) => updateQuickAssignEmployeeField('employeeName', e.target.value)}
+                      placeholder="Type employee name"
+                      className={assignValidated && !quickAssignForm.employeeName.trim() ? 'input-error' : ''}
+                    />
+                    <datalist id="quick-assign-employee-names">
+                      {quickAssignUsers.map((employee, index) => (
+                        <option key={`employee-name-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.name || ''}>
+                          {employee.employee_code || employee.employee_email || ''}
+                        </option>
+                      ))}
+                    </datalist>
+                  </label>
+                  <label className="assignment-field">
+                    <span>Employee Code</span>
+                    <input
+                      type="text"
+                      value={quickAssignForm.employeeCode}
+                      onChange={(e) => updateQuickAssignEmployeeField('employeeCode', e.target.value)}
+                      placeholder="Type employee code"
+                      className={assignValidated && !quickAssignForm.employeeCode.trim() ? 'input-error' : ''}
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Email</span>
+                    <input
+                      type="text"
+                      value={quickAssignForm.employeeEmail}
+                      onChange={(e) => updateQuickAssignEmployeeField('employeeEmail', e.target.value)}
+                      placeholder="Type email"
+                      className={assignValidated && !quickAssignForm.employeeEmail.trim() ? 'input-error' : ''}
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Mobile</span>
+                    <input
+                      value={quickAssignForm.employeeMobile}
+                      onChange={(e) => updateQuickAssignEmployeeField('employeeMobile', e.target.value)}
+                      placeholder="Type mobile"
+                      className={assignValidated && !quickAssignForm.employeeMobile.trim() ? 'input-error' : ''}
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Department</span>
+                    <input
+                      value={quickAssignForm.employeeDepartment}
+                      onChange={(e) => updateQuickAssignEmployeeField('employeeDepartment', e.target.value)}
+                      placeholder="Type department"
+                      className={assignValidated && !quickAssignForm.employeeDepartment.trim() ? 'input-error' : ''}
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Designation</span>
+                    <input
+                      value={quickAssignForm.employeeDesignation}
+                      onChange={(e) => updateQuickAssignEmployeeField('employeeDesignation', e.target.value)}
+                      placeholder="Type designation"
+                      className={assignValidated && !quickAssignForm.employeeDesignation.trim() ? 'input-error' : ''}
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Asset Type</span>
+                    <select
+                      value={quickAssignForm.assetType}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
+                    >
+                      <option value="all">All asset types</option>
+                      {quickAssignTypeOptions.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="assignment-field">
+                    <span>Available Asset</span>
+                    <SearchableSelect
+                      value={quickAssignForm.assetId}
+                      onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
+                      options={quickAssignAssetSelectOptions}
+                      placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
+                      searchPlaceholder="Search asset by name, serial, brand..."
+                      emptyMessage="No asset found"
+                      className={assignValidated && !quickAssignForm.assetId ? 'input-error' : ''}
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Notes</span>
+                    <input
+                      name="notes"
+                      value={quickAssignForm.notes}
+                      onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    />
+                  </label>
+                  {!isSuperAdmin && (
+                    <button
+                      type="button"
+                      className="selfie-open-btn"
+                      disabled={!getQuickAssignSelfieUserId()}
+                      onClick={(e) => openSelfieCamera(e, getQuickAssignSelfieUserId())}
+                    >
+                      Live Selfie
+                    </button>
+                  )}
+                  <div className="assignment-submit-row">
+                    <button
+                      type="submit"
+                      className="assignment-submit-btn"
+                    >
+                      Assign To Employee
+                    </button>
+                  </div>
+                </form>
+                {selfieCameraOpen && (
+                  <div className="selfie-camera-box quick-selfie-camera">
+                    <video ref={selfieVideoRef} className="selfie-camera-preview" autoPlay playsInline muted />
+                    <div className="selfie-camera-actions">
+                      <button type="button" className="small selfie-capture-btn" onClick={captureEmployeeSelfie} disabled={selfieSaving}>
+                        {selfieSaving ? 'Saving...' : 'Capture Selfie'}
+                      </button>
+                      <button type="button" className="small outline" onClick={stopSelfieCamera}>
+                        Close Camera
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {selfieError && <p className="selfie-error">{selfieError}</p>}
+                <p className="assignment-inline-meta">
+                  {quickAssignAssetOptions.length} matching available assets
+                  {quickAssignForm.assetType !== 'all' ? ` in ${quickAssignForm.assetType}` : ''}
+                </p>
+              </div>
+            )}
             <section className="panel wide assignment-directory-panel">
               <div className="panel-head">
                 <h3>Employee Assignment Directory</h3>
@@ -5129,153 +5268,14 @@ function App() {
                 <button type="button" className="small" onClick={exportAssignmentCsv}>Export CSV</button>
               </form>
 
-              {hasAdminPermission('assignments.manage') && (
-                <div className="create-box assignment-quick-assign">
-                  <h4>Assign Asset To Employee</h4>
-                  <form id="assignment-quick-form" onSubmit={allocate} className="form assignment-inline-form">
-                    <label className="assignment-field">
-                      <span>Employee Name</span>
-                      <input
-                        list="quick-assign-employee-names"
-                        value={quickAssignForm.employeeName}
-                        onChange={(e) => updateQuickAssignEmployeeField('employeeName', e.target.value)}
-                        placeholder="Type employee name"
-                        className={assignValidated && !quickAssignForm.employeeName.trim() ? 'input-error' : ''}
-                      />
-                      <datalist id="quick-assign-employee-names">
-                        {quickAssignUsers.map((employee, index) => (
-                          <option key={`employee-name-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.name || ''}>
-                            {employee.employee_code || employee.employee_email || ''}
-                          </option>
-                        ))}
-                      </datalist>
-                    </label>
-                    <label className="assignment-field">
-                      <span>Employee Code</span>
-                      <input
-                        type="text"
-                        value={quickAssignForm.employeeCode}
-                        onChange={(e) => updateQuickAssignEmployeeField('employeeCode', e.target.value)}
-                        placeholder="Type employee code"
-                        className={assignValidated && !quickAssignForm.employeeCode.trim() ? 'input-error' : ''}
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Email</span>
-                      <input
-                        type="text"
-                        value={quickAssignForm.employeeEmail}
-                        onChange={(e) => updateQuickAssignEmployeeField('employeeEmail', e.target.value)}
-                        placeholder="Type email"
-                        className={assignValidated && !quickAssignForm.employeeEmail.trim() ? 'input-error' : ''}
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Mobile</span>
-                      <input
-                        value={quickAssignForm.employeeMobile}
-                        onChange={(e) => updateQuickAssignEmployeeField('employeeMobile', e.target.value)}
-                        placeholder="Type mobile"
-                        className={assignValidated && !quickAssignForm.employeeMobile.trim() ? 'input-error' : ''}
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Department</span>
-                      <input
-                        value={quickAssignForm.employeeDepartment}
-                        onChange={(e) => updateQuickAssignEmployeeField('employeeDepartment', e.target.value)}
-                        placeholder="Type department"
-                        className={assignValidated && !quickAssignForm.employeeDepartment.trim() ? 'input-error' : ''}
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Designation</span>
-                      <input
-                        value={quickAssignForm.employeeDesignation}
-                        onChange={(e) => updateQuickAssignEmployeeField('employeeDesignation', e.target.value)}
-                        placeholder="Type designation"
-                        className={assignValidated && !quickAssignForm.employeeDesignation.trim() ? 'input-error' : ''}
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Asset Type</span>
-                      <select
-                        value={quickAssignForm.assetType}
-                        onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
-                      >
-                        <option value="all">All asset types</option>
-                        {quickAssignTypeOptions.map((type) => (
-                          <option key={type} value={type}>{type}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="assignment-field">
-                      <span>Available Asset</span>
-                      <SearchableSelect
-                        value={quickAssignForm.assetId}
-                        onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
-                        options={quickAssignAssetSelectOptions}
-                        placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
-                        searchPlaceholder="Search asset by name, serial, brand..."
-                        emptyMessage="No asset found"
-                        className={assignValidated && !quickAssignForm.assetId ? 'input-error' : ''}
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Notes</span>
-                      <input
-                        name="notes"
-                        value={quickAssignForm.notes}
-                        onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      />
-                    </label>
-                    {!isSuperAdmin && (
-                      <button
-                        type="button"
-                        className="selfie-open-btn"
-                        disabled={!getQuickAssignSelfieUserId()}
-                        onClick={(e) => openSelfieCamera(e, getQuickAssignSelfieUserId())}
-                      >
-                        Live Selfie
-                      </button>
-                    )}
-                    <div className="assignment-submit-row">
-                      <button
-                        type="submit"
-                        className="assignment-submit-btn"
-                      >
-                        Assign To Employee
-                      </button>
-                    </div>
-                  </form>
-                  {selfieCameraOpen && (
-                    <div className="selfie-camera-box quick-selfie-camera">
-                      <video ref={selfieVideoRef} className="selfie-camera-preview" autoPlay playsInline muted />
-                      <div className="selfie-camera-actions">
-                        <button type="button" className="small selfie-capture-btn" onClick={captureEmployeeSelfie} disabled={selfieSaving}>
-                          {selfieSaving ? 'Saving...' : 'Capture Selfie'}
-                        </button>
-                        <button type="button" className="small outline" onClick={stopSelfieCamera}>
-                          Close Camera
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {selfieError && <p className="selfie-error">{selfieError}</p>}
-                  <p className="assignment-inline-meta">
-                    {quickAssignAssetOptions.length} matching available assets
-                    {quickAssignForm.assetType !== 'all' ? ` in ${quickAssignForm.assetType}` : ''}
-                  </p>
-                </div>
-              )}
-
-              <div className="table-wrap assignment-employee-table">
-                <table key={employeeDirectoryRenderKey}>
-                  <thead>
-                    <tr>
-                      <th>S.No</th>
-                      <th>Employee</th>
-                      <th>ID</th>
+              <div className="assignment-directory-table-shell">
+                <div className="table-wrap assignment-employee-table">
+                  <table key={employeeDirectoryRenderKey}>
+                    <thead>
+                      <tr>
+                        <th>S.No</th>
+                        <th>Employee</th>
+                        <th>ID</th>
                       <th>Code</th>
                       <th>Email</th>
                       <th>Mobile</th>
@@ -5325,9 +5325,10 @@ function App() {
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 {assignmentTotalPages > 1 && (
                   <div className="inventory-pager">
                     <span>
