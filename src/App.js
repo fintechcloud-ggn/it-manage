@@ -891,6 +891,7 @@ function App() {
     permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
   });
   const [adminCreateDomainDropdownOpen, setAdminCreateDomainDropdownOpen] = useState(false);
+  const adminCreateDomainPickerRef = useRef(null);
   const [adminPermissionDrafts, setAdminPermissionDrafts] = useState({});
   const [adminDetailDrafts, setAdminDetailDrafts] = useState({});
   const [roleAccountPasswords, setRoleAccountPasswords] = useState(() => readRoleAccountPasswords());
@@ -1308,12 +1309,34 @@ function App() {
   useEffect(() => {
     if (!currentUserDomain) return;
     setAssetDomainName((prev) => prev || currentUserDomain);
-    setAdminCreateForm((prev) => (
-      prev.domain_names?.length || prev.domain_name
-        ? prev
-        : { ...prev, domain_name: currentUserDomain, domain_names: [currentUserDomain] }
-    ));
   }, [currentUserDomain]);
+
+  useEffect(() => {
+    if (!createAdminPopupOpen) return;
+    setAdminCreateForm({
+      name: '',
+      email: '',
+      password: '',
+      role: 'admin',
+      domain_name: '',
+      domain_names: [],
+      employee_code_prefix: '',
+      permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
+    });
+    setAdminCreateDomainDropdownOpen(false);
+  }, [createAdminPopupOpen]);
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!adminCreateDomainDropdownOpen) return;
+      if (adminCreateDomainPickerRef.current && !adminCreateDomainPickerRef.current.contains(event.target)) {
+        setAdminCreateDomainDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [adminCreateDomainDropdownOpen]);
 
   useEffect(() => {
     if (!token || section !== 'activity' || auditLogsLoaded) return;
@@ -3034,9 +3057,17 @@ function App() {
     () => users.filter((u) => (u.role || '').toLowerCase() !== 'user' && !u.is_super_admin),
     [users]
   );
+  const claimedRoleDomains = useMemo(
+    () => new Set(
+      managedAdmins
+        .flatMap((admin) => normalizeDomainList(admin.domain_name))
+        .filter(Boolean)
+    ),
+    [managedAdmins]
+  );
   const accountManagementDomains = useMemo(
     () => Array.from(new Set(
-      [...domains, ...managedAdmins.flatMap((admin) => normalizeDomainList(admin.domain_name))]
+      [...domains.flatMap((domain) => normalizeDomainList(domain)), ...managedAdmins.flatMap((admin) => normalizeDomainList(admin.domain_name))]
         .map((domain) => String(domain || '').trim().toLowerCase())
         .filter(Boolean)
     )).sort((a, b) => a.localeCompare(b)),
@@ -3045,7 +3076,12 @@ function App() {
   const domainManagementRows = useMemo(() => {
     const rowMap = new Map();
     domainRecords.forEach((domain) => {
-      if (domain.name) rowMap.set(domain.name, domain);
+      normalizeDomainList(domain.name).forEach((name) => {
+        if (!name) return;
+        if (!rowMap.has(name)) {
+          rowMap.set(name, { ...domain, name });
+        }
+      });
     });
     accountManagementDomains.forEach((name) => {
       if (!rowMap.has(name)) {
@@ -5545,7 +5581,7 @@ function App() {
                   </label>
                   <label className="account-field">
                     <span>Domain</span>
-                    <div className="multi-domain-picker">
+                    <div className="multi-domain-picker" ref={adminCreateDomainPickerRef}>
                       <button
                         type="button"
                         className="multi-domain-picker-trigger"
@@ -5553,7 +5589,7 @@ function App() {
                       >
                         <span>
                           {adminCreateForm.domain_names.length
-                            ? adminCreateForm.domain_names.join(', ')
+                            ? `${adminCreateForm.domain_names.length} selected`
                             : 'Select domains'}
                         </span>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -5562,7 +5598,11 @@ function App() {
                       </button>
                       {adminCreateDomainDropdownOpen && (
                         <div className="multi-domain-picker-panel">
-                          {domainManagementRows.map((domain) => {
+                          {domainManagementRows.filter((domain) => {
+                            const domainName = String(domain.name || '').trim().toLowerCase();
+                            if (!domainName) return false;
+                            return !claimedRoleDomains.has(domainName);
+                          }).map((domain) => {
                             const domainName = String(domain.name || '').trim().toLowerCase();
                             if (!domainName) return null;
                             return (
