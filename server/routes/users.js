@@ -326,10 +326,24 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage']), async (req, res) => {
+router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage', 'assignments.manage']), async (req, res) => {
   try {
-    const { name, email, role, password, profile_image_url, permissions, domain_name, domain_names, employee_code_prefix } = req.body;
-    const requestedRole = role || 'user';
+    const {
+      name,
+      email,
+      role,
+      password,
+      profile_image_url,
+      permissions,
+      domain_name,
+      domain_names,
+      employee_code_prefix,
+      employee_code,
+      personal_mobile_no,
+      designation
+    } = req.body;
+    const canManageAccounts = hasPermission(req.user, 'accounts.create') || hasPermission(req.user, 'accounts.manage');
+    const requestedRole = canManageAccounts ? (role || 'user') : 'user';
     const requestedDomains = isSuperAdmin(req.user)
       ? parseDomainList(domain_names || domain_name)
       : parseDomainList(getUserDomain(req.user));
@@ -340,15 +354,30 @@ router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage']), a
       await query('INSERT IGNORE INTO domains (name) VALUES (?)', [domain]);
     }
     const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
+    const normalizedEmployeeCode = String(employee_code || '').trim() || null;
+    const normalizedPersonalMobile = String(personal_mobile_no || '').trim() || null;
+    const normalizedDesignation = String(designation || '').trim() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
     const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
     const storedDomain = serializeDomainList(requestedDomains);
     const result = await query(
-      'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email, requestedRole, storedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
+      'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password, employee_code, personal_mobile_no, designation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        name,
+        email,
+        requestedRole,
+        storedDomain,
+        normalizedPrefix,
+        profile_image_url || null,
+        permissionsJson,
+        hashed,
+        normalizedEmployeeCode,
+        normalizedPersonalMobile,
+        normalizedDesignation
+      ]
     );
     const createdRows = await query(
-      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json, personal_mobile_no, designation FROM users WHERE id = ? LIMIT 1',
       [result.insertId]
     );
     await writeAuditLog({
@@ -403,12 +432,12 @@ router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage'
   }
 });
 
-router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), async (req, res) => {
+router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage', 'assignments.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { name, email, role, profile_image_url, domain_name, domain_names, employee_code_prefix } = req.body;
+    const { name, email, role, profile_image_url, domain_name, domain_names, employee_code_prefix, employee_code, personal_mobile_no, designation } = req.body;
     const existingRows = await query(
-      'SELECT id, name, email, role, domain_name, employee_code_prefix, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, domain_name, employee_code_prefix, employee_code, personal_mobile_no, designation, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
     );
     const existing = existingRows[0];
@@ -430,15 +459,24 @@ router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), a
       }
     }
     const normalizedPrefix = String(employee_code_prefix || existing.employee_code_prefix || '').trim().toLowerCase() || null;
+    const normalizedEmployeeCode = employee_code !== undefined
+      ? String(employee_code || '').trim() || null
+      : (existing.employee_code || null);
+    const normalizedPersonalMobile = personal_mobile_no !== undefined
+      ? String(personal_mobile_no || '').trim() || null
+      : (existing.personal_mobile_no || null);
+    const normalizedDesignation = designation !== undefined
+      ? String(designation || '').trim() || null
+      : (existing.designation || null);
 
     const nextPermissions = requestedRole === 'user' ? null : existing.permissions_json;
     const storedDomain = serializeDomainList(requestedDomains.length ? requestedDomains : existing.domain_name);
     await query(
-      'UPDATE users SET name = ?, email = ?, role = ?, domain_name = ?, employee_code_prefix = ?, profile_image_url = ?, permissions_json = ? WHERE id = ?',
-      [name, email, requestedRole, storedDomain, normalizedPrefix, profile_image_url || null, nextPermissions, id]
+      'UPDATE users SET name = ?, email = ?, role = ?, domain_name = ?, employee_code_prefix = ?, profile_image_url = ?, permissions_json = ?, employee_code = ?, personal_mobile_no = ?, designation = ? WHERE id = ?',
+      [name, email, requestedRole, storedDomain, normalizedPrefix, profile_image_url || null, nextPermissions, normalizedEmployeeCode, normalizedPersonalMobile, normalizedDesignation, id]
     );
     const updatedRows = await query(
-      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, personal_mobile_no, designation, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
     );
     await writeAuditLog({
@@ -526,7 +564,7 @@ router.put('/:id/permissions', requireAnyPermission(['accounts.edit', 'accounts.
   }
 });
 
-router.delete('/:id', requireAnyPermission(['accounts.delete', 'accounts.manage']), async (req, res) => {
+router.delete('/:id', requireAnyPermission(['accounts.delete', 'accounts.manage', 'assignments.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const rows = await query(

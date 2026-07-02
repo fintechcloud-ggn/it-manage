@@ -843,6 +843,14 @@ function App() {
     assetSearch: '',
     notes: ''
   });
+  const [employeeCreateForm, setEmployeeCreateForm] = useState({
+    name: '',
+    employee_code: '',
+    email: '',
+    personal_mobile_no: '',
+    domain_name: '',
+    designation: ''
+  });
   const [assignValidated, setAssignValidated] = useState(false);
   const [selfieEmployeeId, setSelfieEmployeeId] = useState('');
   const [selfieCameraOpen, setSelfieCameraOpen] = useState(false);
@@ -907,6 +915,9 @@ function App() {
   const [employeeEditForm, setEmployeeEditForm] = useState({
     name: '',
     email: '',
+    employee_code: '',
+    personal_mobile_no: '',
+    designation: '',
     role: 'user',
     domain_name: '',
     employmentStatus: 'active',
@@ -1209,6 +1220,7 @@ function App() {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
+      employees: 'assignments.view',
       insights: 'insights.view',
       invoices: 'invoices.view',
       activity: 'activity.view',
@@ -1309,6 +1321,13 @@ function App() {
   useEffect(() => {
     if (!currentUserDomain) return;
     setAssetDomainName((prev) => prev || currentUserDomain);
+  }, [currentUserDomain]);
+
+  useEffect(() => {
+    if (!currentUserDomain) return;
+    setEmployeeCreateForm((prev) => (
+      prev.domain_name ? prev : { ...prev, domain_name: currentUserDomain }
+    ));
   }, [currentUserDomain]);
 
   useEffect(() => {
@@ -2354,9 +2373,13 @@ function App() {
   async function updateEmployee(e) {
     e.preventDefault();
     if (!selectedEmployee) return;
+    const targetUserId = selectedEmployee.local_user_id || selectedEmployee.id;
     const payload = {
       name: employeeEditForm.name.trim(),
       email: employeeEditForm.email.trim(),
+      employee_code: employeeEditForm.employee_code.trim(),
+      personal_mobile_no: employeeEditForm.personal_mobile_no.trim(),
+      designation: employeeEditForm.designation.trim(),
       role: (employeeEditForm.role || 'user').trim(),
       domain_name: (employeeEditForm.domain_name || '').trim().toLowerCase()
     };
@@ -2364,7 +2387,7 @@ function App() {
       setMessage('Name and email are required');
       return;
     }
-    const res = await apiFetch(`/api/users/${selectedEmployee.id}`, {
+    const res = await apiFetch(`/api/users/${targetUserId}`, {
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify(payload)
@@ -2376,6 +2399,9 @@ function App() {
         id: body.id ?? selectedEmployee.id,
         name: body.name ?? payload.name,
         email: body.email ?? payload.email,
+        employee_code: body.employee_code ?? payload.employee_code,
+        personal_mobile_no: body.personal_mobile_no ?? payload.personal_mobile_no,
+        designation: body.designation ?? payload.designation,
         role: body.role ?? payload.role,
         domain_name: body.domain_name ?? payload.domain_name,
         profile_image_url: body.profile_image_url ?? selectedEmployee.profile_image_url ?? null,
@@ -2668,6 +2694,88 @@ function App() {
       fetchAuditLogs();
       setAssetDomainName((prev) => (String(prev || '').trim().toLowerCase() === normalizedDomain ? currentUserDomain || '' : prev));
     }
+  }
+
+  async function createEmployeeRecord(e) {
+    e.preventDefault();
+    if (!hasAdminPermission('assignments.manage') && !isSuperAdmin) {
+      setMessage('You do not have permission to create employees.');
+      return false;
+    }
+    const payload = {
+      name: employeeCreateForm.name.trim(),
+      employee_code: employeeCreateForm.employee_code.trim(),
+      email: employeeCreateForm.email.trim(),
+      personal_mobile_no: employeeCreateForm.personal_mobile_no.trim(),
+      domain_name: String(employeeCreateForm.domain_name || '').trim().toLowerCase(),
+      designation: employeeCreateForm.designation.trim(),
+      role: 'user',
+      password: 'password'
+    };
+    if (!payload.name || !payload.employee_code || !payload.email || !payload.personal_mobile_no || !payload.domain_name || !payload.designation) {
+      setMessage('Please fill employee name, code, email, mobile, domain, and designation.');
+      return false;
+    }
+    const res = await apiFetch('/api/users', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      setToken('');
+      setUser(null);
+      setAuditLogs([]);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setAuthView('login');
+      setMessage('Session expired. Please login again.');
+      return false;
+    }
+    setMessage(res.ok ? 'Employee created successfully.' : body.error || 'Employee creation failed');
+    if (res.ok) {
+      setEmployeeCreateForm({
+        name: '',
+        employee_code: '',
+        email: '',
+        personal_mobile_no: '',
+        domain_name: currentUserDomain || '',
+        designation: ''
+      });
+      fetchUsers();
+      fetchAuditLogs();
+    }
+    return res.ok;
+  }
+
+  async function deleteEmployeeRecord(targetUserId) {
+    if (!hasAdminPermission('assignments.manage') && !isSuperAdmin) {
+      setMessage('You do not have permission to delete employees.');
+      return false;
+    }
+    const employeeName = employeeModuleRows.find((emp) => String(emp.id) === String(targetUserId))?.name || 'this employee';
+    const confirmed = window.confirm(`Delete ${employeeName}? This cannot be undone.`);
+    if (!confirmed) return false;
+    const res = await apiFetch(`/api/users/${targetUserId}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? 'Employee deleted.' : body.error || 'Employee delete failed');
+    if (res.ok) {
+      if (String(selectedEmployeeId) === String(targetUserId)) {
+        setSelectedEmployeeId(null);
+        setIsEditingEmployee(false);
+      }
+      fetchUsers();
+      fetchAuditLogs();
+    }
+    return res.ok;
+  }
+
+  function openEmployeeEdit(targetUserId) {
+    setSelectedEmployeeId(String(targetUserId));
+    window.setTimeout(() => setIsEditingEmployee(true), 0);
   }
 
   const activeAllocations = useMemo(() => allocations.filter((a) => !a.returned_at), [allocations]);
@@ -3025,6 +3133,10 @@ function App() {
   const employees = useMemo(() => {
     return users.filter((u) => (u.role || '').toLowerCase() === 'user');
   }, [users]);
+  const employeeModuleRows = useMemo(
+    () => [...employees].sort((a, b) => (a.name || '').localeCompare(b.name || '') || String(a.employee_code || '').localeCompare(String(b.employee_code || ''))),
+    [employees]
+  );
   const quickAssignTypeOptions = useMemo(
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [availableAssets]
@@ -3243,11 +3355,11 @@ function App() {
       .sort((a, b) => b.assignedCount - a.assignedCount || (a.name || '').localeCompare(b.name || ''));
   }, [quickAssignUsers, employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch, uploadedEmployeeLookup, userById]);
   const selectedEmployee = useMemo(
-    () => employeeDirectory.find((emp) => emp.id === selectedEmployeeId) || null,
+    () => employeeDirectory.find((emp) => String(emp.id) === String(selectedEmployeeId)) || null,
     [employeeDirectory, selectedEmployeeId]
   );
   const selectedReplacementEmployee = useMemo(
-    () => employeeDirectory.find((emp) => emp.id === selectedReplacementEmployeeId) || null,
+    () => employeeDirectory.find((emp) => String(emp.id) === String(selectedReplacementEmployeeId)) || null,
     [employeeDirectory, selectedReplacementEmployeeId]
   );
   const employeeDirectoryRenderKey = useMemo(
@@ -3308,6 +3420,9 @@ function App() {
     setEmployeeEditForm({
       name: selectedEmployee.name || '',
       email: selectedEmployee.email || '',
+      employee_code: selectedEmployee.employee_code || '',
+      personal_mobile_no: selectedEmployee.personal_mobile_no || '',
+      designation: selectedEmployee.designation || '',
       role: selectedEmployee.role || 'user',
       domain_name: selectedEmployee.domain_name || currentUserDomain || '',
       employmentStatus: 'active',
@@ -3873,6 +3988,7 @@ function App() {
     { key: 'overview', label: 'Overview', icon: 'DB' },
     { key: 'inventory', label: 'Inventory', icon: 'IV' },
     { key: 'assignments', label: 'Assignments', icon: 'AS' },
+    { key: 'employees', label: 'Employee', icon: 'EM' },
     { key: 'insights', label: 'Insights', icon: 'IN' },
     { key: 'invoices', label: 'Invoices', icon: 'BI' },
     { key: 'activity', label: 'Recent Activity', icon: 'AC' },
@@ -5238,6 +5354,130 @@ function App() {
           </div>
         )}
 
+        {section === 'employees' && (
+          <div className="assignments-page-stack">
+            {hasAdminPermission('assignments.manage') ? (
+              <>
+                <div className="create-box assignment-quick-assign">
+                  <h4>Add Employee</h4>
+                  <form className="form assignment-inline-form employee-create-form" onSubmit={createEmployeeRecord}>
+                    <label className="assignment-field">
+                      <span>Employee Name</span>
+                      <input
+                        type="text"
+                        value={employeeCreateForm.name}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                        placeholder="Type employee name"
+                        required
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Employee Code</span>
+                      <input
+                        type="text"
+                        value={employeeCreateForm.employee_code}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, employee_code: e.target.value.toUpperCase() }))}
+                        placeholder="Type employee code"
+                        required
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Email</span>
+                      <input
+                        type="email"
+                        value={employeeCreateForm.email}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="Type email"
+                        required
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Mobile</span>
+                      <input
+                        type="text"
+                        value={employeeCreateForm.personal_mobile_no}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                        placeholder="Type mobile"
+                        required
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Domain</span>
+                      <select
+                        value={employeeCreateForm.domain_name}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
+                        required
+                      >
+                        <option value="" disabled>Select domain</option>
+                        {domainManagementRows.map((domain) => {
+                          const domainName = String(domain.name || '').trim().toLowerCase();
+                          if (!domainName) return null;
+                          return <option key={domainName} value={domainName}>{domainName}</option>;
+                        })}
+                      </select>
+                    </label>
+                    <label className="assignment-field">
+                      <span>Designation</span>
+                      <input
+                        type="text"
+                        value={employeeCreateForm.designation}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, designation: e.target.value }))}
+                        placeholder="Type designation"
+                        required
+                      />
+                    </label>
+                    <div className="assignment-submit-row">
+                      <button type="submit" className="assignment-submit-btn">
+                        Add Employee
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="table-wrap assignment-employee-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Employee Name</th>
+                        <th>Employee Code</th>
+                        <th>Email</th>
+                        <th>Mobile</th>
+                        <th>Domain</th>
+                        <th>Designation</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employeeModuleRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={7}>No employees found.</td>
+                        </tr>
+                      ) : employeeModuleRows.map((emp) => (
+                        <tr key={emp.id}>
+                          <td>{emp.name || '-'}</td>
+                          <td>{emp.employee_code || '-'}</td>
+                          <td>{emp.email || '-'}</td>
+                          <td>{emp.personal_mobile_no || '-'}</td>
+                          <td>{emp.domain_name || '-'}</td>
+                          <td>{emp.designation || '-'}</td>
+                          <td>
+                            <div className="assignment-row-actions">
+                              <button type="button" className="small assignment-view-btn" onClick={() => openEmployeeEdit(emp.id)}>Edit</button>
+                              <button type="button" className="small assignment-return-btn" onClick={() => deleteEmployeeRecord(emp.id)}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <div className="acct-empty-row">Only admins with assignment access can add employees.</div>
+            )}
+          </div>
+        )}
+
         {section === 'accounts' && (
           <section className="panel wide account-management-panel">
             {isSuperAdmin && (
@@ -6019,6 +6259,22 @@ function App() {
                           required
                         />
                       </label>
+                      <label>
+                        <span>Employee Code</span>
+                        <input
+                          value={employeeEditForm.employee_code}
+                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, employee_code: e.target.value.toUpperCase() }))}
+                          placeholder="EMP001"
+                        />
+                      </label>
+                      <label>
+                        <span>Mobile</span>
+                        <input
+                          value={employeeEditForm.personal_mobile_no}
+                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                          placeholder="9999999999"
+                        />
+                      </label>
 
                       <label>
                         <span>Domain</span>
@@ -6028,6 +6284,14 @@ function App() {
                           onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
                           placeholder="finance / hr / sales"
                           required
+                        />
+                      </label>
+                      <label>
+                        <span>Designation</span>
+                        <input
+                          value={employeeEditForm.designation}
+                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, designation: e.target.value }))}
+                          placeholder="Team Lead"
                         />
                       </label>
                       <label>

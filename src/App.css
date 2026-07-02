@@ -4748,6 +4748,14 @@ body {
   width: 100%;
 }
 
+.dashboard-shell .assignments-page-stack > .assignment-quick-assign {
+  order: 1;
+}
+
+.dashboard-shell .assignments-page-stack > .assignment-employee-table {
+  order: 2;
+}
+
 .dashboard-shell .assignment-directory-panel,
 .dashboard-shell .assignment-quick-assign,
 .dashboard-shell .assignment-search-top,
