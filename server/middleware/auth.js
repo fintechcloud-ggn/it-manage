@@ -7,6 +7,15 @@ function normalizeDomain(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function parseDomainList(value) {
+  const list = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(/[,;\n]/)
+      .map((item) => item.trim());
+  return Array.from(new Set(list.map((item) => normalizeDomain(item)).filter(Boolean)));
+}
+
 const DOMAIN_EMPLOYEE_CODE_RULES = {
   fintech: ['fch'],
   zapto: ['zpt']
@@ -44,7 +53,12 @@ function isSuperAdmin(user) {
 
 function getUserDomain(user) {
   if (!user) return '';
-  return normalizeDomain(user.domain_name || user.domain || '');
+  return parseDomainList(user.domain_name || user.domain || '')[0] || '';
+}
+
+function getUserDomains(user) {
+  if (!user) return [];
+  return parseDomainList(user.domain_name || user.domain || '');
 }
 
 function getUserEmployeeCodePrefix(user) {
@@ -65,16 +79,16 @@ function hasPermission(user, permissionKey) {
 function canAccessDomain(user, domainName) {
   if (!user) return false;
   if (isSuperAdmin(user)) return true;
-  const userDomain = getUserDomain(user);
+  const userDomains = getUserDomains(user);
   const targetDomain = normalizeDomain(domainName);
-  if (!userDomain) return !targetDomain;
-  return userDomain === targetDomain;
+  if (!userDomains.length) return !targetDomain;
+  return userDomains.includes(targetDomain);
 }
 
 function canAccessDomainRecord(user, record = {}) {
   if (!user) return false;
   if (isSuperAdmin(user)) return true;
-  const userDomain = getUserDomain(user);
+  const userDomains = getUserDomains(user);
   const userPrefix = getUserEmployeeCodePrefix(user);
 
   const recordDomain = normalizeDomain(record.domain_name || record.domain || '');
@@ -88,10 +102,10 @@ function canAccessDomainRecord(user, record = {}) {
     if (recordCode && recordCode.includes(userPrefix)) return true;
   }
 
-  if (!userDomain) return false;
-  if (recordDomain) return recordDomain === userDomain;
+  if (!userDomains.length) return false;
+  if (recordDomain) return userDomains.includes(recordDomain);
 
-  return domainMatchesEmployeeCode(userDomain, recordCode);
+  return userDomains.some((userDomain) => domainMatchesEmployeeCode(userDomain, recordCode));
 }
 
 function hasAnyPermission(user, permissionKeys = []) {
@@ -166,6 +180,7 @@ module.exports = {
   normalizeEmployeeCode,
   domainMatchesEmployeeCode,
   getUserDomain,
+  getUserDomains,
   getUserEmployeeCodePrefix,
   canAccessDomain,
   canAccessDomainRecord,

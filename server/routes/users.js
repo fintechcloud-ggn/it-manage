@@ -45,6 +45,19 @@ function normalizeValue(value) {
   return String(value).trim();
 }
 
+function parseDomainList(value) {
+  const list = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(/[,;\n]/)
+      .map((item) => item.trim());
+  return Array.from(new Set(list.map((item) => normalizeDomain(item)).filter(Boolean)));
+}
+
+function serializeDomainList(value) {
+  return parseDomainList(value).join(', ');
+}
+
 function buildEmployeeLabel(name, employeeCode) {
   return employeeCode ? `${name} (${employeeCode})` : name;
 }
@@ -315,21 +328,24 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage']), async (req, res) => {
   try {
-    const { name, email, role, password, profile_image_url, permissions, domain_name, employee_code_prefix } = req.body;
+    const { name, email, role, password, profile_image_url, permissions, domain_name, domain_names, employee_code_prefix } = req.body;
     const requestedRole = role || 'user';
-    const requestedDomain = isSuperAdmin(req.user)
-      ? normalizeDomain(domain_name)
-      : getUserDomain(req.user);
-    if (!requestedDomain) {
+    const requestedDomains = isSuperAdmin(req.user)
+      ? parseDomainList(domain_names || domain_name)
+      : parseDomainList(getUserDomain(req.user));
+    if (!requestedDomains.length) {
       return res.status(400).json({ error: 'Domain is required' });
     }
-    await query('INSERT IGNORE INTO domains (name) VALUES (?)', [requestedDomain]);
+    for (const domain of requestedDomains) {
+      await query('INSERT IGNORE INTO domains (name) VALUES (?)', [domain]);
+    }
     const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
     const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
+    const storedDomain = serializeDomainList(requestedDomains);
     const result = await query(
       'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email, requestedRole, requestedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
+      [name, email, requestedRole, storedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
     );
     const createdRows = await query(
       'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
@@ -340,7 +356,7 @@ router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage']), a
       action: 'CREATE_USER',
       entityType: 'user',
       entityId: result.insertId,
-      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${requestedDomain}, code_prefix=${normalizedPrefix || ''}`
+      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${storedDomain}, code_prefix=${normalizedPrefix || ''}`
     });
     res.status(201).json(normalizeUserRow(createdRows[0]));
   } catch (err) {
@@ -353,19 +369,22 @@ router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage'
     if (!isSuperAdmin(req.user)) {
       return res.status(403).json({ error: 'Only super admin can create admin accounts' });
     }
-    const { name, email, password, profile_image_url, permissions, role, domain_name, employee_code_prefix } = req.body;
+    const { name, email, password, profile_image_url, permissions, role, domain_name, domain_names, employee_code_prefix } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'name and email are required' });
     const requestedRole = String(role || 'admin').trim() || 'admin';
-    const requestedDomain = normalizeDomain(domain_name);
-    if (!requestedDomain) return res.status(400).json({ error: 'domain is required' });
-    await query('INSERT IGNORE INTO domains (name) VALUES (?)', [requestedDomain]);
+    const requestedDomains = parseDomainList(domain_names || domain_name);
+    if (!requestedDomains.length) return res.status(400).json({ error: 'domain is required' });
+    for (const domain of requestedDomains) {
+      await query('INSERT IGNORE INTO domains (name) VALUES (?)', [domain]);
+    }
     const normalizedPrefix = String(employee_code_prefix || '').trim().toLowerCase() || null;
     const hashed = bcrypt.hashSync(password || 'password', 8);
     const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
+    const storedDomain = serializeDomainList(requestedDomains);
 
     const result = await query(
       'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email, requestedRole, requestedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
+      [name, email, requestedRole, storedDomain, normalizedPrefix, profile_image_url || null, permissionsJson, hashed]
     );
     const createdRows = await query(
       'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
@@ -376,7 +395,7 @@ router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage'
       action: 'CREATE_ADMIN_ACCOUNT',
       entityType: 'user',
       entityId: result.insertId,
-      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${requestedDomain}, code_prefix=${normalizedPrefix || ''}, permissions_count=${parsePermissions(permissionsJson).length}`
+      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${storedDomain}, code_prefix=${normalizedPrefix || ''}, permissions_count=${parsePermissions(permissionsJson).length}`
     });
     res.status(201).json(normalizeUserRow(createdRows[0]));
   } catch (err) {
@@ -387,7 +406,7 @@ router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage'
 router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { name, email, role, profile_image_url, domain_name, employee_code_prefix } = req.body;
+    const { name, email, role, profile_image_url, domain_name, domain_names, employee_code_prefix } = req.body;
     const existingRows = await query(
       'SELECT id, name, email, role, domain_name, employee_code_prefix, permissions_json FROM users WHERE id = ? LIMIT 1',
       [id]
@@ -402,18 +421,21 @@ router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), a
     }
 
     const requestedRole = role || existing.role || 'user';
-    const requestedDomain = isSuperAdmin(req.user)
-      ? (normalizeDomain(domain_name) || normalizeDomain(existing.domain_name))
-      : getUserDomain(req.user);
-    if (requestedDomain) {
-      await query('INSERT IGNORE INTO domains (name) VALUES (?)', [requestedDomain]);
+    const requestedDomains = isSuperAdmin(req.user)
+      ? parseDomainList(domain_names || domain_name || existing.domain_name)
+      : parseDomainList(getUserDomain(req.user));
+    if (requestedDomains.length) {
+      for (const domain of requestedDomains) {
+        await query('INSERT IGNORE INTO domains (name) VALUES (?)', [domain]);
+      }
     }
     const normalizedPrefix = String(employee_code_prefix || existing.employee_code_prefix || '').trim().toLowerCase() || null;
 
     const nextPermissions = requestedRole === 'user' ? null : existing.permissions_json;
+    const storedDomain = serializeDomainList(requestedDomains.length ? requestedDomains : existing.domain_name);
     await query(
       'UPDATE users SET name = ?, email = ?, role = ?, domain_name = ?, employee_code_prefix = ?, profile_image_url = ?, permissions_json = ? WHERE id = ?',
-      [name, email, requestedRole, requestedDomain, normalizedPrefix, profile_image_url || null, nextPermissions, id]
+      [name, email, requestedRole, storedDomain, normalizedPrefix, profile_image_url || null, nextPermissions, id]
     );
     const updatedRows = await query(
       'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json FROM users WHERE id = ? LIMIT 1',
@@ -424,7 +446,7 @@ router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage']), a
       action: 'UPDATE_USER',
       entityType: 'user',
       entityId: id,
-      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${requestedDomain}, code_prefix=${normalizedPrefix || ''}`
+      details: `name=${name}, email=${email}, role=${requestedRole}, domain=${storedDomain}, code_prefix=${normalizedPrefix || ''}`
     });
     res.json(normalizeUserRow(updatedRows[0]));
   } catch (err) {

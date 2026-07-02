@@ -146,6 +146,15 @@ function normalizeBrandName(name) {
   return String(name || '').trim().toLowerCase();
 }
 
+function normalizeDomainList(value) {
+  const list = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(/[,;\n]/)
+      .map((item) => item.trim());
+  return Array.from(new Set(list.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)));
+}
+
 function isAppleMacBrandName(name) {
   const normalized = normalizeBrandName(name);
   return ['apple', 'mac', 'macbook', 'macintosh'].includes(normalized);
@@ -270,6 +279,11 @@ const INVOICE_APPROVAL_SORT_ORDER = {
 const INVOICE_STORAGE_VERSION = 'head_accounts_approval_v1';
 const DELETED_INVOICE_KEYS_STORAGE_KEY = 'deleted_invoice_keys';
 const INVOICE_ACCOUNTANT_NAMES = ['hansi kunwar', 'umesh', 'umesh ji', 'jeetiesh', 'jeetiesh ji'];
+const ROLE_ACCOUNT_OPTIONS = [
+  { value: 'hr', label: 'HR' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'accountant', label: 'Accountant' }
+];
 const ROLE_ACCOUNT_PASSWORDS_KEY = 'itmanage_role_account_passwords';
 
 function getInvoiceMergeKey(invoice = {}) {
@@ -853,21 +867,17 @@ function App() {
   const [accountManagementTab, setAccountManagementTab] = useState('roles');
   const [createAdminPopupOpen, setCreateAdminPopupOpen] = useState(false);
   const [createDomainPopupOpen, setCreateDomainPopupOpen] = useState(false);
+  const [editingDomain, setEditingDomain] = useState(null);
   const [selectedAdminPermissionId, setSelectedAdminPermissionId] = useState(null);
   const [domainCreateForm, setDomainCreateForm] = useState({
     code: '',
     name: '',
-    branch_type: 'Branch',
     country: 'India',
     state: '',
     city: '',
     address: '',
     pincode: '',
-    latitude: '',
-    longitude: '',
     status: 'active',
-    primary_admin_id: '',
-    backup_admin_id: '',
     employee_code_prefix: ''
   });
   const [adminCreateForm, setAdminCreateForm] = useState({
@@ -876,9 +886,11 @@ function App() {
     password: '',
     role: 'admin',
     domain_name: '',
+    domain_names: [],
     employee_code_prefix: '',
     permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
   });
+  const [adminCreateDomainDropdownOpen, setAdminCreateDomainDropdownOpen] = useState(false);
   const [adminPermissionDrafts, setAdminPermissionDrafts] = useState({});
   const [adminDetailDrafts, setAdminDetailDrafts] = useState({});
   const [roleAccountPasswords, setRoleAccountPasswords] = useState(() => readRoleAccountPasswords());
@@ -1297,7 +1309,9 @@ function App() {
     if (!currentUserDomain) return;
     setAssetDomainName((prev) => prev || currentUserDomain);
     setAdminCreateForm((prev) => (
-      prev.domain_name ? prev : { ...prev, domain_name: currentUserDomain }
+      prev.domain_names?.length || prev.domain_name
+        ? prev
+        : { ...prev, domain_name: currentUserDomain, domain_names: [currentUserDomain] }
     ));
   }, [currentUserDomain]);
 
@@ -2385,16 +2399,20 @@ function App() {
       setMessage('Select at least one permission for this role account.');
       return false;
     }
+    const selectedDomains = normalizeDomainList(
+      adminCreateForm.domain_names.length ? adminCreateForm.domain_names : adminCreateForm.domain_name
+    );
     const payload = {
       name: adminCreateForm.name.trim(),
       email: adminCreateForm.email.trim(),
       password: adminCreateForm.password.trim() || 'password',
       role: (adminCreateForm.role || 'admin').trim(),
-      domain_name: adminCreateForm.domain_name.trim().toLowerCase(),
+      domain_name: selectedDomains.join(', '),
+      domain_names: selectedDomains,
       employee_code_prefix: adminCreateForm.employee_code_prefix.trim().toLowerCase(),
       permissions: normalizedPermissions
     };
-    if (!payload.name || !payload.email || !payload.domain_name) {
+    if (!payload.name || !payload.email || !selectedDomains.length) {
       setMessage('Role account name, email, and domain are required.');
       return;
     }
@@ -2429,9 +2447,11 @@ function App() {
         password: '',
         role: 'admin',
         domain_name: currentUserDomain || '',
+        domain_names: currentUserDomain ? [currentUserDomain] : [],
         employee_code_prefix: '',
         permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
       });
+      setAdminCreateDomainDropdownOpen(false);
       fetchUsers();
       fetchDomains();
       fetchAuditLogs();
@@ -2440,7 +2460,48 @@ function App() {
     return res.ok;
   }
 
-  async function createDomain(event) {
+  function resetDomainForm() {
+    setEditingDomain(null);
+    setDomainCreateForm({
+      code: '',
+      name: '',
+      country: 'India',
+      state: '',
+      city: '',
+      address: '',
+      pincode: '',
+      status: 'active',
+      employee_code_prefix: ''
+    });
+  }
+
+  function openCreateDomainPopup() {
+    resetDomainForm();
+    setCreateDomainPopupOpen(true);
+  }
+
+  function startEditDomain(domain) {
+    setEditingDomain(domain || null);
+    setDomainCreateForm({
+      code: String(domain?.code || ''),
+      name: String(domain?.name || ''),
+      country: String(domain?.country || 'India'),
+      state: String(domain?.state || ''),
+      city: String(domain?.city || ''),
+      address: String(domain?.address || ''),
+      pincode: String(domain?.pincode || ''),
+      status: String(domain?.status || 'active'),
+      employee_code_prefix: String(domain?.employee_code_prefix || '')
+    });
+    setCreateDomainPopupOpen(true);
+  }
+
+  function closeDomainPopup() {
+    setCreateDomainPopupOpen(false);
+    resetDomainForm();
+  }
+
+  async function saveDomain(event) {
     event.preventDefault();
     if (!isSuperAdmin) {
       setMessage('Only super admin can create domains.');
@@ -2449,48 +2510,32 @@ function App() {
     const payload = {
       code: String(domainCreateForm.code || '').trim().toUpperCase(),
       name: String(domainCreateForm.name || '').trim().toLowerCase(),
-      branch_type: String(domainCreateForm.branch_type || '').trim(),
       country: String(domainCreateForm.country || '').trim(),
       state: String(domainCreateForm.state || '').trim(),
       city: String(domainCreateForm.city || '').trim(),
       address: String(domainCreateForm.address || '').trim(),
       pincode: String(domainCreateForm.pincode || '').trim(),
-      latitude: String(domainCreateForm.latitude || '').trim(),
-      longitude: String(domainCreateForm.longitude || '').trim(),
       status: String(domainCreateForm.status || 'active').trim().toLowerCase(),
-      primary_admin_id: domainCreateForm.primary_admin_id || null,
-      backup_admin_id: domainCreateForm.backup_admin_id || null,
       employee_code_prefix: String(domainCreateForm.employee_code_prefix || '').trim().toLowerCase()
     };
-    if (!payload.code || !payload.name || !payload.branch_type || !payload.city) {
-      setMessage('Domain code, domain name, branch type, and city are required.');
+    if (!payload.code || !payload.name || !payload.city) {
+      setMessage('Domain code, domain name, and city are required.');
       return false;
     }
-    const res = await apiFetch('/api/domains', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(payload)
-    });
+    const isEditing = Boolean(editingDomain?.name);
+    const targetName = String(editingDomain?.name || payload.name || '').trim().toLowerCase();
+    const res = await apiFetch(
+      isEditing ? `/api/domains/${encodeURIComponent(targetName)}` : '/api/domains',
+      {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload)
+      }
+    );
     const body = await res.json().catch(() => ({}));
-    setMessage(res.ok ? 'Domain location created.' : body.error || 'Domain creation failed');
+    setMessage(res.ok ? (isEditing ? 'Domain updated.' : 'Domain location created.') : body.error || (isEditing ? 'Domain update failed' : 'Domain creation failed'));
     if (res.ok) {
-      setDomainCreateForm({
-        code: '',
-        name: '',
-        branch_type: 'Branch',
-        country: 'India',
-        state: '',
-        city: '',
-        address: '',
-        pincode: '',
-        latitude: '',
-        longitude: '',
-        status: 'active',
-        primary_admin_id: '',
-        backup_admin_id: '',
-        employee_code_prefix: ''
-      });
-      setCreateDomainPopupOpen(false);
+      closeDomainPopup();
       fetchDomains();
       fetchAuditLogs();
     }
@@ -2991,19 +3036,11 @@ function App() {
   );
   const accountManagementDomains = useMemo(
     () => Array.from(new Set(
-      [...domains, ...managedAdmins.map((admin) => admin.domain_name)]
+      [...domains, ...managedAdmins.flatMap((admin) => normalizeDomainList(admin.domain_name))]
         .map((domain) => String(domain || '').trim().toLowerCase())
         .filter(Boolean)
     )).sort((a, b) => a.localeCompare(b)),
     [domains, managedAdmins]
-  );
-  const adminSelectOptions = useMemo(
-    () => managedAdmins.map((admin) => ({
-      value: String(admin.id),
-      label: `${admin.name || admin.email || 'Admin'} (${admin.domain_name || 'no domain'})`,
-      searchText: `${admin.name || ''} ${admin.email || ''} ${admin.domain_name || ''}`
-    })),
-    [managedAdmins]
   );
   const domainManagementRows = useMemo(() => {
     const rowMap = new Map();
@@ -3029,10 +3066,6 @@ function App() {
       if (domain.primary_admin_id) domainAdminIds.add(`primary-${domain.primary_admin_id}`);
       if (domain.backup_admin_id) domainAdminIds.add(`backup-${domain.backup_admin_id}`);
     });
-    const pendingBills = invoices.filter((invoice) => {
-      const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
-      return ['pending_domain', 'pending_head', 'pending_accounts', 'payment_pending'].includes(approvalStatus);
-    }).length;
     return {
       totalDomains: domainManagementRows.length,
       activeLocations: domainManagementRows.filter((domain) => (domain.status || 'active') === 'active').length,
@@ -3040,11 +3073,9 @@ function App() {
       domainAdmins: domainAdminIds.size || managedAdmins.filter((admin) => admin.domain_name).length,
       employees: domainEmployeeCount || employees.length,
       openTickets: 0,
-      unassignedAssets: availableAssets.length,
-      pendingApprovals: pendingBills,
-      pendingBills
+      unassignedAssets: availableAssets.length
     };
-  }, [assets, availableAssets, domainManagementRows, employees, invoices, managedAdmins]);
+  }, [assets, availableAssets, domainManagementRows, employees, managedAdmins]);
   const filteredManagedAdmins = useMemo(() => {
     const q = accountSearch.trim().toLowerCase();
     if (!q) return managedAdmins;
@@ -5192,7 +5223,7 @@ function App() {
               </div>
             )}
 
-            {/* â”€â”€ Hero Banner â”€â”€ */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ Hero Banner Ã¢â€â‚¬Ã¢â€â‚¬ */}
             <div className="acct-hero-banner">
               <div className="acct-hero-glow acct-hero-glow-1" />
               <div className="acct-hero-glow acct-hero-glow-2" />
@@ -5203,17 +5234,12 @@ function App() {
                     Admin Console
                   </div>
                   <h2 className="acct-hero-title">{accountManagementTab === 'domains' ? 'Domain / Location Management' : 'Account Management'}</h2>
-                  <p className="acct-hero-sub">
-                    {accountManagementTab === 'domains'
-                      ? 'Central control for branch details, admins, assets, employees, and pending approvals.'
-                      : 'Control admin access, permissions, and account lifecycle from one place.'}
-                  </p>
                 </div>
                 {isSuperAdmin && (
                   <button
                     type="button"
                     className="acct-hero-cta"
-                    onClick={() => (accountManagementTab === 'domains' ? setCreateDomainPopupOpen(true) : setCreateAdminPopupOpen(true))}
+                    onClick={() => (accountManagementTab === 'domains' ? openCreateDomainPopup() : setCreateAdminPopupOpen(true))}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
                     {accountManagementTab === 'domains' ? 'Create Domain' : 'Create Role Account'}
@@ -5221,7 +5247,7 @@ function App() {
                 )}
               </div>
 
-              {/* â”€â”€ Metric Cards inside hero â”€â”€ */}
+              {/* Ã¢â€â‚¬Ã¢â€â‚¬ Metric Cards inside hero Ã¢â€â‚¬Ã¢â€â‚¬ */}
               <div className="acct-metric-row">
                 <div className="acct-metric-card">
                   <div className="acct-metric-icon acct-icon-blue">
@@ -5259,19 +5285,21 @@ function App() {
                     <strong>{accountManagementTab === 'domains' ? domainDashboardStats.employees : accountSummary.avgPermissions}</strong>
                   </div>
                 </div>
-                <div className="acct-metric-card">
-                  <div className="acct-metric-icon acct-icon-rose">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+                {accountManagementTab !== 'domains' && (
+                  <div className="acct-metric-card">
+                    <div className="acct-metric-icon acct-icon-rose">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+                    </div>
+                    <div className="acct-metric-body">
+                      <span>Max Permissions</span>
+                      <strong>{accountSummary.maxPermissions}</strong>
+                    </div>
                   </div>
-                  <div className="acct-metric-body">
-                    <span>{accountManagementTab === 'domains' ? 'Pending Bills' : 'Max Permissions'}</span>
-                    <strong>{accountManagementTab === 'domains' ? domainDashboardStats.pendingBills : accountSummary.maxPermissions}</strong>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
-            {/* â”€â”€ Content â”€â”€ */}
+            {/* Ã¢â€â‚¬Ã¢â€â‚¬ Content Ã¢â€â‚¬Ã¢â€â‚¬ */}
 
             {!isSuperAdmin ? (
               <div className="acct-restricted">
@@ -5296,7 +5324,7 @@ function App() {
                     <svg className="acct-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
                     <input
                       className="acct-search-input"
-                      placeholder="Search by name or emailâ€¦"
+                      placeholder="Search by name or email"
                       value={accountSearch}
                       onChange={(e) => setAccountSearch(e.target.value)}
                     />
@@ -5343,7 +5371,7 @@ function App() {
                                     <span className="acct-perm-fraction">{permissionCount}/{ADMIN_PERMISSION_OPTIONS.length}</span>
                                   </div>
                                   <span className={`acct-access-chip ${hasFullAccess ? 'chip-full' : 'chip-limited'}`}>
-                                    {hasFullAccess ? 'âœ¦ Full Access' : 'Limited'}
+                                    {hasFullAccess ? 'Full Access' : 'Limited'}
                                   </span>
                                 </div>
                               </td>
@@ -5368,9 +5396,8 @@ function App() {
                   <div className="domain-location-head">
                     <div>
                       <h4>Domain / Location Management</h4>
-                      <p>Central control for branch details, admins, assets, employees, and pending approvals.</p>
                     </div>
-                    <button type="button" className="small" onClick={() => setCreateDomainPopupOpen(true)}>Create Domain</button>
+                    <button type="button" className="small" onClick={openCreateDomainPopup}>Create Domain</button>
                   </div>
 
                   <div className="domain-dashboard-grid">
@@ -5381,7 +5408,6 @@ function App() {
                     <article><span>Employees</span><strong>{domainDashboardStats.employees}</strong></article>
                     <article><span>Open IT Tickets</span><strong>{domainDashboardStats.openTickets}</strong></article>
                     <article><span>Unassigned Assets</span><strong>{domainDashboardStats.unassignedAssets}</strong></article>
-                    <article><span>Pending Bills</span><strong>{domainDashboardStats.pendingBills}</strong></article>
                   </div>
 
                   <div className="domain-master-table-wrap">
@@ -5389,11 +5415,9 @@ function App() {
                       <thead>
                         <tr>
                           <th>Code</th>
+                          <th>Domain</th>
                           <th>Location</th>
-                          <th>Type</th>
                           <th>City</th>
-                          <th>Primary Admin</th>
-                          <th>Backup Admin</th>
                           <th>Prefix</th>
                           <th>Status</th>
                           <th>Action</th>
@@ -5401,31 +5425,36 @@ function App() {
                       </thead>
                       <tbody>
                         {domainManagementRows.length === 0 ? (
-                          <tr><td colSpan={9} className="acct-empty-row">No domains found.</td></tr>
+                          <tr><td colSpan={7} className="acct-empty-row">No domains found.</td></tr>
                         ) : (
                           domainManagementRows.map((domain) => (
                             <tr key={domain.name}>
                               <td>{domain.code || '-'}</td>
-                              <td>
-                                <strong>{domain.name}</strong>
-                                <small>{domain.address || '-'}</small>
-                              </td>
-                              <td>{domain.branch_type || '-'}</td>
+                              <td><strong>{domain.name || '-'}</strong></td>
+                              <td>{domain.address || '-'}</td>
                               <td>{domain.city || '-'}</td>
-                              <td>{domain.primary_admin_name || '-'}</td>
-                              <td>{domain.backup_admin_name || '-'}</td>
                               <td>{domain.employee_code_prefix || '-'}</td>
                               <td><span className={`domain-status-pill status-${domain.status || 'active'}`}>{domain.status || 'active'}</span></td>
                               <td>
-                                <button
-                                  type="button"
-                                  className="domain-delete-btn"
-                                  disabled={domain.name === 'global'}
-                                  onClick={() => deleteDomain(domain.name)}
-                                  title={domain.name === 'global' ? 'Global domain cannot be deleted' : `Delete ${domain.name}`}
-                                >
-                                  Delete
-                                </button>
+                                <div className="domain-action-group">
+                                  <button
+                                    type="button"
+                                    className="domain-edit-btn"
+                                    onClick={() => startEditDomain(domain)}
+                                    title={`Edit ${domain.name}`}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="domain-delete-btn"
+                                    disabled={domain.name === 'global'}
+                                    onClick={() => deleteDomain(domain.name)}
+                                    title={domain.name === 'global' ? 'Global domain cannot be deleted' : `Delete ${domain.name}`}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))
@@ -5441,7 +5470,16 @@ function App() {
         )}
 
         {createAdminPopupOpen && (
-          <div className="account-permission-overlay" role="dialog" aria-modal="true" aria-labelledby="create-admin-title" onClick={() => setCreateAdminPopupOpen(false)}>
+          <div
+            className="account-permission-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-admin-title"
+            onClick={() => {
+              setAdminCreateDomainDropdownOpen(false);
+              setCreateAdminPopupOpen(false);
+            }}
+          >
             <section className="account-permission-modal" onClick={(e) => e.stopPropagation()}>
               <header className="account-permission-header">
                 <div>
@@ -5449,7 +5487,16 @@ function App() {
                   <p>Create a role account, assign a domain, and set permissions in one popup.</p>
                 </div>
                 <div className="employee-modal-actions">
-                  <button type="button" className="small outline" onClick={() => setCreateAdminPopupOpen(false)}>Close</button>
+                  <button
+                    type="button"
+                    className="small outline"
+                    onClick={() => {
+                      setAdminCreateDomainDropdownOpen(false);
+                      setCreateAdminPopupOpen(false);
+                    }}
+                  >
+                    Close
+                  </button>
                 </div>
               </header>
               <form className="form account-create-form" onSubmit={createAdminAccount}>
@@ -5486,23 +5533,66 @@ function App() {
                 <div className="account-form-row">
                   <label className="account-field">
                     <span>Role</span>
-                    <input
-                      type="text"
-                      placeholder="e.g. admin, manager"
+                    <select
                       value={adminCreateForm.role}
                       onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, role: e.target.value }))}
                       required
-                    />
+                    >
+                      {ROLE_ACCOUNT_OPTIONS.map((roleOption) => (
+                        <option key={roleOption.value} value={roleOption.value}>{roleOption.label}</option>
+                      ))}
+                    </select>
                   </label>
                   <label className="account-field">
                     <span>Domain</span>
-                    <input
-                      type="text"
-                      placeholder="e.g. finance"
-                      value={adminCreateForm.domain_name}
-                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
-                      required
-                    />
+                    <div className="multi-domain-picker">
+                      <button
+                        type="button"
+                        className="multi-domain-picker-trigger"
+                        onClick={() => setAdminCreateDomainDropdownOpen((prev) => !prev)}
+                      >
+                        <span>
+                          {adminCreateForm.domain_names.length
+                            ? adminCreateForm.domain_names.join(', ')
+                            : 'Select domains'}
+                        </span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      {adminCreateDomainDropdownOpen && (
+                        <div className="multi-domain-picker-panel">
+                          {domainManagementRows.map((domain) => {
+                            const domainName = String(domain.name || '').trim().toLowerCase();
+                            if (!domainName) return null;
+                            return (
+                              <label key={domainName} className="multi-domain-option">
+                                <span>{domainName}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={adminCreateForm.domain_names.includes(domainName)}
+                                  onChange={(e) => {
+                                    setAdminCreateForm((prev) => {
+                                      const next = new Set(
+                                        normalizeDomainList(prev.domain_names.length ? prev.domain_names : prev.domain_name)
+                                      );
+                                      if (e.target.checked) next.add(domainName);
+                                      else next.delete(domainName);
+                                      const nextDomains = Array.from(next);
+                                      return {
+                                        ...prev,
+                                        domain_name: nextDomains.join(', '),
+                                        domain_names: nextDomains
+                                      };
+                                    });
+                                  }}
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </label>
                 </div>
                 <label className="account-field">
@@ -5559,52 +5649,33 @@ function App() {
         )}
 
         {createDomainPopupOpen && (
-          <div className="account-permission-overlay" role="dialog" aria-modal="true" aria-labelledby="create-domain-title" onClick={() => setCreateDomainPopupOpen(false)}>
+          <div className="account-permission-overlay" role="dialog" aria-modal="true" aria-labelledby="create-domain-title" onClick={closeDomainPopup}>
             <section className="account-permission-modal domain-create-modal" onClick={(e) => e.stopPropagation()}>
               <header className="account-permission-header">
                 <div>
-                  <h3 id="create-domain-title">Create Domain / Location</h3>
-                  <p>Add branch identity, address, admins, status, and employee code prefix.</p>
-                </div>
-                <div className="employee-modal-actions">
-                  <button type="button" className="small outline" onClick={() => setCreateDomainPopupOpen(false)}>Close</button>
+                  <h3 id="create-domain-title">{editingDomain ? 'Edit Domain' : 'Create Domain'}</h3>
                 </div>
               </header>
-              <form className="form account-create-form domain-create-form" onSubmit={createDomain}>
+              <form className="form account-create-form domain-create-form" onSubmit={saveDomain}>
+                <label className="account-field">
+                  <span>Location Code</span>
+                  <input
+                    placeholder="e.g. DEL-HO"
+                    value={domainCreateForm.code}
+                    onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                    required
+                  />
+                </label>
+                <label className="account-field">
+                  <span>Domain Name</span>
+                  <input
+                    placeholder="e.g. Delhi Head Office"
+                    value={domainCreateForm.name}
+                    onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                    required
+                  />
+                </label>
                 <div className="account-form-row">
-                  <label className="account-field">
-                    <span>Location Code</span>
-                    <input
-                      placeholder="e.g. DEL-HO"
-                      value={domainCreateForm.code}
-                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                      required
-                    />
-                  </label>
-                  <label className="account-field">
-                    <span>Domain Name</span>
-                    <input
-                      placeholder="e.g. Delhi Head Office"
-                      value={domainCreateForm.name}
-                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                      required
-                    />
-                  </label>
-                </div>
-                <div className="account-form-row">
-                  <label className="account-field">
-                    <span>Branch Type</span>
-                    <select
-                      value={domainCreateForm.branch_type}
-                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, branch_type: e.target.value }))}
-                    >
-                      <option value="Head Office">Head Office</option>
-                      <option value="Branch">Branch</option>
-                      <option value="Tech Center">Tech Center</option>
-                      <option value="Warehouse">Warehouse</option>
-                      <option value="Remote Hub">Remote Hub</option>
-                    </select>
-                  </label>
                   <label className="account-field">
                     <span>Status</span>
                     <select
@@ -5615,6 +5686,10 @@ function App() {
                       <option value="inactive">Inactive</option>
                       <option value="maintenance">Maintenance</option>
                     </select>
+                  </label>
+                  <label className="account-field">
+                    <span>Employee Code Prefix</span>
+                    <input placeholder="e.g. del" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))} />
                   </label>
                 </div>
                 <div className="account-form-row">
@@ -5641,38 +5716,9 @@ function App() {
                   <span>Full Address</span>
                   <input placeholder="Office address" value={domainCreateForm.address} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, address: e.target.value }))} />
                 </label>
-                <div className="account-form-row">
-                  <label className="account-field">
-                    <span>Latitude</span>
-                    <input placeholder="28.6139" value={domainCreateForm.latitude} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, latitude: e.target.value }))} />
-                  </label>
-                  <label className="account-field">
-                    <span>Longitude</span>
-                    <input placeholder="77.2090" value={domainCreateForm.longitude} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, longitude: e.target.value }))} />
-                  </label>
-                </div>
-                <div className="account-form-row">
-                  <label className="account-field">
-                    <span>Primary Admin</span>
-                    <select value={domainCreateForm.primary_admin_id} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, primary_admin_id: e.target.value }))}>
-                      <option value="">Select admin</option>
-                      {adminSelectOptions.map((admin) => <option key={admin.value} value={admin.value}>{admin.label}</option>)}
-                    </select>
-                  </label>
-                  <label className="account-field">
-                    <span>Backup Admin</span>
-                    <select value={domainCreateForm.backup_admin_id} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, backup_admin_id: e.target.value }))}>
-                      <option value="">Select backup admin</option>
-                      {adminSelectOptions.map((admin) => <option key={admin.value} value={admin.value}>{admin.label}</option>)}
-                    </select>
-                  </label>
-                </div>
-                <label className="account-field">
-                  <span>Employee Code Prefix</span>
-                  <input placeholder="e.g. del" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))} />
-                </label>
                 <div className="employee-edit-actions">
-                  <button type="submit" className="small">Create Domain</button>
+                  <button type="button" className="small outline" onClick={closeDomainPopup}>Close</button>
+                  <button type="submit" className="small">{editingDomain ? 'Update' : 'Create'}</button>
                 </div>
               </form>
             </section>
@@ -6648,7 +6694,7 @@ function App() {
                 <span>Latest Event</span>
                 <strong>
                   {activitySummary.latestEvent
-                    ? `${activitySummary.latestEvent.action} â€¢ ${activitySummary.latestEvent.assetName}`
+                    ? `${activitySummary.latestEvent.action} Ã¢â‚¬Â¢ ${activitySummary.latestEvent.assetName}`
                     : 'No activity yet'}
                 </strong>
               </div>
@@ -6664,7 +6710,7 @@ function App() {
                       <div className="dot" />
                       <div>
                         <strong>{a.assetName} {a.action.toLowerCase()} for {a.userName}</strong>
-                        <small>{new Date(a.timestampMs).toLocaleString()} â€¢ Allocation #{a.allocationId}</small>
+                        <small>{new Date(a.timestampMs).toLocaleString()} Ã¢â‚¬Â¢ Allocation #{a.allocationId}</small>
                       </div>
                     </li>
                   ))}
@@ -6913,4 +6959,5 @@ function App() {
 }
 
 export default App;
+
 
