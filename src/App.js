@@ -814,6 +814,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [section, setSection] = useState('overview');
   const [inventoryQuery, setInventoryQuery] = useState('');
+  const [inventoryTab, setInventoryTab] = useState('assigned');
   const [quickAssetQuery, setQuickAssetQuery] = useState('');
   const [filterDomain, setFilterDomain] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -1004,7 +1005,7 @@ function App() {
       vendor: '',
       notes: ''
     });
-    setAssetDomainName(currentUserDomain || '');
+    setAssetDomainName('');
   }
 
   function startEditAsset(asset) {
@@ -1045,7 +1046,7 @@ function App() {
       vendor: String(asset?.vendor || ''),
       notes: String(asset?.notes || '')
     });
-    setAssetDomainName(String(asset?.domain_name || currentUserDomain || '').trim().toLowerCase());
+    setAssetDomainName(String(asset?.domain_name || '').trim().toLowerCase());
 
     const formAnchor = document.querySelector('.inventory-create-top');
     if (formAnchor?.scrollIntoView) {
@@ -1932,7 +1933,7 @@ function App() {
     const serial = assetDraft.serial.trim();
     const vendor = assetDraft.vendor.trim();
     const notes = assetDraft.notes.trim();
-    const domain_name = (assetDomainName || currentUserDomain || '').trim().toLowerCase();
+    const domain_name = (assetDomainName || '').trim().toLowerCase();
     if (!type) {
       setMessage('Select asset type.');
       return;
@@ -1949,9 +1950,14 @@ function App() {
       setMessage('Asset serial number is required.');
       return;
     }
-    if (!domain_name) {
-      setMessage('Asset domain is required.');
-      return;
+    const isEditing = Boolean(editingAsset?.id);
+    if (isEditing) {
+      if (!domain_name && editingAsset.domain_name) {
+        if (editingAsset.assigned_to_name) {
+          setMessage(`This asset is assigned to an employee (${editingAsset.assigned_to_name}, ${editingAsset.assigned_to_employee_code || 'N/A'}). Unassign it before removing the domain assignment.`);
+          return;
+        }
+      }
     }
     let brand_id = selectedBrandId && selectedBrandId !== OTHER_BRAND_VALUE ? Number(selectedBrandId) : null;
     let model_id = selectedModelId && selectedModelId !== OTHER_MODEL_VALUE ? Number(selectedModelId) : null;
@@ -1978,7 +1984,6 @@ function App() {
       return;
     }
     const name = (createdModelName || createdBrandName || type || 'Asset').trim();
-    const isEditing = Boolean(editingAsset?.id);
     const res = await apiFetch(isEditing ? `/api/assets/${editingAsset.id}` : '/api/assets', {
       method: isEditing ? 'PUT' : 'POST',
       headers: authHeaders(),
@@ -3629,7 +3634,9 @@ function App() {
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
-      return matchQuery && matchDomain && matchStatus && matchBrand && matchType;
+      const hasDomain = Boolean(a.domain_name && String(a.domain_name).trim().length > 0);
+      const matchTab = inventoryTab === 'assigned' ? hasDomain : !hasDomain;
+      return matchQuery && matchDomain && matchStatus && matchBrand && matchType && matchTab;
     });
 
     const sorted = [...filtered].sort((a, b) => {
@@ -3646,7 +3653,7 @@ function App() {
       return 0;
     });
     return sorted;
-  }, [assets, inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir, isSimInventoryView]);
+  }, [assets, inventoryQuery, filterDomain, filterStatus, filterBrand, filterType, sortBy, sortDir, isSimInventoryView, inventoryTab]);
   const pageSize = inventoryPageSize === 'all' ? filteredSortedAssets.length || 1 : Number(inventoryPageSize);
   const totalPages = Math.max(1, Math.ceil(filteredSortedAssets.length / pageSize));
   const paginatedAssets = useMemo(() => {
@@ -4834,16 +4841,15 @@ function App() {
                       onChange={(e) => setAssetDraft((prev) => ({ ...prev, vendor: e.target.value }))}
                     />
                   </label>
-                  <label className="field required-field">
-                    <span>Domain <span className="required-indicator">*</span></span>
+                  <label className="field">
+                    <span>Domain (optional)</span>
                     <select
                       name="domain_name"
                       value={assetDomainName}
                       onChange={(e) => setAssetDomainName(e.target.value)}
-                      required
                       disabled={!isSuperAdmin}
                     >
-                      <option value="" disabled>Select domain</option>
+                      <option value="">No Domain (Free Asset)</option>
                       {Array.from(new Set([assetDomainName, currentUserDomain, ...inventoryDomains].filter(Boolean)))
                         .sort((a, b) => a.localeCompare(b))
                         .map((domain) => (
@@ -4897,6 +4903,23 @@ function App() {
                 </form>
               </div>
             )}
+
+            <div className="account-tabs" style={{ marginBottom: '16px' }}>
+              <button
+                type="button"
+                className={inventoryTab === 'assigned' ? 'active' : ''}
+                onClick={() => setInventoryTab('assigned')}
+              >
+                Assigned Assets
+              </button>
+              <button
+                type="button"
+                className={inventoryTab === 'free' ? 'active' : ''}
+                onClick={() => setInventoryTab('free')}
+              >
+                Free Assets
+              </button>
+            </div>
 
             <div className="inventory-filter-grid">
               <input
@@ -5004,24 +5027,47 @@ function App() {
                   </table>
                 ) : (
                   <table>
-                    <thead><tr><th>Type</th><th>Brand</th><th>Model</th><th>Domain</th><th>Vendor</th><th>Serial</th><th>Status</th><th>QR</th><th>Action</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th>Type</th>
+                        <th>Brand</th>
+                        <th>Model</th>
+                        {inventoryTab === 'assigned' && <th>Domain</th>}
+                        <th>Vendor</th>
+                        <th>Serial</th>
+                        {inventoryTab === 'assigned' && <th>Status</th>}
+                        {inventoryTab === 'assigned' && <th>QR</th>}
+                        <th>Action</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {paginatedAssets.map((a) => (
                         <tr key={a.id}>
-                          <td>{a.type}</td><td>{a.brand_name || '-'}</td><td>{a.model_name || '-'}</td><td>{a.domain_name || '-'}</td><td>{a.vendor || '-'}</td><td>{a.serial}</td>
-                          <td><span className={`status ${a.status}`}>{a.status}</span></td>
-                          <td>
-                            <div className="asset-qr-cell">
-                              <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
-                              <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
-                            </div>
-                          </td>
+                          <td>{a.type}</td>
+                          <td>{a.brand_name || '-'}</td>
+                          <td>{a.model_name || '-'}</td>
+                          {inventoryTab === 'assigned' && <td>{a.domain_name || '-'}</td>}
+                          <td>{a.vendor || '-'}</td>
+                          <td>{a.serial}</td>
+                          {inventoryTab === 'assigned' && (
+                            <td><span className={`status ${a.status}`}>{a.status}</span></td>
+                          )}
+                          {inventoryTab === 'assigned' && (
+                            <td>
+                              <div className="asset-qr-cell">
+                                <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
+                                <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
+                              </div>
+                            </td>
+                          )}
                           <td>
                             <div className="asset-row-actions">
                               {hasAdminPermission('inventory.manage') ? (
                                 <>
                                   <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                  <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
+                                  {inventoryTab === 'assigned' && (
+                                    <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
+                                  )}
                                 </>
                               ) : '-'}
                             </div>

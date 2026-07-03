@@ -87,11 +87,10 @@ router.post('/', requirePermission('inventory.manage'), async (req, res) => {
     const requestedDomain = isSuperAdmin(req.user)
       ? normalizeDomain(domain_name)
       : getUserDomain(req.user);
-    if (!requestedDomain) return res.status(400).json({ error: 'Domain is required' });
     const result = await query(
       `INSERT INTO assets (name, type, domain_name, serial, status, store_id, vendor, notes, brand_id, model_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [name, type, requestedDomain, serial, assetStatus, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null],
+      [name, type, requestedDomain || null, serial, assetStatus, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null],
     );
     const created = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [result.insertId]);
     await writeAuditLog({
@@ -116,14 +115,14 @@ router.put('/:id', requirePermission('inventory.manage'), async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Asset not found' });
     if (!canAccessDomain(req.user, existing.domain_name)) return res.status(403).json({ error: 'Forbidden' });
     const requestedDomain = isSuperAdmin(req.user)
-      ? (normalizeDomain(domain_name) || normalizeDomain(existing.domain_name))
+      ? normalizeDomain(domain_name)
       : getUserDomain(req.user);
     const nextStatus = getAssetStatusFromPayload(type, notes, status);
     await query(
       `UPDATE assets
        SET name = ?, type = ?, domain_name = ?, serial = ?, status = ?, store_id = ?, vendor = ?, notes = ?, brand_id = ?, model_id = ?
        WHERE id = ?`,
-      [name, type, requestedDomain, serial, nextStatus, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null, id],
+      [name, type, requestedDomain || null, serial, nextStatus, store_id || null, vendor || null, notes || null, brand_id || null, model_id || null, id],
     );
     const updated = await query('SELECT * FROM assets WHERE id = ? LIMIT 1', [id]);
     await writeAuditLog({
