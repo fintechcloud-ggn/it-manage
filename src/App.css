@@ -1745,14 +1745,12 @@ p {
 }
 
 .assignment-directory-panel .panel-head {
-  order: 1;
   margin-bottom: 0;
   padding-bottom: 8px;
   border-bottom: 1px solid #d7e5f2;
 }
 
 .assignment-search-top {
-  order: 2;
   display: grid;
   grid-template-columns: 2fr minmax(180px, 0.7fr) auto;
   gap: 8px;
