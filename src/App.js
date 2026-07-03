@@ -4904,21 +4904,23 @@ function App() {
               </div>
             )}
 
-            <div className="account-tabs" style={{ marginBottom: '16px' }}>
-              <button
-                type="button"
-                className={inventoryTab === 'assigned' ? 'active' : ''}
-                onClick={() => setInventoryTab('assigned')}
-              >
-                Assigned Assets
-              </button>
-              <button
-                type="button"
-                className={inventoryTab === 'free' ? 'active' : ''}
-                onClick={() => setInventoryTab('free')}
-              >
-                Free Assets
-              </button>
+            <div>
+              <div className="account-tabs" style={{ marginBottom: '16px' }}>
+                <button
+                  type="button"
+                  className={inventoryTab === 'assigned' ? 'active' : ''}
+                  onClick={() => setInventoryTab('assigned')}
+                >
+                  Assigned Assets
+                </button>
+                <button
+                  type="button"
+                  className={inventoryTab === 'free' ? 'active' : ''}
+                  onClick={() => setInventoryTab('free')}
+                >
+                  Free Assets
+                </button>
+              </div>
             </div>
 
             <div className="inventory-filter-grid">
