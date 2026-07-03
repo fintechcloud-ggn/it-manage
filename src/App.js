@@ -4904,8 +4904,8 @@ function App() {
               </div>
             )}
 
-            <div>
-              <div className="account-tabs" style={{ marginBottom: '16px' }}>
+            <div className="inventory-tabs-wrapper">
+              <div className="account-tabs">
                 <button
                   type="button"
                   className={inventoryTab === 'assigned' ? 'active' : ''}

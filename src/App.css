@@ -4678,6 +4678,16 @@ body {
   min-width: 0;
 }
 
+.dashboard-shell .inventory-tabs-wrapper {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+
 .dashboard-shell .inventory-page-stack .inventory-head,
 .dashboard-shell .inventory-page-stack .inventory-filter-grid,
 .dashboard-shell .inventory-page-stack .inventory-mini-stats {
