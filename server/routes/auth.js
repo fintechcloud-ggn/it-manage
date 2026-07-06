@@ -8,9 +8,10 @@ const { SECRET, parsePermissions, isSuperAdmin, requireAuth } = require('../midd
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    const loginValue = String(email || '').trim();
     const rows = await query(
-      'SELECT id, name, email, role, profile_image_url, permissions_json, domain_name, employee_code_prefix, password FROM users WHERE email = ? LIMIT 1',
-      [email]
+      'SELECT id, name, email, role, profile_image_url, permissions_json, domain_name, employee_code_prefix, password FROM users WHERE LOWER(email) = LOWER(?) OR LOWER(name) = LOWER(?) LIMIT 1',
+      [loginValue, loginValue]
     );
     const user = rows[0];
     if (!user) return res.status(401).json({ error: 'Invalid credentials' });

@@ -2648,7 +2648,6 @@ function App() {
       setMessage('Name, email, role, and domain are required.');
       return false;
     }
-
     const permissions = normalizeAdminPermissions(adminPermissionDrafts[targetUserId] || []);
     if (!permissions.length) {
       setMessage('Select at least one permission before saving.');
@@ -3177,15 +3176,26 @@ function App() {
   }, [users]);
   const employeeModuleRows = useMemo(
     () => {
-      const selectedAssignmentDomain = String(assignmentUserFilter || 'all').trim().toLowerCase();
+      const selectedAssignmentDomain = String(isSuperAdmin ? assignmentUserFilter : (currentUserDomain || assignmentUserFilter) || 'all').trim().toLowerCase();
       return [...employees]
         .filter((employee) => {
           if (selectedAssignmentDomain === 'all') return true;
-          return String(employee.domain_name || '').trim().toLowerCase() === selectedAssignmentDomain;
+          const employeeDomain = String(employee.domain_name || '').trim().toLowerCase();
+          if (employeeDomain === selectedAssignmentDomain) return true;
+          return activeAllocations.some((allocation) => {
+            const matchesEmployee =
+              String(allocation.user_id || '') === String(employee.id || '') ||
+              String(allocation.employee_code || '').trim().toLowerCase() === String(employee.employee_code || '').trim().toLowerCase() ||
+              String(allocation.employee_email || '').trim().toLowerCase() === String(employee.email || '').trim().toLowerCase() ||
+              String(allocation.employee_name || '').trim().toLowerCase() === String(employee.name || '').trim().toLowerCase();
+            if (!matchesEmployee) return false;
+            const allocationDomain = String(allocation.domain_name || assetById[allocation.asset_id]?.domain_name || '').trim().toLowerCase();
+            return allocationDomain === selectedAssignmentDomain;
+          });
         })
         .sort((a, b) => (a.name || '').localeCompare(b.name || '') || String(a.employee_code || '').localeCompare(String(b.employee_code || '')));
     },
-    [employees, assignmentUserFilter]
+    [employees, assignmentUserFilter, currentUserDomain, isSuperAdmin, activeAllocations, assetById]
   );
   const quickAssignTypeOptions = useMemo(
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -3319,7 +3329,7 @@ function App() {
     return lookup;
   }, [uploadedEmployeeAssets]);
   const employeeDirectory = useMemo(() => {
-    const selectedAssignmentDomain = String(assignmentUserFilter || 'all').trim().toLowerCase();
+    const selectedAssignmentDomain = String(isSuperAdmin ? assignmentUserFilter : (currentUserDomain || assignmentUserFilter) || 'all').trim().toLowerCase();
     const directorySource = quickAssignUsers.length
       ? quickAssignUsers
       : employees.map((emp) => ({
@@ -3346,7 +3356,7 @@ function App() {
         })
           .map((key) => uploadedEmployeeLookup[key])
           .find(Boolean);
-        const assignedAssets = activeAllocations
+        const rawAssignedAssets = activeAllocations
           .filter((a) => {
             if (localUserId && Number(a.user_id) === Number(localUserId)) return true;
             const allocationCode = String(a.employee_code || '').trim().toLowerCase();
@@ -3357,11 +3367,6 @@ function App() {
               || (email && allocationEmail === String(email).trim().toLowerCase())
               || (name && allocationName === String(name).trim().toLowerCase())
             );
-          })
-          .filter((a) => {
-            if (selectedAssignmentDomain === 'all') return true;
-            const allocationDomain = String(a.domain_name || assetById[a.asset_id]?.domain_name || '').trim().toLowerCase();
-            return allocationDomain === selectedAssignmentDomain;
           })
           .map((a) => ({
             id: a.id,
@@ -3377,7 +3382,20 @@ function App() {
             serial: assetById[a.asset_id]?.serial || '-',
             type: assetById[a.asset_id]?.type || '-'
           }));
-        if (selectedAssignmentDomain !== 'all' && assignedAssets.length === 0) {
+        const rowDomain = String(baseEmployee.domain_name || option.domain_name || uploadedEmployee?.domain_name || rawAssignedAssets[0]?.domain_name || assetById[rawAssignedAssets[0]?.assetId]?.domain_name || '')
+          .trim()
+          .toLowerCase();
+        const assignedAssets = selectedAssignmentDomain === 'all'
+          ? rawAssignedAssets
+          : rawAssignedAssets.filter((asset) => {
+            const assetDomain = String(asset.domain_name || '').trim().toLowerCase();
+            return !assetDomain || assetDomain === selectedAssignmentDomain;
+          });
+        const rowMatchesDomain = selectedAssignmentDomain === 'all'
+          || rowDomain === selectedAssignmentDomain
+          || rawAssignedAssets.some((asset) => String(asset.domain_name || '').trim().toLowerCase() === selectedAssignmentDomain)
+          || (selectedAssignmentDomain !== 'all' && assignedAssets.length > 0 && !rowDomain);
+        if (!rowMatchesDomain) {
           return null;
         }
         const latestAllocatedAt = assignedAssets.length
@@ -3399,7 +3417,7 @@ function App() {
           personal_mobile_no: baseEmployee.personal_mobile_no || uploadedEmployee?.mobile_no || uploadedEmployee?.mobile || '',
           profile_image_url: baseEmployee.profile_image_url || uploadedEmployee?.employee_photo || '',
           geolocation: baseEmployee.location || option.location || uploadedEmployee?.location || '',
-          domain_name: baseEmployee.domain_name || option.domain_name || uploadedEmployee?.domain_name || assignedAssets[0]?.domain_name || '',
+          domain_name: rowDomain || assignedAssets[0]?.domain_name || (selectedAssignmentDomain !== 'all' ? selectedAssignmentDomain : ''),
           assignedAssets,
           assignedCount: assignedAssets.length,
           latestAllocatedAt: latestAllocatedAt ? new Date(latestAllocatedAt) : null
@@ -3414,7 +3432,7 @@ function App() {
         return `${emp.name || ''} ${emp.employee_code || ''} ${emp.email || ''} ${emp.personal_mobile_no || ''} ${emp.role || ''} ${emp.department || ''} ${emp.designation || ''} ${emp.geolocation || emp.location || ''} ${assetsText}`.toLowerCase().includes(q);
       })
       .sort((a, b) => b.assignedCount - a.assignedCount || (a.name || '').localeCompare(b.name || ''));
-  }, [quickAssignUsers, employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch, uploadedEmployeeLookup, userById]);
+  }, [quickAssignUsers, employees, activeAllocations, assetById, assignmentUserFilter, assignmentSearch, uploadedEmployeeLookup, userById, currentUserDomain, isSuperAdmin]);
   const selectedEmployee = useMemo(
     () => employeeDirectory.find((emp) => String(emp.id) === String(selectedEmployeeId)) || null,
     [employeeDirectory, selectedEmployeeId]
@@ -5480,24 +5498,24 @@ function App() {
                     </label>
                     <label className="assignment-field">
                       <span>Email</span>
-                      <input
-                        type="email"
-                        value={employeeCreateForm.email}
-                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, email: e.target.value }))}
-                        placeholder="Type email"
-                        required
-                      />
-                    </label>
-                    <label className="assignment-field">
-                      <span>Mobile</span>
-                      <input
-                        type="text"
-                        value={employeeCreateForm.personal_mobile_no}
-                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
-                        placeholder="Type mobile"
-                        required
-                      />
-                    </label>
+                    <input
+                      type="email"
+                      value={employeeCreateForm.email}
+                      onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Type email"
+                      required
+                    />
+                  </label>
+                  <label className="assignment-field">
+                    <span>Mobile</span>
+                    <input
+                      type="text"
+                      value={employeeCreateForm.personal_mobile_no}
+                      onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                      placeholder="Type mobile"
+                      required
+                    />
+                  </label>
                     <label className="assignment-field">
                       <span>Domain</span>
                       <select
@@ -6362,6 +6380,16 @@ function App() {
                       <label>
                         <span>Mobile</span>
                         <input
+                          value={employeeEditForm.personal_mobile_no}
+                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                          placeholder="9999999999"
+                        />
+                      </label>
+
+                      <label>
+                        <span>Domain</span>
+                        <input
+                          type="text"
                           value={employeeEditForm.personal_mobile_no}
                           onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
                           placeholder="9999999999"
