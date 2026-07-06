@@ -5621,9 +5621,59 @@ body {
   gap: 8px;
 }
 
+.account-create-form .account-form-row {
+  align-items: start;
+}
+
 .account-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.account-permission-modal .account-field input,
+.account-permission-modal .account-field select {
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+  border: 1px solid #cfd8e2;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.status-toggle-btn {
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #cfd8e2;
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.status-toggle-btn.status-active {
+  color: #176b3c;
+  border-color: #cde8d7;
+  background: #f7fcf9;
+}
+
+.status-toggle-btn.status-inactive {
+  color: #536474;
+  border-color: #dbe3eb;
+  background: #f8fafc;
+}
+
+.status-toggle-btn:focus,
+.status-toggle-btn:hover {
+  outline: none;
+  border-color: #84b3bd;
 }
 
 .account-field span {
@@ -5639,9 +5689,10 @@ body {
 
 .multi-domain-picker-trigger {
   width: 100%;
-  min-height: 48px;
-  padding: 10px 14px;
-  border-radius: 14px;
+  min-height: 42px;
+  height: 42px;
+  padding: 10px 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -5666,6 +5717,13 @@ body {
   border: 1px solid #cfd8e2 !important;
   box-shadow: none !important;
   background-image: none !important;
+}
+
+.account-permission-modal .multi-domain-picker-trigger {
+  min-height: 42px;
+  height: 42px;
+  padding: 10px 12px;
+  border-radius: 10px;
 }
 
 .multi-domain-picker-trigger svg {
@@ -6117,6 +6175,11 @@ body {
   text-transform: capitalize;
 }
 
+.domain-status-toggle {
+  border: 0;
+  cursor: pointer;
+}
+
 .domain-status-pill.status-inactive {
   background: #eef2f7;
   color: #536474;
@@ -6149,7 +6212,8 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
 }
 
 .domain-edit-btn {
@@ -6165,12 +6229,28 @@ body {
   cursor: pointer;
 }
 
+.domain-action-group button {
+  white-space: nowrap;
+}
+
 .domain-create-modal {
   width: min(760px, 96vw);
 }
 
 .domain-create-form {
   gap: 14px;
+}
+
+.domain-create-form .account-field input,
+.domain-create-form .account-field select,
+.domain-create-form .status-toggle-btn {
+  height: 42px;
+  border-radius: 10px;
+}
+
+.domain-create-form .account-field input,
+.domain-create-form .account-field select {
+  width: 100%;
 }
 
 .account-permission-overlay {
@@ -6224,6 +6304,27 @@ body {
 
 .account-create-form .permission-item {
   min-height: 64px;
+}
+
+.account-permission-modal .small,
+.account-create-form .small {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+  border-radius: 14px;
+}
+
+.account-create-actions {
+  justify-content: flex-end;
+}
+
+.account-manage-actions {
+  justify-content: flex-end;
+}
+
+.account-permission-modal .employee-edit-actions,
+.account-create-form .employee-edit-actions {
+  flex-wrap: wrap;
 }
 
 .permission-popup-grid .permission-item {

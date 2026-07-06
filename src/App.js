@@ -2550,6 +2550,37 @@ function App() {
     setCreateDomainPopupOpen(true);
   }
 
+  async function toggleDomainStatus(domain) {
+    if (!isSuperAdmin) {
+      setMessage('Only super admin can update domains.');
+      return;
+    }
+    const currentStatus = String(domain?.status || 'active').trim().toLowerCase();
+    const nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const payload = {
+      code: String(domain?.code || '').trim().toUpperCase(),
+      name: String(domain?.name || '').trim().toLowerCase(),
+      country: String(domain?.country || '').trim(),
+      state: String(domain?.state || '').trim(),
+      city: String(domain?.city || '').trim(),
+      address: String(domain?.address || '').trim(),
+      pincode: String(domain?.pincode || '').trim(),
+      status: nextStatus,
+      employee_code_prefix: String(domain?.employee_code_prefix || '').trim().toLowerCase()
+    };
+    const res = await apiFetch(`/api/domains/${encodeURIComponent(payload.name)}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const body = await res.json().catch(() => ({}));
+    setMessage(res.ok ? `Domain marked ${nextStatus}.` : body.error || 'Domain status update failed');
+    if (res.ok) {
+      fetchDomains();
+      fetchAuditLogs();
+    }
+  }
+
   function closeDomainPopup() {
     setCreateDomainPopupOpen(false);
     resetDomainForm();
@@ -2561,6 +2592,7 @@ function App() {
       setMessage('Only super admin can create domains.');
       return false;
     }
+    const isEditing = Boolean(editingDomain?.name);
     const payload = {
       code: String(domainCreateForm.code || '').trim().toUpperCase(),
       name: String(domainCreateForm.name || '').trim().toLowerCase(),
@@ -2569,14 +2601,15 @@ function App() {
       city: String(domainCreateForm.city || '').trim(),
       address: String(domainCreateForm.address || '').trim(),
       pincode: String(domainCreateForm.pincode || '').trim(),
-      status: String(domainCreateForm.status || 'active').trim().toLowerCase(),
+      status: isEditing
+        ? String(editingDomain?.status || domainCreateForm.status || 'active').trim().toLowerCase()
+        : String(domainCreateForm.status || 'active').trim().toLowerCase(),
       employee_code_prefix: String(domainCreateForm.employee_code_prefix || '').trim().toLowerCase()
     };
     if (!payload.code || !payload.name || !payload.city) {
       setMessage('Domain code, domain name, and city are required.');
       return false;
     }
-    const isEditing = Boolean(editingDomain?.name);
     const targetName = String(editingDomain?.name || payload.name || '').trim().toLowerCase();
     const res = await apiFetch(
       isEditing ? `/api/domains/${encodeURIComponent(targetName)}` : '/api/domains',
@@ -2596,60 +2629,64 @@ function App() {
     return res.ok;
   }
 
-  async function saveAdminPermissions(targetUserId) {
+  async function saveRoleAccountChanges(targetUserId) {
     if (!isSuperAdmin) {
-      setMessage('Only super admin can update role permissions.');
+      setMessage('Only super admin can update role account details.');
       return false;
     }
+
+    const detailDraft = adminDetailDrafts[targetUserId] || {};
+    const detailPayload = {
+      name: String(detailDraft.name || '').trim(),
+      email: String(detailDraft.email || '').trim(),
+      role: String(detailDraft.role || 'admin').trim(),
+      domain_name: String(detailDraft.domain_name || '').trim().toLowerCase(),
+      employee_code_prefix: String(detailDraft.employee_code_prefix || '').trim().toLowerCase()
+    };
+
+    if (!detailPayload.name || !detailPayload.email || !detailPayload.role || !detailPayload.domain_name) {
+      setMessage('Name, email, role, and domain are required.');
+      return false;
+    }
+
     const permissions = normalizeAdminPermissions(adminPermissionDrafts[targetUserId] || []);
     if (!permissions.length) {
       setMessage('Select at least one permission before saving.');
       return false;
     }
-    const res = await apiFetch(`/api/users/${targetUserId}/permissions`, {
-      method: 'PUT',
-      headers: authHeaders(),
-      body: JSON.stringify({ permissions })
-    });
-    const body = await res.json().catch(() => ({}));
-    setMessage(res.ok ? 'Role permissions updated.' : body.error || 'Permission update failed');
-    if (res.ok) {
+
+    const [detailsRes, permissionsRes] = await Promise.all([
+      apiFetch(`/api/users/${targetUserId}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify(detailPayload)
+      }),
+      apiFetch(`/api/users/${targetUserId}/permissions`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({ permissions })
+      })
+    ]);
+
+    const detailsBody = await detailsRes.json().catch(() => ({}));
+    const permissionsBody = await permissionsRes.json().catch(() => ({}));
+    const detailsOk = detailsRes.ok;
+    const permissionsOk = permissionsRes.ok;
+
+    if (detailsOk && permissionsOk) {
+      setMessage('Role account details and permissions updated.');
       fetchUsers();
       fetchDomains();
       fetchAuditLogs();
+      return true;
     }
-    return res.ok;
-  }
 
-  async function saveRoleAccountDetails(targetUserId) {
-    if (!isSuperAdmin) {
-      setMessage('Only super admin can update role account details.');
-      return false;
-    }
-    const draft = adminDetailDrafts[targetUserId] || {};
-    const payload = {
-      name: String(draft.name || '').trim(),
-      email: String(draft.email || '').trim(),
-      role: String(draft.role || 'admin').trim(),
-      domain_name: String(draft.domain_name || '').trim().toLowerCase(),
-      employee_code_prefix: String(draft.employee_code_prefix || '').trim().toLowerCase()
-    };
-    if (!payload.name || !payload.email || !payload.role || !payload.domain_name) {
-      setMessage('Name, email, role, and domain are required.');
-      return false;
-    }
-    const res = await apiFetch(`/api/users/${targetUserId}`, {
-      method: 'PUT',
-      headers: authHeaders(),
-      body: JSON.stringify(payload)
-    });
-    const body = await res.json().catch(() => ({}));
-    setMessage(res.ok ? 'Role account details updated.' : body.error || 'Role account update failed');
-    if (res.ok) {
-      fetchUsers();
-      fetchAuditLogs();
-    }
-    return res.ok;
+    setMessage(
+      detailsOk
+        ? permissionsBody.error || 'Permission update failed'
+        : detailsBody.error || 'Role account update failed'
+    );
+    return false;
   }
 
   async function deleteRoleAccount(targetUserId) {
@@ -3139,8 +3176,16 @@ function App() {
     return users.filter((u) => (u.role || '').toLowerCase() === 'user');
   }, [users]);
   const employeeModuleRows = useMemo(
-    () => [...employees].sort((a, b) => (a.name || '').localeCompare(b.name || '') || String(a.employee_code || '').localeCompare(String(b.employee_code || ''))),
-    [employees]
+    () => {
+      const selectedAssignmentDomain = String(assignmentUserFilter || 'all').trim().toLowerCase();
+      return [...employees]
+        .filter((employee) => {
+          if (selectedAssignmentDomain === 'all') return true;
+          return String(employee.domain_name || '').trim().toLowerCase() === selectedAssignmentDomain;
+        })
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '') || String(a.employee_code || '').localeCompare(String(b.employee_code || '')));
+    },
+    [employees, assignmentUserFilter]
   );
   const quickAssignTypeOptions = useMemo(
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -3274,6 +3319,7 @@ function App() {
     return lookup;
   }, [uploadedEmployeeAssets]);
   const employeeDirectory = useMemo(() => {
+    const selectedAssignmentDomain = String(assignmentUserFilter || 'all').trim().toLowerCase();
     const directorySource = quickAssignUsers.length
       ? quickAssignUsers
       : employees.map((emp) => ({
@@ -3312,10 +3358,16 @@ function App() {
               || (name && allocationName === String(name).trim().toLowerCase())
             );
           })
+          .filter((a) => {
+            if (selectedAssignmentDomain === 'all') return true;
+            const allocationDomain = String(a.domain_name || assetById[a.asset_id]?.domain_name || '').trim().toLowerCase();
+            return allocationDomain === selectedAssignmentDomain;
+          })
           .map((a) => ({
             id: a.id,
             assetId: a.asset_id,
             allocatedAt: a.allocated_at,
+            domain_name: String(a.domain_name || assetById[a.asset_id]?.domain_name || '').trim().toLowerCase(),
             assigned_by_name: a.assigned_by_name,
             assigned_by_user_id: a.assigned_by_user_id,
             assigned_by_role: a.assigned_by_role,
@@ -3325,6 +3377,9 @@ function App() {
             serial: assetById[a.asset_id]?.serial || '-',
             type: assetById[a.asset_id]?.type || '-'
           }));
+        if (selectedAssignmentDomain !== 'all' && assignedAssets.length === 0) {
+          return null;
+        }
         const latestAllocatedAt = assignedAssets.length
           ? assignedAssets
             .map((item) => new Date(item.allocatedAt || '').getTime())
@@ -3344,12 +3399,13 @@ function App() {
           personal_mobile_no: baseEmployee.personal_mobile_no || uploadedEmployee?.mobile_no || uploadedEmployee?.mobile || '',
           profile_image_url: baseEmployee.profile_image_url || uploadedEmployee?.employee_photo || '',
           geolocation: baseEmployee.location || option.location || uploadedEmployee?.location || '',
-          domain_name: baseEmployee.domain_name || option.domain_name || uploadedEmployee?.domain_name || '',
+          domain_name: baseEmployee.domain_name || option.domain_name || uploadedEmployee?.domain_name || assignedAssets[0]?.domain_name || '',
           assignedAssets,
           assignedCount: assignedAssets.length,
           latestAllocatedAt: latestAllocatedAt ? new Date(latestAllocatedAt) : null
         };
       })
+      .filter(Boolean)
       .filter((emp) => assignmentUserFilter === 'all' || String(emp.domain_name || '').trim().toLowerCase() === assignmentUserFilter)
       .filter((emp) => {
         const q = assignmentSearch.trim().toLowerCase();
@@ -3458,14 +3514,6 @@ function App() {
     setAdminPermissionDrafts(drafts);
     setAdminDetailDrafts(detailDrafts);
   }, [managedAdmins]);
-
-  function hasDraftChanges(adminUser) {
-    const current = new Set(Array.isArray(adminUser.permissions) ? adminUser.permissions : []);
-    const draft = new Set(Array.isArray(adminPermissionDrafts[adminUser.id]) ? adminPermissionDrafts[adminUser.id] : []);
-    if (current.size !== draft.size) return true;
-    for (const key of current) if (!draft.has(key)) return true;
-    return false;
-  }
 
   function openAdminPermissionPopup(adminUser) {
     setAdminPermissionDrafts((prev) => ({
@@ -5759,7 +5807,16 @@ function App() {
                               <td>{domain.address || '-'}</td>
                               <td>{domain.city || '-'}</td>
                               <td>{domain.employee_code_prefix || '-'}</td>
-                              <td><span className={`domain-status-pill status-${domain.status || 'active'}`}>{domain.status || 'active'}</span></td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className={`domain-status-pill status-${domain.status || 'active'} domain-status-toggle`}
+                                  onClick={() => toggleDomainStatus(domain)}
+                                  title={`Mark ${String(domain.status || 'active').toLowerCase() === 'active' ? 'inactive' : 'active'}`}
+                                >
+                                  {domain.status || 'active'}
+                                </button>
+                              </td>
                               <td>
                                 <div className="domain-action-group">
                                   <button
@@ -5809,19 +5866,6 @@ function App() {
               <header className="account-permission-header">
                 <div>
                   <h3 id="create-admin-title">Create Role Account</h3>
-                  <p>Create a role account, assign a domain, and set permissions in one popup.</p>
-                </div>
-                <div className="employee-modal-actions">
-                  <button
-                    type="button"
-                    className="small outline"
-                    onClick={() => {
-                      setAdminCreateDomainDropdownOpen(false);
-                      setCreateAdminPopupOpen(false);
-                    }}
-                  >
-                    Close
-                  </button>
                 </div>
               </header>
               <form className="form account-create-form" onSubmit={createAdminAccount}>
@@ -5846,16 +5890,16 @@ function App() {
                     />
                   </label>
                 </div>
-                <label className="account-field">
-                  <span>Password</span>
-                  <input
-                    type="text"
-                    placeholder="Default: password"
-                    value={adminCreateForm.password}
-                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, password: e.target.value }))}
-                  />
-                </label>
                 <div className="account-form-row">
+                  <label className="account-field">
+                    <span>Password</span>
+                    <input
+                      type="text"
+                      placeholder="Default: password"
+                      value={adminCreateForm.password}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, password: e.target.value }))}
+                    />
+                  </label>
                   <label className="account-field">
                     <span>Role</span>
                     <select
@@ -5868,6 +5912,8 @@ function App() {
                       ))}
                     </select>
                   </label>
+                </div>
+                <div className="account-form-row">
                   <label className="account-field">
                     <span>Domain</span>
                     <div className="multi-domain-picker" ref={adminCreateDomainPickerRef}>
@@ -5923,16 +5969,16 @@ function App() {
                       )}
                     </div>
                   </label>
+                  <label className="account-field">
+                    <span>Employee Code Prefix</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. fch"
+                      value={adminCreateForm.employee_code_prefix}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))}
+                    />
+                  </label>
                 </div>
-                <label className="account-field">
-                  <span>Employee Code Prefix</span>
-                  <input
-                    type="text"
-                    placeholder="e.g. fch"
-                    value={adminCreateForm.employee_code_prefix}
-                    onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))}
-                  />
-                </label>
                 <div className="permission-actions">
                   <button
                     type="button"
@@ -5969,7 +6015,17 @@ function App() {
                     </label>
                   ))}
                 </div>
-                <div className="employee-edit-actions">
+                <div className="employee-edit-actions account-create-actions">
+                  <button
+                    type="button"
+                    className="small outline"
+                    onClick={() => {
+                      setAdminCreateDomainDropdownOpen(false);
+                      setCreateAdminPopupOpen(false);
+                    }}
+                  >
+                    Close
+                  </button>
                   <button type="submit" className="small">Create Account</button>
                 </div>
               </form>
@@ -5986,41 +6042,30 @@ function App() {
                 </div>
               </header>
               <form className="form account-create-form domain-create-form" onSubmit={saveDomain}>
-                <label className="account-field">
-                  <span>Location Code</span>
-                  <input
-                    placeholder="e.g. DEL-HO"
-                    value={domainCreateForm.code}
-                    onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                    required
-                  />
-                </label>
-                <label className="account-field">
-                  <span>Domain Name</span>
-                  <input
-                    placeholder="e.g. Delhi Head Office"
-                    value={domainCreateForm.name}
-                    onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                    required
-                  />
-                </label>
                 <div className="account-form-row">
                   <label className="account-field">
-                    <span>Status</span>
-                    <select
-                      value={domainCreateForm.status}
-                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, status: e.target.value }))}
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="maintenance">Maintenance</option>
-                    </select>
+                    <span>Location Code</span>
+                    <input
+                      placeholder="e.g. DEL-HO"
+                      value={domainCreateForm.code}
+                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                      required
+                    />
                   </label>
                   <label className="account-field">
-                    <span>Employee Code Prefix</span>
-                    <input placeholder="e.g. del" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))} />
+                    <span>Domain Name</span>
+                    <input
+                      placeholder="e.g. Delhi Head Office"
+                      value={domainCreateForm.name}
+                      onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
                   </label>
                 </div>
+                <label className="account-field">
+                  <span>Employee Code Prefix</span>
+                  <input placeholder="e.g. del" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))} />
+                </label>
                 <div className="account-form-row">
                   <label className="account-field">
                     <span>Country</span>
@@ -6067,9 +6112,6 @@ function App() {
                 <div>
                   <h3 id="admin-permission-title">{selectedAdminPermissionUser.name}</h3>
                   <p>{selectedAdminPermissionUser.email} | role: {selectedAdminPermissionUser.role} | domain: {selectedAdminPermissionUser.domain_name || '-'} | prefix: {selectedAdminPermissionUser.employee_code_prefix || '-'}</p>
-                </div>
-                <div className="employee-modal-actions">
-                  <button type="button" className="small outline" onClick={() => setSelectedAdminPermissionId(null)}>Close</button>
                 </div>
               </header>
 
@@ -6134,28 +6176,30 @@ function App() {
                   />
                 </label>
               </div>
-              <label className="account-field">
-                <span>Employee Code Prefix</span>
-                <input
-                  placeholder="e.g. fch"
-                  value={adminDetailDrafts[selectedAdminPermissionUser.id]?.employee_code_prefix || ''}
-                  onChange={(e) => setAdminDetailDrafts((prev) => ({
-                    ...prev,
-                    [selectedAdminPermissionUser.id]: {
-                      ...(prev[selectedAdminPermissionUser.id] || {}),
-                      employee_code_prefix: e.target.value.toLowerCase()
-                    }
-                  }))}
-                />
-              </label>
-              <label className="account-field">
-                <span>Password</span>
-                <input
-                  type="text"
-                  readOnly
-                  value={roleAccountPasswords[selectedAdminPermissionUser.id] || 'Not available for older accounts'}
-                />
-              </label>
+              <div className="account-form-row">
+                <label className="account-field">
+                  <span>Employee Code Prefix</span>
+                  <input
+                    placeholder="e.g. fch"
+                    value={adminDetailDrafts[selectedAdminPermissionUser.id]?.employee_code_prefix || ''}
+                    onChange={(e) => setAdminDetailDrafts((prev) => ({
+                      ...prev,
+                      [selectedAdminPermissionUser.id]: {
+                        ...(prev[selectedAdminPermissionUser.id] || {}),
+                        employee_code_prefix: e.target.value.toLowerCase()
+                      }
+                    }))}
+                  />
+                </label>
+                <label className="account-field">
+                  <span>Password</span>
+                  <input
+                    type="text"
+                    readOnly
+                    value={roleAccountPasswords[selectedAdminPermissionUser.id] || 'Not available for older accounts'}
+                  />
+                </label>
+              </div>
 
               <div className="permission-actions">
                 <button
@@ -6213,24 +6257,23 @@ function App() {
                 ))}
               </div>
 
-              <div className="employee-edit-actions">
+              <div className="employee-edit-actions account-manage-actions">
                 <button
                   type="button"
                   className="small outline"
-                  onClick={() => saveRoleAccountDetails(selectedAdminPermissionUser.id)}
+                  onClick={() => setSelectedAdminPermissionId(null)}
                 >
-                  Save Details
+                  Close
                 </button>
                 <button
                   type="button"
                   className="small"
-                  disabled={!hasDraftChanges(selectedAdminPermissionUser)}
                   onClick={async () => {
-                    const ok = await saveAdminPermissions(selectedAdminPermissionUser.id);
+                    const ok = await saveRoleAccountChanges(selectedAdminPermissionUser.id);
                     if (ok) setSelectedAdminPermissionId(null);
                   }}
                 >
-                  {hasDraftChanges(selectedAdminPermissionUser) ? 'Save Permissions' : 'Saved'}
+                  Save Details
                 </button>
                 <button
                   type="button"
