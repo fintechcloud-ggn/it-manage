@@ -1952,9 +1952,10 @@ function App() {
     }
     const isEditing = Boolean(editingAsset?.id);
     if (isEditing) {
-      if (!domain_name && editingAsset.domain_name) {
+      const originalDomain = (editingAsset.domain_name || '').trim().toLowerCase();
+      if (domain_name !== originalDomain) {
         if (editingAsset.assigned_to_name) {
-          setMessage(`This asset is assigned to an employee (${editingAsset.assigned_to_name}, ${editingAsset.assigned_to_employee_code || 'N/A'}). Unassign it before removing the domain assignment.`);
+          setMessage(`This asset is currently assigned to ${editingAsset.assigned_to_name}. Please unassign the asset before changing its domain.`);
           return;
         }
       }
@@ -2794,7 +2795,23 @@ function App() {
       setMessage('You do not have permission to delete employees.');
       return false;
     }
-    const employeeName = employeeModuleRows.find((emp) => String(emp.id) === String(targetUserId))?.name || 'this employee';
+    
+    const targetEmployee = employeeModuleRows.find((emp) => String(emp.id) === String(targetUserId));
+    if (targetEmployee) {
+      const hasAssignedAssets = activeAllocations.some((allocation) => {
+        return String(allocation.user_id || '') === String(targetEmployee.id || '') ||
+          (targetEmployee.employee_code && String(allocation.employee_code || '').trim().toLowerCase() === String(targetEmployee.employee_code || '').trim().toLowerCase()) ||
+          (targetEmployee.email && String(allocation.employee_email || '').trim().toLowerCase() === String(targetEmployee.email || '').trim().toLowerCase()) ||
+          (targetEmployee.name && String(allocation.employee_name || '').trim().toLowerCase() === String(targetEmployee.name || '').trim().toLowerCase());
+      });
+
+      if (hasAssignedAssets) {
+        window.alert("This employee has assigned assets. Please unassign all assets before deleting the employee.");
+        return false;
+      }
+    }
+
+    const employeeName = targetEmployee?.name || 'this employee';
     const confirmed = window.confirm(`Delete ${employeeName}? This cannot be undone.`);
     if (!confirmed) return false;
     const res = await apiFetch(`/api/users/${targetUserId}`, {
@@ -3177,11 +3194,26 @@ function App() {
   const employeeModuleRows = useMemo(
     () => {
       const selectedAssignmentDomain = String(isSuperAdmin ? assignmentUserFilter : (currentUserDomain || assignmentUserFilter) || 'all').trim().toLowerCase();
-      return [...employees]
+      const source = quickAssignUsers.length ? quickAssignUsers : employees;
+      return [...source]
+        .map(emp => ({ ...emp, email: emp.email || emp.employee_email }))
         .filter((employee) => {
           if (selectedAssignmentDomain === 'all') return true;
+          const targetDomains = selectedAssignmentDomain.split(',').map(d => d.trim()).filter(Boolean);
           const employeeDomain = String(employee.domain_name || '').trim().toLowerCase();
-          if (employeeDomain === selectedAssignmentDomain) return true;
+          if (targetDomains.includes(employeeDomain)) return true;
+          
+          if (!employeeDomain) {
+            for (const target of targetDomains) {
+              const domainRecord = domainRecords.find(d => String(d.name).toLowerCase() === target);
+              if (domainRecord) {
+                const code = String(employee.employee_code || '').trim().toLowerCase();
+                const p1 = String(domainRecord.code || '').trim().toLowerCase();
+                const p2 = String(domainRecord.employee_code_prefix || '').trim().toLowerCase();
+                if (code && ((p1 && code.startsWith(p1)) || (p2 && code.startsWith(p2)))) return true;
+              }
+            }
+          }
           return activeAllocations.some((allocation) => {
             const matchesEmployee =
               String(allocation.user_id || '') === String(employee.id || '') ||
@@ -3568,15 +3600,15 @@ function App() {
     
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5001/api/allocations/${employeeReturnForm.allocationId}/return`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      const res = await apiFetch(`/api/allocations/${employeeReturnForm.allocationId}/return`, {
+        method: 'PUT',
+        headers: authHeaders(),
         body: JSON.stringify({
-          return_reason: employeeReturnForm.reason,
-          return_notes: employeeReturnForm.notes,
+          reason: employeeReturnForm.reason,
+          reason_detail: employeeReturnForm.notes,
         })
       });
-      const body = await res.json();
+      const body = await res.json().catch(() => ({}));
       setMessage(res.ok ? 'Asset returned successfully' : body.error || 'Return failed');
       if (res.ok) {
         setSelectedEmployeeReturnId(null);
@@ -3700,8 +3732,8 @@ function App() {
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
-      const hasDomain = Boolean(a.domain_name && String(a.domain_name).trim().length > 0);
-      const matchTab = inventoryTab === 'assigned' ? hasDomain : !hasDomain;
+      const isAssigned = a.status === 'allocated';
+      const matchTab = inventoryTab === 'assigned' ? isAssigned : !isAssigned;
       return matchQuery && matchDomain && matchStatus && matchBrand && matchType && matchTab;
     });
 
@@ -5083,7 +5115,9 @@ function App() {
                                 {hasAdminPermission('inventory.manage') ? (
                                   <>
                                     <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                    <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
+                                    {inventoryTab === 'free' && (
+                                      <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
+                                    )}
                                   </>
                                 ) : '-'}
                               </div>
@@ -5133,7 +5167,7 @@ function App() {
                               {hasAdminPermission('inventory.manage') ? (
                                 <>
                                   <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                  {inventoryTab === 'assigned' && (
+                                  {inventoryTab === 'free' && (
                                     <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
                                   )}
                                 </>
@@ -5223,7 +5257,27 @@ function App() {
                       className={assignValidated && !quickAssignForm.employeeName.trim() ? 'input-error' : ''}
                     />
                     <datalist id="quick-assign-employee-names">
-                      {quickAssignUsers.map((employee, index) => (
+                      {quickAssignUsers
+                        .filter(employee => {
+                          if (!currentUserDomain) return true;
+                          const targetDomains = currentUserDomain.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+                          const empDomain = String(employee.domain_name || employee.domain || '').trim().toLowerCase();
+                          if (targetDomains.includes(empDomain)) return true;
+                          
+                          if (!empDomain) {
+                            for (const target of targetDomains) {
+                              const domainRecord = domainRecords.find(d => String(d.name).toLowerCase() === target);
+                              if (domainRecord) {
+                                const code = String(employee.employee_code || '').trim().toLowerCase();
+                                const p1 = String(domainRecord.code || '').trim().toLowerCase();
+                                const p2 = String(domainRecord.employee_code_prefix || '').trim().toLowerCase();
+                                if (code && ((p1 && code.startsWith(p1)) || (p2 && code.startsWith(p2)))) return true;
+                              }
+                            }
+                          }
+                          return false;
+                        })
+                        .map((employee, index) => (
                         <option key={`employee-name-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.name || ''}>
                           {employee.employee_code || employee.employee_email || ''}
                         </option>
