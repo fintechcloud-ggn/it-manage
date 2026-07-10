@@ -3227,7 +3227,7 @@ function App() {
         })
         .sort((a, b) => (a.name || '').localeCompare(b.name || '') || String(a.employee_code || '').localeCompare(String(b.employee_code || '')));
     },
-    [employees, assignmentUserFilter, currentUserDomain, isSuperAdmin, activeAllocations, assetById]
+    [employees, assignmentUserFilter, currentUserDomain, isSuperAdmin, activeAllocations, assetById, domainRecords, quickAssignUsers]
   );
   const quickAssignTypeOptions = useMemo(
     () => Array.from(new Set(availableAssets.map((asset) => asset.type).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
