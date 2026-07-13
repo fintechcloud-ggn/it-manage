@@ -512,16 +512,16 @@ function SearchableSelect({
         </div>
       )}
       {!customMode && (
-      <button
-        type="button"
-        className={`searchable-select__trigger${isOpen ? ' is-open' : ''}`}
-        onClick={() => setIsOpen((prev) => !prev)}
-      >
-        <span className={`searchable-select__value${selectedOption || selectedLabel ? '' : ' is-placeholder'}`}>
-          {selectedOption?.label || selectedLabel || placeholder}
-        </span>
-        <span className="searchable-select__caret" aria-hidden="true" />
-      </button>
+        <button
+          type="button"
+          className={`searchable-select__trigger${isOpen ? ' is-open' : ''}`}
+          onClick={() => setIsOpen((prev) => !prev)}
+        >
+          <span className={`searchable-select__value${selectedOption || selectedLabel ? '' : ' is-placeholder'}`}>
+            {selectedOption?.label || selectedLabel || placeholder}
+          </span>
+          <span className="searchable-select__caret" aria-hidden="true" />
+        </button>
       )}
 
       {isOpen && (
@@ -1766,7 +1766,7 @@ function App() {
       requestAnimationFrame(() => {
         if (selfieVideoRef.current) {
           selfieVideoRef.current.srcObject = stream;
-          selfieVideoRef.current.play().catch(() => {});
+          selfieVideoRef.current.play().catch(() => { });
         }
       });
     } catch (err) {
@@ -2800,7 +2800,7 @@ function App() {
       setMessage('You do not have permission to delete employees.');
       return false;
     }
-    
+
     const targetEmployee = employeeModuleRows.find((emp) => String(emp.id) === String(targetUserId));
     if (targetEmployee) {
       const hasAssignedAssets = activeAllocations.some((allocation) => {
@@ -3189,7 +3189,7 @@ function App() {
   useEffect(() => {
     setSelectedModelId((prev) => (
       prev === OTHER_MODEL_VALUE ? prev :
-      prev && modelOptionsByType.some((model) => String(model.id) === String(prev)) ? prev : ''
+        prev && modelOptionsByType.some((model) => String(model.id) === String(prev)) ? prev : ''
     ));
   }, [modelOptionsByType]);
   const availableAssets = useMemo(() => assets.filter((a) => a.status === 'available'), [assets]);
@@ -3207,7 +3207,7 @@ function App() {
           const targetDomains = selectedAssignmentDomain.split(',').map(d => d.trim()).filter(Boolean);
           const employeeDomain = String(employee.domain_name || '').trim().toLowerCase();
           if (targetDomains.includes(employeeDomain)) return true;
-          
+
           if (!employeeDomain) {
             for (const target of targetDomains) {
               const domainRecord = domainRecords.find(d => String(d.name).toLowerCase() === target);
@@ -3602,7 +3602,7 @@ function App() {
   async function submitEmployeeReturnAsset(e) {
     e.preventDefault();
     if (!employeeReturnForm.allocationId) return;
-    
+
     setLoading(true);
     try {
       const res = await apiFetch(`/api/allocations/${employeeReturnForm.allocationId}/return`, {
@@ -4836,285 +4836,337 @@ function App() {
                 </div>
               </div>
 
-            {hasAdminPermission('inventory.manage') && (
-              <div className="create-box inventory-create-top">
-                <div className="create-head">
-                  <div>
-                    <h4>{editingAsset ? 'Edit Asset' : 'Add New Asset'}</h4>
+              {hasAdminPermission('inventory.manage') && (
+                <div className="create-box inventory-create-top">
+                  <div className="create-head">
+                    <div>
+                      <h4>{editingAsset ? 'Edit Asset' : 'Add New Asset'}</h4>
+                    </div>
+                    <div className="create-meta">
+                      <span>{editingAsset ? 'Editing mode' : (displayedAssetType || 'Select asset type')}</span>
+                      <span>{brandsBySelectedType.length} brands</span>
+                      <span>{modelOptionsByType.length} models</span>
+                    </div>
                   </div>
-                  <div className="create-meta">
-                    <span>{editingAsset ? 'Editing mode' : (displayedAssetType || 'Select asset type')}</span>
-                    <span>{brandsBySelectedType.length} brands</span>
-                    <span>{modelOptionsByType.length} models</span>
-                  </div>
+                  <form onSubmit={createAsset} className="form asset-create-form">
+                    <label className="field required-field">
+                      <span>Asset Type <span className="required-indicator">*</span></span>
+                      <SearchableSelect
+                        value={selectedAssetType}
+                        onChange={(value) => {
+                          setSelectedAssetType(value);
+                          setCustomAssetType('');
+                          setSelectedBrandId('');
+                          setCustomBrandName('');
+                          setSelectedModelId('');
+                          setCustomModelName('');
+                        }}
+                        options={assetTypeDropdownOptions}
+                        placeholder="Select asset type"
+                        searchPlaceholder="Search or type asset type..."
+                        emptyMessage="No asset type found"
+                        showSearch={false}
+                        selectedLabel={displayedAssetType}
+                        customMode={selectedAssetType === OTHER_ASSET_TYPE_VALUE}
+                        customValue={customAssetType}
+                        customPlaceholder="Type asset type"
+                        onCustomChange={(value) => {
+                          setCustomAssetType(value);
+                          setSelectedBrandId('');
+                          setCustomBrandName('');
+                          setSelectedModelId('');
+                          setCustomModelName('');
+                        }}
+                      />
+                    </label>
+                    <label className="field required-field">
+                      <span>Brand <span className="required-indicator">*</span></span>
+                      <SearchableSelect
+                        value={selectedBrandId}
+                        onChange={(value) => {
+                          setSelectedBrandId(value);
+                          setCustomBrandName('');
+                          setSelectedModelId('');
+                          setCustomModelName('');
+                        }}
+                        options={brandDropdownOptions}
+                        placeholder="Select asset brand"
+                        searchPlaceholder="Search or type brand..."
+                        emptyMessage="No brand found"
+                        showSearch={false}
+                        selectedLabel={customBrandName}
+                        customMode={selectedBrandId === OTHER_BRAND_VALUE}
+                        customValue={customBrandName}
+                        customPlaceholder="Type asset brand"
+                        onCustomChange={(value) => {
+                          setCustomBrandName(value);
+                          setSelectedModelId('');
+                          setCustomModelName('');
+                        }}
+                      />
+                    </label>
+                    <label className="field required-field">
+                      <span>Model <span className="required-indicator">*</span></span>
+                      <SearchableSelect
+                        value={selectedModelId}
+                        onChange={(value) => {
+                          setSelectedModelId(value);
+                          setCustomModelName('');
+                        }}
+                        options={modelDropdownOptions}
+                        placeholder="Select asset model"
+                        searchPlaceholder="Search or type asset model..."
+                        emptyMessage="No model found"
+                        showSearch={false}
+                        selectedLabel={customModelName}
+                        customMode={selectedModelId === OTHER_MODEL_VALUE}
+                        customValue={customModelName}
+                        customPlaceholder="Type asset model"
+                        onCustomChange={setCustomModelName}
+                      />
+                    </label>
+                    <label className="field required-field">
+                      <span>Serial Number <span className="required-indicator">*</span></span>
+                      <input
+                        name="serial"
+                        placeholder="e.g. SN-AX9-22190"
+                        value={assetDraft.serial}
+                        onChange={(e) => setAssetDraft((prev) => ({ ...prev, serial: e.target.value }))}
+                        required
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Vendor (optional)</span>
+                      <input
+                        name="vendor"
+                        placeholder="e.g. Dell Partner, Amazon, Local Supplier"
+                        value={assetDraft.vendor}
+                        onChange={(e) => setAssetDraft((prev) => ({ ...prev, vendor: e.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Domain (optional)</span>
+                      <select
+                        name="domain_name"
+                        value={assetDomainName}
+                        onChange={(e) => setAssetDomainName(e.target.value)}
+                        disabled={!isSuperAdmin}
+                      >
+                        <option value="">No Domain (Free Asset)</option>
+                        {Array.from(new Set([assetDomainName, currentUserDomain, ...inventoryDomains].filter(Boolean)))
+                          .sort((a, b) => a.localeCompare(b))
+                          .map((domain) => (
+                            <option key={domain} value={domain}>{domain}</option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Notes</span>
+                      <input
+                        name="notes"
+                        placeholder="Branch, team, procurement, warranty..."
+                        value={assetDraft.notes}
+                        onChange={(e) => setAssetDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                      />
+                    </label>
+                    <div className="field asset-bulk-upload">
+                      <span>Bulk Upload Assets</span>
+                      <div className="bulk-upload-actions">
+                        <div className="bulk-upload-file-box">
+                          <input
+                            id="bulk-asset-upload"
+                            className="bulk-upload-input"
+                            type="file"
+                            accept=".csv,text/csv"
+                            onChange={uploadBulkAssets}
+                          />
+                          <label className="bulk-upload-picker" htmlFor="bulk-asset-upload">
+                            Choose file
+                          </label>
+                        </div>
+                        <div className="bulk-upload-sample-box">
+                          <button
+                            type="button"
+                            className="secondary-link bulk-upload-inline-link"
+                            onClick={downloadBulkAssetTemplate}
+                          >
+                            Download Bulk Upload Sample
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="create-actions">
+                      <div className="create-action-buttons">
+                        {editingAsset && (
+                          <button type="button" className="outline" onClick={resetAssetForm}>Cancel Edit</button>
+                        )}
+                        <button type="submit">{editingAsset ? 'Save Changes' : 'Add Asset'}</button>
+                      </div>
+                    </div>
+                  </form>
                 </div>
-                <form onSubmit={createAsset} className="form asset-create-form">
-                  <label className="field required-field">
-                    <span>Asset Type <span className="required-indicator">*</span></span>
-                    <SearchableSelect
-                      value={selectedAssetType}
-                      onChange={(value) => {
-                        setSelectedAssetType(value);
-                        setCustomAssetType('');
-                        setSelectedBrandId('');
-                        setCustomBrandName('');
-                        setSelectedModelId('');
-                        setCustomModelName('');
-                      }}
-                      options={assetTypeDropdownOptions}
-                      placeholder="Select asset type"
-                      searchPlaceholder="Search or type asset type..."
-                      emptyMessage="No asset type found"
-                      showSearch={false}
-                      selectedLabel={displayedAssetType}
-                      customMode={selectedAssetType === OTHER_ASSET_TYPE_VALUE}
-                      customValue={customAssetType}
-                      customPlaceholder="Type asset type"
-                      onCustomChange={(value) => {
-                        setCustomAssetType(value);
-                        setSelectedBrandId('');
-                        setCustomBrandName('');
-                        setSelectedModelId('');
-                        setCustomModelName('');
-                      }}
-                    />
-                  </label>
-                  <label className="field required-field">
-                    <span>Brand <span className="required-indicator">*</span></span>
-                    <SearchableSelect
-                      value={selectedBrandId}
-                      onChange={(value) => {
-                        setSelectedBrandId(value);
-                        setCustomBrandName('');
-                        setSelectedModelId('');
-                        setCustomModelName('');
-                      }}
-                      options={brandDropdownOptions}
-                      placeholder="Select asset brand"
-                      searchPlaceholder="Search or type brand..."
-                      emptyMessage="No brand found"
-                      showSearch={false}
-                      selectedLabel={customBrandName}
-                      customMode={selectedBrandId === OTHER_BRAND_VALUE}
-                      customValue={customBrandName}
-                      customPlaceholder="Type asset brand"
-                      onCustomChange={(value) => {
-                        setCustomBrandName(value);
-                        setSelectedModelId('');
-                        setCustomModelName('');
-                      }}
-                    />
-                  </label>
-                  <label className="field required-field">
-                    <span>Model <span className="required-indicator">*</span></span>
-                    <SearchableSelect
-                      value={selectedModelId}
-                      onChange={(value) => {
-                        setSelectedModelId(value);
-                        setCustomModelName('');
-                      }}
-                      options={modelDropdownOptions}
-                      placeholder="Select asset model"
-                      searchPlaceholder="Search or type asset model..."
-                      emptyMessage="No model found"
-                      showSearch={false}
-                      selectedLabel={customModelName}
-                      customMode={selectedModelId === OTHER_MODEL_VALUE}
-                      customValue={customModelName}
-                      customPlaceholder="Type asset model"
-                      onCustomChange={setCustomModelName}
-                    />
-                  </label>
-                  <label className="field required-field">
-                    <span>Serial Number <span className="required-indicator">*</span></span>
-                    <input
-                      name="serial"
-                      placeholder="e.g. SN-AX9-22190"
-                      value={assetDraft.serial}
-                      onChange={(e) => setAssetDraft((prev) => ({ ...prev, serial: e.target.value }))}
-                      required
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Vendor (optional)</span>
-                    <input
-                      name="vendor"
-                      placeholder="e.g. Dell Partner, Amazon, Local Supplier"
-                      value={assetDraft.vendor}
-                      onChange={(e) => setAssetDraft((prev) => ({ ...prev, vendor: e.target.value }))}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Domain (optional)</span>
-                    <select
-                      name="domain_name"
-                      value={assetDomainName}
-                      onChange={(e) => setAssetDomainName(e.target.value)}
-                      disabled={!isSuperAdmin}
-                    >
-                      <option value="">No Domain (Free Asset)</option>
-                      {Array.from(new Set([assetDomainName, currentUserDomain, ...inventoryDomains].filter(Boolean)))
-                        .sort((a, b) => a.localeCompare(b))
-                        .map((domain) => (
-                          <option key={domain} value={domain}>{domain}</option>
-                        ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Notes</span>
-                    <input
-                      name="notes"
-                      placeholder="Branch, team, procurement, warranty..."
-                      value={assetDraft.notes}
-                      onChange={(e) => setAssetDraft((prev) => ({ ...prev, notes: e.target.value }))}
-                    />
-                  </label>
-                  <div className="field asset-bulk-upload">
-                    <span>Bulk Upload Assets</span>
-                    <div className="bulk-upload-actions">
-                      <div className="bulk-upload-file-box">
-                        <input
-                          id="bulk-asset-upload"
-                          className="bulk-upload-input"
-                          type="file"
-                          accept=".csv,text/csv"
-                          onChange={uploadBulkAssets}
-                        />
-                        <label className="bulk-upload-picker" htmlFor="bulk-asset-upload">
-                          Choose file
-                        </label>
-                      </div>
-                      <div className="bulk-upload-sample-box">
-                        <button
-                          type="button"
-                          className="secondary-link bulk-upload-inline-link"
-                          onClick={downloadBulkAssetTemplate}
-                        >
-                          Download Bulk Upload Sample
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="create-actions">
-                    <div className="create-action-buttons">
-                      {editingAsset && (
-                        <button type="button" className="outline" onClick={resetAssetForm}>Cancel Edit</button>
-                      )}
-                      <button type="submit">{editingAsset ? 'Save Changes' : 'Add Asset'}</button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            )}
+              )}
 
-            <div className="inventory-tabs-wrapper">
-              <div className="account-tabs">
+              <div className="inventory-tabs-wrapper">
+                <div className="account-tabs">
+                  <button
+                    type="button"
+                    className={inventoryTab === 'assigned' ? 'active' : ''}
+                    onClick={() => setInventoryTab('assigned')}
+                  >
+                    Assigned Assets
+                  </button>
+                  <button
+                    type="button"
+                    className={inventoryTab === 'free' ? 'active' : ''}
+                    onClick={() => setInventoryTab('free')}
+                  >
+                    Free Assets
+                  </button>
+                </div>
+              </div>
+
+              <div className="inventory-filter-grid">
+                <input
+                  className="inventory-search"
+                  placeholder="Search by asset, serial, vendor, brand, model, domain, status..."
+                  value={inventoryQuery}
+                  onChange={(e) => setInventoryQuery(e.target.value)}
+                />
+                <select value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
+                  <option value="all">All Domains</option>
+                  {inventoryDomains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
+                </select>
+                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="all">All Status</option>
+                  <option value="available">Available</option>
+                  <option value="allocated">Allocated</option>
+                </select>
+                <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
+                  <option value="all">All Brands</option>
+                  {inventoryBrands.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                  <option value="name">Sort by Name</option>
+                  <option value="type">Sort by Type</option>
+                  <option value="brand_name">Sort by Brand</option>
+                  <option value="model_name">Sort by Model</option>
+                  <option value="domain_name">Sort by Domain</option>
+                  <option value="serial">Sort by Serial</option>
+                  <option value="status">Sort by Status</option>
+                </select>
+                <select value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+                <select value={inventoryPageSize} onChange={(e) => setInventoryPageSize(e.target.value)}>
+                  <option value="25">Show 25</option>
+                  <option value="50">Show 50</option>
+                  <option value="100">Show 100</option>
+                  <option value="all">Show All</option>
+                </select>
+              </div>
+
+              <div className="inventory-type-buttons" aria-label="Asset type filters">
                 <button
                   type="button"
-                  className={inventoryTab === 'assigned' ? 'active' : ''}
-                  onClick={() => setInventoryTab('assigned')}
+                  className={filterType === 'all' ? 'active' : ''}
+                  onClick={() => { setFilterType('all'); fetchAssets('all'); }}
                 >
-                  Assigned Assets
+                  All Types
                 </button>
-                <button
-                  type="button"
-                  className={inventoryTab === 'free' ? 'active' : ''}
-                  onClick={() => setInventoryTab('free')}
-                >
-                  Free Assets
-                </button>
+                {inventoryTypes.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={filterType === type ? 'active' : ''}
+                    onClick={() => { setFilterType(type); fetchAssets(type); }}
+                  >
+                    {type}
+                  </button>
+                ))}
+                <div className="inventory-type-actions">
+                  <button type="button" className="outline inventory-export-inline" onClick={exportInventoryCsv}>Export CSV</button>
+                  <button type="button" className="outline inventory-reset-inline" onClick={resetInventoryFilters}>Reset Filters</button>
+                </div>
               </div>
-            </div>
 
-            <div className="inventory-filter-grid">
-              <input
-                className="inventory-search"
-                placeholder="Search by asset, serial, vendor, brand, model, domain, status..."
-                value={inventoryQuery}
-                onChange={(e) => setInventoryQuery(e.target.value)}
-              />
-              <select value={filterDomain} onChange={(e) => setFilterDomain(e.target.value)}>
-                <option value="all">All Domains</option>
-                {inventoryDomains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
-              </select>
-              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="all">All Status</option>
-                <option value="available">Available</option>
-                <option value="allocated">Allocated</option>
-              </select>
-              <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
-                <option value="all">All Brands</option>
-                {inventoryBrands.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-                <option value="name">Sort by Name</option>
-                <option value="type">Sort by Type</option>
-                <option value="brand_name">Sort by Brand</option>
-                <option value="model_name">Sort by Model</option>
-                <option value="domain_name">Sort by Domain</option>
-                <option value="serial">Sort by Serial</option>
-                <option value="status">Sort by Status</option>
-              </select>
-              <select value={sortDir} onChange={(e) => setSortDir(e.target.value)}>
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
-              <select value={inventoryPageSize} onChange={(e) => setInventoryPageSize(e.target.value)}>
-                <option value="25">Show 25</option>
-                <option value="50">Show 50</option>
-                <option value="100">Show 100</option>
-                <option value="all">Show All</option>
-              </select>
-            </div>
-
-            <div className="inventory-type-buttons" aria-label="Asset type filters">
-              <button
-                type="button"
-                className={filterType === 'all' ? 'active' : ''}
-                onClick={() => { setFilterType('all'); fetchAssets('all'); }}
-              >
-                All Types
-              </button>
-              {inventoryTypes.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={filterType === type ? 'active' : ''}
-                  onClick={() => { setFilterType(type); fetchAssets(type); }}
-                >
-                  {type}
-                </button>
-              ))}
-              <div className="inventory-type-actions">
-                <button type="button" className="outline inventory-export-inline" onClick={exportInventoryCsv}>Export CSV</button>
-                <button type="button" className="outline inventory-reset-inline" onClick={resetInventoryFilters}>Reset Filters</button>
+              <div className="inventory-mini-stats inventory-mini-stats-strong">
+                <article><span>Filtered Total</span><strong>{inventoryStats.total}</strong></article>
+                <article><span>Available Stock</span><strong>{inventoryStats.available}</strong></article>
+                <article><span>Allocated Stock</span><strong>{inventoryStats.allocated}</strong></article>
+                <article><span>Brands</span><strong>{inventoryStats.uniqueBrands}</strong></article>
               </div>
-            </div>
 
-            <div className="inventory-mini-stats inventory-mini-stats-strong">
-              <article><span>Filtered Total</span><strong>{inventoryStats.total}</strong></article>
-              <article><span>Available Stock</span><strong>{inventoryStats.available}</strong></article>
-              <article><span>Allocated Stock</span><strong>{inventoryStats.allocated}</strong></article>
-              <article><span>Brands</span><strong>{inventoryStats.uniqueBrands}</strong></article>
-            </div>
-
-            <div className="inventory-table-shell">
-              <div className="table-wrap">
-                {isSimInventoryView ? (
-                  <table>
-                    <thead><tr><th>S. No.</th><th>CONNECTION NUMBER</th><th>CONNECTION TYPE</th><th>STATUS</th><th>SIM NUMBER</th><th>NAME</th><th>SOURCE</th><th>Action</th></tr></thead>
-                    <tbody>
-                      {paginatedAssets.map((a, index) => {
-                        const sim = getSimAssetDetails(a);
-                        return (
+              <div className="inventory-table-shell">
+                <div className="table-wrap">
+                  {isSimInventoryView ? (
+                    <table>
+                      <thead><tr><th>S. No.</th><th>CONNECTION NUMBER</th><th>CONNECTION TYPE</th><th>STATUS</th><th>SIM NUMBER</th><th>NAME</th><th>SOURCE</th><th>Action</th></tr></thead>
+                      <tbody>
+                        {paginatedAssets.map((a, index) => {
+                          const sim = getSimAssetDetails(a);
+                          return (
+                            <tr key={a.id}>
+                              <td>{sim.sNo || (page - 1) * pageSize + index + 1}</td>
+                              <td>{sim.connectionNumber || '-'}</td>
+                              <td>{sim.connectionType || '-'}</td>
+                              <td>{sim.simStatus || '-'}</td>
+                              <td>{sim.simNumber || '-'}</td>
+                              <td>{sim.assignedName || '-'}</td>
+                              <td>{sim.source || '-'}</td>
+                              <td>
+                                <div className="asset-row-actions">
+                                  {hasAdminPermission('inventory.manage') ? (
+                                    <>
+                                      <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
+                                      {inventoryTab === 'free' && (
+                                        <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
+                                      )}
+                                    </>
+                                  ) : '-'}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Brand</th>
+                          <th>Model</th>
+                          {inventoryTab === 'assigned' && <th>Domain</th>}
+                          <th>Vendor</th>
+                          <th>Serial</th>
+                          {inventoryTab === 'assigned' && <th>Status</th>}
+                          {inventoryTab === 'assigned' && <th>QR</th>}
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedAssets.map((a) => (
                           <tr key={a.id}>
-                            <td>{sim.sNo || (page - 1) * pageSize + index + 1}</td>
-                            <td>{sim.connectionNumber || '-'}</td>
-                            <td>{sim.connectionType || '-'}</td>
-                            <td>{sim.simStatus || '-'}</td>
-                            <td>{sim.simNumber || '-'}</td>
-                            <td>{sim.assignedName || '-'}</td>
-                            <td>{sim.source || '-'}</td>
+                            <td>{a.type}</td>
+                            <td>{a.brand_name || '-'}</td>
+                            <td>{a.model_name || '-'}</td>
+                            {inventoryTab === 'assigned' && <td>{a.domain_name || '-'}</td>}
+                            <td>{a.vendor || '-'}</td>
+                            <td>{a.serial}</td>
+                            {inventoryTab === 'assigned' && (
+                              <td><span className={`status ${a.status}`}>{a.status}</span></td>
+                            )}
+                            {inventoryTab === 'assigned' && (
+                              <td>
+                                <div className="asset-qr-cell">
+                                  <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
+                                  <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
+                                </div>
+                              </td>
+                            )}
                             <td>
                               <div className="asset-row-actions">
                                 {hasAdminPermission('inventory.manage') ? (
@@ -5128,71 +5180,19 @@ function App() {
                               </div>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Type</th>
-                        <th>Brand</th>
-                        <th>Model</th>
-                        {inventoryTab === 'assigned' && <th>Domain</th>}
-                        <th>Vendor</th>
-                        <th>Serial</th>
-                        {inventoryTab === 'assigned' && <th>Status</th>}
-                        {inventoryTab === 'assigned' && <th>QR</th>}
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedAssets.map((a) => (
-                        <tr key={a.id}>
-                          <td>{a.type}</td>
-                          <td>{a.brand_name || '-'}</td>
-                          <td>{a.model_name || '-'}</td>
-                          {inventoryTab === 'assigned' && <td>{a.domain_name || '-'}</td>}
-                          <td>{a.vendor || '-'}</td>
-                          <td>{a.serial}</td>
-                          {inventoryTab === 'assigned' && (
-                            <td><span className={`status ${a.status}`}>{a.status}</span></td>
-                          )}
-                          {inventoryTab === 'assigned' && (
-                            <td>
-                              <div className="asset-qr-cell">
-                                <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
-                                <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
-                              </div>
-                            </td>
-                          )}
-                          <td>
-                            <div className="asset-row-actions">
-                              {hasAdminPermission('inventory.manage') ? (
-                                <>
-                                  <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                  {inventoryTab === 'free' && (
-                                    <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
-                                  )}
-                                </>
-                              ) : '-'}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-              <div className="inventory-pager">
-                <span>Page {page} of {totalPages} | Showing {paginatedAssets.length} items</span>
-                <div className="inventory-pager-actions">
-                  <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-                  <button type="button" className="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div className="inventory-pager">
+                  <span>Page {page} of {totalPages} | Showing {paginatedAssets.length} items</span>
+                  <div className="inventory-pager-actions">
+                    <button type="button" className="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+                    <button type="button" className="outline" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+                  </div>
                 </div>
               </div>
-            </div>
             </div>
           </section>
         )}
@@ -5268,7 +5268,7 @@ function App() {
                           const targetDomains = currentUserDomain.split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
                           const empDomain = String(employee.domain_name || employee.domain || '').trim().toLowerCase();
                           if (targetDomains.includes(empDomain)) return true;
-                          
+
                           if (!empDomain) {
                             for (const target of targetDomains) {
                               const domainRecord = domainRecords.find(d => String(d.name).toLowerCase() === target);
@@ -5283,10 +5283,10 @@ function App() {
                           return false;
                         })
                         .map((employee, index) => (
-                        <option key={`employee-name-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.name || ''}>
-                          {employee.employee_code || employee.employee_email || ''}
-                        </option>
-                      ))}
+                          <option key={`employee-name-${employee.selection_value || employee.local_user_id || employee.id || index}`} value={employee.name || ''}>
+                            {employee.employee_code || employee.employee_email || ''}
+                          </option>
+                        ))}
                     </datalist>
                   </label>
                   <label className="assignment-field">
@@ -5449,55 +5449,55 @@ function App() {
                         <th>S.No</th>
                         <th>Employee</th>
                         <th>ID</th>
-                      <th>Code</th>
-                      <th>Email</th>
-                      <th>Mobile</th>
-                      <th>Domain</th>
-                      <th>Asset Type</th>
-                      <th>Geolocation</th>
-                      <th>Assigned Assets</th>
-                      <th>Latest Assignment</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedEmployeeDirectory.length === 0 ? (
-                      <tr><td colSpan={12}>No employees matched this search.</td></tr>
-                    ) : paginatedEmployeeDirectory.map((emp, index) => (
-                      <tr key={emp.id}>
-                        <td>{(assignmentPage - 1) * assignmentSize + index + 1}</td>
-                        <td className="employee-cell">
-                          <div>
-                            <strong>{emp.name}</strong>
-                          </div>
-                        </td>
-                        <td>{emp.id}</td>
-                        <td>{emp.employee_code || '-'}</td>
-                        <td>{emp.email || '-'}</td>
-                        <td>{emp.personal_mobile_no || '-'}</td>
-                        <td>{emp.domain_name || '-'}</td>
-                        <td>{[...new Set(emp.assignedAssets.map(a => a.type))].join(', ') || '-'}</td>
-                        <td>
-                          {emp.geolocation ? (
-                            <a className="geolocation-link" href={getGeolocationMapUrl(emp.geolocation)} target="_blank" rel="noreferrer">
-                              {emp.geolocation}
-                            </a>
-                          ) : '-'}
-                        </td>
-                        <td><span className="count-pill">{emp.assignedCount}</span></td>
-                        <td>{emp.latestAllocatedAt ? emp.latestAllocatedAt.toLocaleString() : '-'}</td>
-                        <td>
-                          <div className="assignment-row-actions">
-                            <button type="button" className="small assignment-view-btn" onClick={() => setSelectedEmployeeId(emp.id)}>View</button>
-                            {hasAdminPermission('assignments.manage') && emp.assignedCount > 0 && (
-                              <>
-                                <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Replace</button>
-                                <button type="button" className="small assignment-return-btn" onClick={() => startReturnForEmployee(emp.id)}>Return</button>
-                              </>
-                            )}
-                          </div>
-                        </td>
+                        <th>Code</th>
+                        <th>Email</th>
+                        <th>Mobile</th>
+                        <th>Domain</th>
+                        <th>Asset Type</th>
+                        <th>Geolocation</th>
+                        <th>Assigned Assets</th>
+                        <th>Latest Assignment</th>
+                        <th>Action</th>
                       </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedEmployeeDirectory.length === 0 ? (
+                        <tr><td colSpan={12}>No employees matched this search.</td></tr>
+                      ) : paginatedEmployeeDirectory.map((emp, index) => (
+                        <tr key={emp.id}>
+                          <td>{(assignmentPage - 1) * assignmentSize + index + 1}</td>
+                          <td className="employee-cell">
+                            <div>
+                              <strong>{emp.name}</strong>
+                            </div>
+                          </td>
+                          <td>{emp.id}</td>
+                          <td>{emp.employee_code || '-'}</td>
+                          <td>{emp.email || '-'}</td>
+                          <td>{emp.personal_mobile_no || '-'}</td>
+                          <td>{emp.domain_name || '-'}</td>
+                          <td>{[...new Set(emp.assignedAssets.map(a => a.type))].join(', ') || '-'}</td>
+                          <td>
+                            {emp.geolocation ? (
+                              <a className="geolocation-link" href={getGeolocationMapUrl(emp.geolocation)} target="_blank" rel="noreferrer">
+                                {emp.geolocation}
+                              </a>
+                            ) : '-'}
+                          </td>
+                          <td><span className="count-pill">{emp.assignedCount}</span></td>
+                          <td>{emp.latestAllocatedAt ? emp.latestAllocatedAt.toLocaleString() : '-'}</td>
+                          <td>
+                            <div className="assignment-row-actions">
+                              <button type="button" className="small assignment-view-btn" onClick={() => setSelectedEmployeeId(emp.id)}>View</button>
+                              {hasAdminPermission('assignments.manage') && emp.assignedCount > 0 && (
+                                <>
+                                  <button type="button" className="small assignment-assign-btn" onClick={() => startQuickAssignForEmployee(emp.id)}>Replace</button>
+                                  <button type="button" className="small assignment-return-btn" onClick={() => startReturnForEmployee(emp.id)}>Return</button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -5506,8 +5506,8 @@ function App() {
                   <div className="inventory-pager">
                     <span>
                       Page {assignmentPage} of {assignmentTotalPages} | Showing {paginatedEmployeeDirectory.length} of {employeeDirectory.length} items
-                      <select 
-                        value={assignmentPageSize} 
+                      <select
+                        value={assignmentPageSize}
                         onChange={(e) => setAssignmentPageSize(e.target.value)}
                         style={{ marginLeft: '10px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border)' }}
                       >
@@ -5581,24 +5581,24 @@ function App() {
                     </label>
                     <label className="assignment-field">
                       <span>Email</span>
-                    <input
-                      type="email"
-                      value={employeeCreateForm.email}
-                      onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, email: e.target.value }))}
-                      placeholder="Type email"
-                      required
-                    />
-                  </label>
-                  <label className="assignment-field">
-                    <span>Mobile</span>
-                    <input
-                      type="text"
-                      value={employeeCreateForm.personal_mobile_no}
-                      onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
-                      placeholder="Type mobile"
-                      required
-                    />
-                  </label>
+                      <input
+                        type="email"
+                        value={employeeCreateForm.email}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, email: e.target.value }))}
+                        placeholder="Type email"
+                        required
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Mobile</span>
+                      <input
+                        type="text"
+                        value={employeeCreateForm.personal_mobile_no}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                        placeholder="Type mobile"
+                        required
+                      />
+                    </label>
                     <label className="assignment-field">
                       <span>Designation</span>
                       <input
@@ -5774,165 +5774,165 @@ function App() {
               </div>
             ) : (
               <>
-              {accountManagementTab === 'roles' && (
-                <section className="acct-table-section">
-                <div className="acct-table-header">
-                  <div className="acct-table-title-group">
-                    <h4>Role Permission Control</h4>
-                    <span className="acct-count-badge">{filteredManagedAdmins.length} accounts</span>
-                  </div>
-                  <div className="acct-search-wrap">
-                    <svg className="acct-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
-                    <input
-                      className="acct-search-input"
-                      placeholder="Search by name or email"
-                      value={accountSearch}
-                      onChange={(e) => setAccountSearch(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="acct-table-wrap">
-                  <table className="acct-table">
-                    <thead>
-                      <tr>
-                        <th>Role Account</th>
-                        <th>Permission Access</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredManagedAdmins.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="acct-empty-row">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
-                            <span>No managed role accounts found.</span>
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredManagedAdmins.map((adminUser) => {
-                          const permissionCount = (adminUser.permissions || []).length;
-                          const hasFullAccess = permissionCount === ADMIN_PERMISSION_OPTIONS.length;
-                          const pct = Math.round((permissionCount / ADMIN_PERMISSION_OPTIONS.length) * 100);
-                          return (
-                            <tr key={adminUser.id} className="acct-admin-row">
-                              <td>
-                                <div className="acct-admin-cell">
-                                  <span className="acct-admin-avatar">{(adminUser.name || 'A').slice(0, 1).toUpperCase()}</span>
-                                  <div className="acct-admin-info">
-                                    <strong>{adminUser.name}</strong>
-                                    <small>{adminUser.email} | {adminUser.role} | {adminUser.domain_name || '-'} | prefix: {adminUser.employee_code_prefix || '-'}</small>
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="acct-perm-cell">
-                                  <div className="acct-perm-bar-wrap">
-                                    <div className="acct-perm-bar"><div className="acct-perm-fill" style={{ width: `${pct}%`, background: hasFullAccess ? '#10b981' : '#f59e0b' }} /></div>
-                                    <span className="acct-perm-fraction">{permissionCount}/{ADMIN_PERMISSION_OPTIONS.length}</span>
-                                  </div>
-                                  <span className={`acct-access-chip ${hasFullAccess ? 'chip-full' : 'chip-limited'}`}>
-                                    {hasFullAccess ? 'Full Access' : 'Limited'}
-                                  </span>
-                                </div>
-                              </td>
-                              <td>
-                                <button type="button" className="acct-manage-btn" onClick={() => openAdminPermissionPopup(adminUser)}>
-                                  Manage
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-              )}
-
-              {accountManagementTab === 'domains' && (
-                <section className="domain-location-panel domain-location-panel-compact">
-                  <div className="domain-location-head">
-                    <div>
-                      <h4>Domain / Location Management</h4>
+                {accountManagementTab === 'roles' && (
+                  <section className="acct-table-section">
+                    <div className="acct-table-header">
+                      <div className="acct-table-title-group">
+                        <h4>Role Permission Control</h4>
+                        <span className="acct-count-badge">{filteredManagedAdmins.length} accounts</span>
+                      </div>
+                      <div className="acct-search-wrap">
+                        <svg className="acct-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                        <input
+                          className="acct-search-input"
+                          placeholder="Search by name or email"
+                          value={accountSearch}
+                          onChange={(e) => setAccountSearch(e.target.value)}
+                        />
+                      </div>
                     </div>
-                    <button type="button" className="small" onClick={openCreateDomainPopup}>Create Domain</button>
-                  </div>
 
-                  <div className="domain-dashboard-grid">
-                    <article><span>Total Domains</span><strong>{domainDashboardStats.totalDomains}</strong></article>
-                    <article><span>Active Locations</span><strong>{domainDashboardStats.activeLocations}</strong></article>
-                    <article><span>IT Assets</span><strong>{domainDashboardStats.totalAssets}</strong></article>
-                    <article><span>Domain Admins</span><strong>{domainDashboardStats.domainAdmins}</strong></article>
-                    <article><span>Employees</span><strong>{domainDashboardStats.employees}</strong></article>
-                    <article><span>Open IT Tickets</span><strong>{domainDashboardStats.openTickets}</strong></article>
-                    <article><span>Unassigned Assets</span><strong>{domainDashboardStats.unassignedAssets}</strong></article>
-                  </div>
-
-                  <div className="domain-master-table-wrap">
-                    <table className="domain-master-table">
-                      <thead>
-                        <tr>
-                          <th>Code</th>
-                          <th>Domain</th>
-                          <th>Location</th>
-                          <th>City</th>
-                          <th>Prefix</th>
-                          <th>Status</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {domainManagementRows.length === 0 ? (
-                          <tr><td colSpan={7} className="acct-empty-row">No domains found.</td></tr>
-                        ) : (
-                          domainManagementRows.map((domain) => (
-                            <tr key={domain.name}>
-                              <td>{domain.code || '-'}</td>
-                              <td><strong>{domain.name || '-'}</strong></td>
-                              <td>{domain.address || '-'}</td>
-                              <td>{domain.city || '-'}</td>
-                              <td>{domain.employee_code_prefix || '-'}</td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className={`domain-status-pill status-${domain.status || 'active'} domain-status-toggle`}
-                                  onClick={() => toggleDomainStatus(domain)}
-                                  title={`Mark ${String(domain.status || 'active').toLowerCase() === 'active' ? 'inactive' : 'active'}`}
-                                >
-                                  {domain.status || 'active'}
-                                </button>
-                              </td>
-                              <td>
-                                <div className="domain-action-group">
-                                  <button
-                                    type="button"
-                                    className="domain-edit-btn"
-                                    onClick={() => startEditDomain(domain)}
-                                    title={`Edit ${domain.name}`}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="domain-delete-btn"
-                                    onClick={() => deleteDomain(domain.name)}
-                                    title={`Delete ${domain.name}`}
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
+                    <div className="acct-table-wrap">
+                      <table className="acct-table">
+                        <thead>
+                          <tr>
+                            <th>Role Account</th>
+                            <th>Permission Access</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredManagedAdmins.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="acct-empty-row">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5" /><path d="M20 21a8 8 0 1 0-16 0" /></svg>
+                                <span>No managed role accounts found.</span>
                               </td>
                             </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
+                          ) : (
+                            filteredManagedAdmins.map((adminUser) => {
+                              const permissionCount = (adminUser.permissions || []).length;
+                              const hasFullAccess = permissionCount === ADMIN_PERMISSION_OPTIONS.length;
+                              const pct = Math.round((permissionCount / ADMIN_PERMISSION_OPTIONS.length) * 100);
+                              return (
+                                <tr key={adminUser.id} className="acct-admin-row">
+                                  <td>
+                                    <div className="acct-admin-cell">
+                                      <span className="acct-admin-avatar">{(adminUser.name || 'A').slice(0, 1).toUpperCase()}</span>
+                                      <div className="acct-admin-info">
+                                        <strong>{adminUser.name}</strong>
+                                        <small>{adminUser.email} | {adminUser.role} | {adminUser.domain_name || '-'} | prefix: {adminUser.employee_code_prefix || '-'}</small>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <div className="acct-perm-cell">
+                                      <div className="acct-perm-bar-wrap">
+                                        <div className="acct-perm-bar"><div className="acct-perm-fill" style={{ width: `${pct}%`, background: hasFullAccess ? '#10b981' : '#f59e0b' }} /></div>
+                                        <span className="acct-perm-fraction">{permissionCount}/{ADMIN_PERMISSION_OPTIONS.length}</span>
+                                      </div>
+                                      <span className={`acct-access-chip ${hasFullAccess ? 'chip-full' : 'chip-limited'}`}>
+                                        {hasFullAccess ? 'Full Access' : 'Limited'}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td>
+                                    <button type="button" className="acct-manage-btn" onClick={() => openAdminPermissionPopup(adminUser)}>
+                                      Manage
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg>
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
+
+                {accountManagementTab === 'domains' && (
+                  <section className="domain-location-panel domain-location-panel-compact">
+                    <div className="domain-location-head">
+                      <div>
+                        <h4>Domain / Location Management</h4>
+                      </div>
+                      <button type="button" className="small" onClick={openCreateDomainPopup}>Create Domain</button>
+                    </div>
+
+                    <div className="domain-dashboard-grid">
+                      <article><span>Total Domains</span><strong>{domainDashboardStats.totalDomains}</strong></article>
+                      <article><span>Active Locations</span><strong>{domainDashboardStats.activeLocations}</strong></article>
+                      <article><span>IT Assets</span><strong>{domainDashboardStats.totalAssets}</strong></article>
+                      <article><span>Domain Admins</span><strong>{domainDashboardStats.domainAdmins}</strong></article>
+                      <article><span>Employees</span><strong>{domainDashboardStats.employees}</strong></article>
+                      <article><span>Open IT Tickets</span><strong>{domainDashboardStats.openTickets}</strong></article>
+                      <article><span>Unassigned Assets</span><strong>{domainDashboardStats.unassignedAssets}</strong></article>
+                    </div>
+
+                    <div className="domain-master-table-wrap">
+                      <table className="domain-master-table">
+                        <thead>
+                          <tr>
+                            <th>Code</th>
+                            <th>Domain</th>
+                            <th>Location</th>
+                            <th>City</th>
+                            <th>Prefix</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {domainManagementRows.length === 0 ? (
+                            <tr><td colSpan={7} className="acct-empty-row">No domains found.</td></tr>
+                          ) : (
+                            domainManagementRows.map((domain) => (
+                              <tr key={domain.name}>
+                                <td>{domain.code || '-'}</td>
+                                <td><strong>{domain.name || '-'}</strong></td>
+                                <td>{domain.address || '-'}</td>
+                                <td>{domain.city || '-'}</td>
+                                <td>{domain.employee_code_prefix || '-'}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className={`domain-status-pill status-${domain.status || 'active'} domain-status-toggle`}
+                                    onClick={() => toggleDomainStatus(domain)}
+                                    title={`Mark ${String(domain.status || 'active').toLowerCase() === 'active' ? 'inactive' : 'active'}`}
+                                  >
+                                    {domain.status || 'active'}
+                                  </button>
+                                </td>
+                                <td>
+                                  <div className="domain-action-group">
+                                    <button
+                                      type="button"
+                                      className="domain-edit-btn"
+                                      onClick={() => startEditDomain(domain)}
+                                      title={`Edit ${domain.name}`}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="domain-delete-btn"
+                                      onClick={() => deleteDomain(domain.name)}
+                                      title={`Delete ${domain.name}`}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
               </>
             )}
           </section>
@@ -6384,8 +6384,8 @@ function App() {
                     <h3 id="employee-view-title">{selectedEmployee.name}</h3>
                     <div className="employee-modal-actions">
                       <button type="button" className="small outline" onClick={printEmployeeDetails}>Print</button>
-                      {hasAdminPermission('employee.manage') && selectedEmployee.local_user_id && (
-                        <button type="button" className="small outline" onClick={() => setIsEditingEmployee((v) => !v)}>{isEditingEmployee ? 'Cancel Edit' : 'Edit'}</button>
+                      {hasAdminPermission('employee.manage') && selectedEmployee.local_user_id && !isEditingEmployee && (
+                        <button type="button" className="small outline" onClick={() => setIsEditingEmployee(true)}>Edit</button>
                       )}
                       <button type="button" className="small outline" onClick={() => setSelectedEmployeeId(null)}>Close</button>
                     </div>
@@ -6405,17 +6405,6 @@ function App() {
                 <article><span>Latest Update</span><strong>{selectedEmployee.latestAllocatedAt ? selectedEmployee.latestAllocatedAt.toLocaleDateString() : '-'}</strong></article>
                 <article><span>Total Replacements</span><strong>{selectedEmployeeReplacementCount}</strong></article>
               </div>
-
-              <div className="employee-modal-ops-grid">
-                <section className="employee-info-card">
-                  <h4>Lifecycle Summary</h4>
-                  <div className="employee-modal-meta">
-                    <article><span>Total Allocations</span><strong>{selectedEmployeeHistory.length}</strong></article>
-                    <article><span>Currently Active</span><strong>{selectedEmployee.assignedCount}</strong></article>
-                    <article><span>Returned Assets</span><strong>{selectedEmployeeReturnHistory.length}</strong></article>
-                    <article><span>Replacement Events</span><strong>{selectedEmployeeReplacementCount}</strong></article>
-                  </div>
-                </section>
 
                 <section className="employee-info-card">
                   <h4>Employee Details</h4>
@@ -6455,15 +6444,6 @@ function App() {
                         />
                       </label>
 
-                      <label>
-                        <span>Domain</span>
-                        <input
-                          type="text"
-                          value={employeeEditForm.personal_mobile_no}
-                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
-                          placeholder="9999999999"
-                        />
-                      </label>
 
                       <label>
                         <span>Domain</span>
@@ -6530,7 +6510,6 @@ function App() {
                     </div>
                   )}
                 </section>
-              </div>
 
               <section className="employee-modal-assets">
                 <h4>Assigned Assets</h4>
