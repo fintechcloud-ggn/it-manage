@@ -5013,13 +5013,15 @@ function App() {
                   >
                     Assigned Assets
                   </button>
-                  <button
-                    type="button"
-                    className={inventoryTab === 'free' ? 'active' : ''}
-                    onClick={() => setInventoryTab('free')}
-                  >
-                    Free Assets
-                  </button>
+                  {String(user?.role || '').toLowerCase() !== 'hr' && (
+                    <button
+                      type="button"
+                      className={inventoryTab === 'free' ? 'active' : ''}
+                      onClick={() => setInventoryTab('free')}
+                    >
+                      Free Assets
+                    </button>
+                  )}
                 </div>
               </div>
 
