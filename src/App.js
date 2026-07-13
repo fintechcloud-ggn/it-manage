@@ -3640,10 +3640,7 @@ function App() {
     if (!selectedEmployee?.latestAllocatedAt) return '-';
     return selectedEmployee.latestAllocatedAt.toLocaleString();
   }, [selectedEmployee]);
-  const selectedEmployeeReturnHistory = useMemo(
-    () => selectedEmployeeHistory.filter((item) => item.returned_at),
-    [selectedEmployeeHistory]
-  );
+
   const selectedEmployeeReplacementCount = useMemo(
     () => selectedEmployeeHistory.filter((item) => (item.notes || '').includes('Replacement for allocation')).length,
     [selectedEmployeeHistory]
