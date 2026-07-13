@@ -210,8 +210,6 @@ router.delete('/:name', requireAuth, async (req, res) => {
 
     const name = normalizeDomain(req.params.name);
     if (!name) return res.status(400).json({ error: 'Domain name is required' });
-    if (name === 'global') return res.status(400).json({ error: 'Global domain cannot be deleted' });
-
     const rows = await query('SELECT id, name FROM domains WHERE name = ? LIMIT 1', [name]);
     if (!rows.length) return res.status(404).json({ error: 'Domain not found' });
 

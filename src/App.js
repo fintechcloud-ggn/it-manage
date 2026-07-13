@@ -402,6 +402,8 @@ const ADMIN_PERMISSION_OPTIONS = [
   { key: 'inventory.manage', label: 'Inventory: Add/Edit/Delete Assets' },
   { key: 'assignments.view', label: 'Assignments: View Employee Assets' },
   { key: 'assignments.manage', label: 'Assignments: Assign/Return/Replace Assets' },
+  { key: 'employee.view', label: 'Employee: View Employees' },
+  { key: 'employee.manage', label: 'Employee: Add/Edit/Delete Employees' },
   { key: 'insights.view', label: 'Insights: View' },
   { key: 'invoices.view', label: 'Invoices: View Bills' },
   { key: 'invoices.manage', label: 'Invoices: Add Bills' },
@@ -1221,7 +1223,7 @@ function App() {
       overview: 'overview.view',
       inventory: 'inventory.view',
       assignments: 'assignments.view',
-      employees: 'assignments.view',
+      employees: 'employee.view',
       insights: 'insights.view',
       invoices: 'invoices.view',
       activity: 'activity.view',
@@ -2692,6 +2694,9 @@ function App() {
   async function deleteRoleAccount(targetUserId) {
     if (!isSuperAdmin) {
       setMessage('Only super admin can delete role accounts.');
+      return false;
+    }
+    if (!window.confirm('Are you sure you want to delete this role account?')) {
       return false;
     }
     const res = await apiFetch(`/api/users/${targetUserId}`, {
@@ -5525,11 +5530,35 @@ function App() {
 
         {section === 'employees' && (
           <div className="assignments-page-stack">
-            {hasAdminPermission('assignments.manage') ? (
+            {hasAdminPermission('employee.manage') ? (
               <>
                 <div className="create-box assignment-quick-assign">
                   <h4>Add Employee</h4>
                   <form className="form assignment-inline-form employee-create-form" onSubmit={createEmployeeRecord}>
+                    <label className="assignment-field">
+                      <span>Domain</span>
+                      <select
+                        value={employeeCreateForm.domain_name}
+                        onChange={(e) => {
+                          const selectedDomain = e.target.value.toLowerCase();
+                          const domainData = domainManagementRows.find(d => String(d.name || '').trim().toLowerCase() === selectedDomain);
+                          const prefix = domainData?.employee_code_prefix ? String(domainData.employee_code_prefix).toUpperCase() : '';
+                          setEmployeeCreateForm((prev) => ({
+                            ...prev,
+                            domain_name: selectedDomain,
+                            employee_code: prefix
+                          }));
+                        }}
+                        required
+                      >
+                        <option value="" disabled>Select domain</option>
+                        {domainManagementRows.map((domain) => {
+                          const domainName = String(domain.name || '').trim().toLowerCase();
+                          if (!domainName) return null;
+                          return <option key={domainName} value={domainName}>{domainName}</option>;
+                        })}
+                      </select>
+                    </label>
                     <label className="assignment-field">
                       <span>Employee Name</span>
                       <input
@@ -5570,21 +5599,6 @@ function App() {
                       required
                     />
                   </label>
-                    <label className="assignment-field">
-                      <span>Domain</span>
-                      <select
-                        value={employeeCreateForm.domain_name}
-                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, domain_name: e.target.value.toLowerCase() }))}
-                        required
-                      >
-                        <option value="" disabled>Select domain</option>
-                        {domainManagementRows.map((domain) => {
-                          const domainName = String(domain.name || '').trim().toLowerCase();
-                          if (!domainName) return null;
-                          return <option key={domainName} value={domainName}>{domainName}</option>;
-                        })}
-                      </select>
-                    </label>
                     <label className="assignment-field">
                       <span>Designation</span>
                       <input
@@ -5650,11 +5664,12 @@ function App() {
         {section === 'accounts' && (
           <section className="panel wide account-management-panel">
             {isSuperAdmin && (
-              <div className="account-tabs account-tabs-top">
+              <div className="account-tabs account-tabs-top" style={{ alignSelf: 'start' }}>
                 <button
                   type="button"
                   className={accountManagementTab === 'roles' ? 'active' : ''}
                   onClick={() => setAccountManagementTab('roles')}
+                  style={{ padding: '10px 14px', height: '39px', display: 'flex', alignItems: 'center' }}
                 >
                   Role Accounts
                 </button>
@@ -5662,6 +5677,7 @@ function App() {
                   type="button"
                   className={accountManagementTab === 'domains' ? 'active' : ''}
                   onClick={() => setAccountManagementTab('domains')}
+                  style={{ padding: '10px 14px', height: '39px', display: 'flex', alignItems: 'center' }}
                 >
                   Domain / Location Management
                 </button>
@@ -5902,9 +5918,8 @@ function App() {
                                   <button
                                     type="button"
                                     className="domain-delete-btn"
-                                    disabled={domain.name === 'global'}
                                     onClick={() => deleteDomain(domain.name)}
-                                    title={domain.name === 'global' ? 'Global domain cannot be deleted' : `Delete ${domain.name}`}
+                                    title={`Delete ${domain.name}`}
                                   >
                                     Delete
                                   </button>
@@ -6369,7 +6384,7 @@ function App() {
                     <h3 id="employee-view-title">{selectedEmployee.name}</h3>
                     <div className="employee-modal-actions">
                       <button type="button" className="small outline" onClick={printEmployeeDetails}>Print</button>
-                      {hasAdminPermission('assignments.manage') && selectedEmployee.local_user_id && (
+                      {hasAdminPermission('employee.manage') && selectedEmployee.local_user_id && (
                         <button type="button" className="small outline" onClick={() => setIsEditingEmployee((v) => !v)}>{isEditingEmployee ? 'Cancel Edit' : 'Edit'}</button>
                       )}
                       <button type="button" className="small outline" onClick={() => setSelectedEmployeeId(null)}>Close</button>
@@ -6404,7 +6419,7 @@ function App() {
 
                 <section className="employee-info-card">
                   <h4>Employee Details</h4>
-                  {isEditingEmployee && hasAdminPermission('assignments.manage') ? (
+                  {isEditingEmployee && hasAdminPermission('employee.manage') ? (
                     <form className="employee-edit-form" onSubmit={updateEmployee}>
                       <label>
                         <span>Name</span>

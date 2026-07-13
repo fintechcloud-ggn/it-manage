@@ -326,7 +326,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage', 'assignments.manage']), async (req, res) => {
+router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage', 'assignments.manage', 'employee.manage']), async (req, res) => {
   try {
     const {
       name,
@@ -432,7 +432,7 @@ router.post('/admin', requireAnyPermission(['accounts.create', 'accounts.manage'
   }
 });
 
-router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage', 'assignments.manage']), async (req, res) => {
+router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage', 'assignments.manage', 'employee.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const { name, email, role, profile_image_url, domain_name, domain_names, employee_code_prefix, employee_code, personal_mobile_no, designation } = req.body;
@@ -492,7 +492,7 @@ router.put('/:id', requireAnyPermission(['accounts.edit', 'accounts.manage', 'as
   }
 });
 
-router.put('/:id/photo', requireAnyPermission(['assignments.manage', 'accounts.edit', 'accounts.manage']), async (req, res) => {
+router.put('/:id/photo', requireAnyPermission(['assignments.manage', 'accounts.edit', 'accounts.manage', 'employee.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const profileImageUrl = String(req.body?.profile_image_url || '').trim();
@@ -564,7 +564,7 @@ router.put('/:id/permissions', requireAnyPermission(['accounts.edit', 'accounts.
   }
 });
 
-router.delete('/:id', requireAnyPermission(['accounts.delete', 'accounts.manage', 'assignments.manage']), async (req, res) => {
+router.delete('/:id', requireAnyPermission(['accounts.delete', 'accounts.manage', 'assignments.manage', 'employee.manage']), async (req, res) => {
   try {
     const id = Number(req.params.id);
     const rows = await query(

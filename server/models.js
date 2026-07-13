@@ -357,9 +357,9 @@ async function seedSample() {
     const adminPassword = bcrypt.hashSync('admin', 8);
     const userPassword = bcrypt.hashSync('password', 8);
     await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Admin', adminEmail, 'admin', 'global', null, adminPassword]);
-    await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Bob Engineer', defaultUserEmail, 'user', 'default', null, userPassword]);
+    await query('INSERT INTO users (name, email, role, domain_name, employee_code_prefix, password) VALUES (?, ?, ?, ?, ?, ?)', ['Bob Engineer', defaultUserEmail, 'user', 'global', null, userPassword]);
   }
-  await query('INSERT IGNORE INTO domains (name) VALUES (?), (?)', ['global', 'default']);
+  await query('INSERT IGNORE INTO domains (name) VALUES (?)', ['global']);
 
   const stores = await query('SELECT id FROM stores LIMIT 1');
   if (stores.length === 0) {
