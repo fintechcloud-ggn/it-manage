@@ -5560,7 +5560,12 @@ function App() {
                       <input
                         type="text"
                         value={employeeCreateForm.name}
-                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (/^[a-zA-Z\s]*$/.test(val)) {
+                            setEmployeeCreateForm((prev) => ({ ...prev, name: val }));
+                          }
+                        }}
                         placeholder="Employee Name"
                         required
                       />
@@ -5599,8 +5604,15 @@ function App() {
                       <input
                         type="text"
                         value={employeeCreateForm.personal_mobile_no}
-                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (/^\d{0,10}$/.test(val)) {
+                            setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: val }));
+                          }
+                        }}
                         placeholder="Mobile"
+                        minLength={10}
+                        maxLength={10}
                         required
                       />
                     </label>
@@ -6419,7 +6431,12 @@ function App() {
                         <span>Name</span>
                         <input
                           value={employeeEditForm.name}
-                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (/^[a-zA-Z\s]*$/.test(val)) {
+                              setEmployeeEditForm((prev) => ({ ...prev, name: val }));
+                            }
+                          }}
                           required
                         />
                       </label>
@@ -6444,8 +6461,15 @@ function App() {
                         <span>Mobile</span>
                         <input
                           value={employeeEditForm.personal_mobile_no}
-                          onChange={(e) => setEmployeeEditForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (/^\d{0,10}$/.test(val)) {
+                              setEmployeeEditForm((prev) => ({ ...prev, personal_mobile_no: val }));
+                            }
+                          }}
                           placeholder="9999999999"
+                          minLength={10}
+                          maxLength={10}
                         />
                       </label>
 
