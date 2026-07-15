@@ -1327,12 +1327,6 @@ function App() {
     setAssetDomainName((prev) => prev || currentUserDomain);
   }, [currentUserDomain]);
 
-  useEffect(() => {
-    if (!currentUserDomain) return;
-    setEmployeeCreateForm((prev) => (
-      prev.domain_name ? prev : { ...prev, domain_name: currentUserDomain }
-    ));
-  }, [currentUserDomain]);
 
   useEffect(() => {
     if (!createAdminPopupOpen) return;
@@ -2788,7 +2782,7 @@ function App() {
         employee_code: '',
         email: '',
         personal_mobile_no: '',
-        domain_name: currentUserDomain || '',
+        domain_name: '',
         designation: ''
       });
       fetchUsers();
