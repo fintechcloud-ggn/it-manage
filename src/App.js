@@ -5186,10 +5186,8 @@ function App() {
                                 <div className="asset-row-actions">
                                   {hasAdminPermission('inventory.manage') ? (
                                     <>
-                                      <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                      {inventoryTab === 'free' && (
-                                        <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
-                                      )}
+                                      <button type="button" className="small" onClick={() => startEditAsset(a)}>Edit</button>
+                                      <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
                                     </>
                                   ) : '-'}
                                 </div>
