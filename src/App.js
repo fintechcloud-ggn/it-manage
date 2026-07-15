@@ -5158,7 +5158,7 @@ function App() {
                           <th>Serial</th>
                           {inventoryTab === 'assigned' && <th>Status</th>}
                           {inventoryTab === 'assigned' && <th>QR</th>}
-                          {String(user?.role || '').toLowerCase() !== 'hr' && <th>Action</th>}
+
                         </tr>
                       </thead>
                       <tbody>
@@ -5181,20 +5181,7 @@ function App() {
                                 </div>
                               </td>
                             )}
-                            {String(user?.role || '').toLowerCase() !== 'hr' && (
-                              <td>
-                                <div className="asset-row-actions">
-                                  {hasAdminPermission('inventory.manage') ? (
-                                    <>
-                                      <button type="button" className="small outline" onClick={() => startEditAsset(a)}>Edit</button>
-                                      {inventoryTab === 'free' && (
-                                        <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
-                                      )}
-                                    </>
-                                  ) : '-'}
-                                </div>
-                              </td>
-                            )}
+
                           </tr>
                         ))}
                       </tbody>
