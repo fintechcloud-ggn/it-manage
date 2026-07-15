@@ -848,6 +848,7 @@ function App() {
   });
   const [employeeCreateForm, setEmployeeCreateForm] = useState({
     name: '',
+    employee_code_prefix: '',
     employee_code: '',
     email: '',
     personal_mobile_no: '',
@@ -2751,7 +2752,7 @@ function App() {
     }
     const payload = {
       name: employeeCreateForm.name.trim(),
-      employee_code: employeeCreateForm.employee_code.trim(),
+      employee_code: `${employeeCreateForm.employee_code_prefix.trim()}${employeeCreateForm.employee_code.trim()}`,
       email: employeeCreateForm.email.trim(),
       personal_mobile_no: employeeCreateForm.personal_mobile_no.trim(),
       domain_name: String(employeeCreateForm.domain_name || '').trim().toLowerCase(),
@@ -2783,6 +2784,7 @@ function App() {
     if (res.ok) {
       setEmployeeCreateForm({
         name: '',
+        employee_code_prefix: '',
         employee_code: '',
         email: '',
         personal_mobile_no: '',
@@ -5545,7 +5547,8 @@ function App() {
                           setEmployeeCreateForm((prev) => ({
                             ...prev,
                             domain_name: selectedDomain,
-                            employee_code: prefix
+                            employee_code_prefix: prefix,
+                            employee_code: ''
                           }));
                         }}
                         required
@@ -5566,6 +5569,15 @@ function App() {
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, name: e.target.value }))}
                         placeholder="Employee Name"
                         required
+                      />
+                    </label>
+                    <label className="assignment-field" style={{ flex: '0 0 100px' }}>
+                      <span>Prefix</span>
+                      <input
+                        type="text"
+                        value={employeeCreateForm.employee_code_prefix}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toUpperCase() }))}
+                        placeholder="Prefix"
                       />
                     </label>
                     <label className="assignment-field">
