@@ -4779,11 +4779,15 @@ body {
   gap: 16px;
 }
 
-.dashboard-shell .assignment-quick-assign,
 .dashboard-shell .assignment-selfie-capture,
 .dashboard-shell .assignment-employee-table {
   position: relative;
   z-index: 0;
+}
+
+.dashboard-shell .assignment-quick-assign {
+  position: relative;
+  z-index: 10;
 }
 
 .dashboard-shell .assignment-search-top {
