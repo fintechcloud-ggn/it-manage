@@ -3946,6 +3946,11 @@ function App() {
       totalAmount: filteredInvoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0),
       count: filteredInvoices.length,
       paid: filteredInvoices.filter((invoice) => invoice.status === 'paid').length,
+      pendingApproval: filteredInvoices.filter((invoice) => {
+        const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
+        return ['pending_domain', 'pending_head', 'pending_accounts', 'payment_pending'].includes(approvalStatus);
+      }).length,
+      rejected: filteredInvoices.filter((invoice) => invoice.approvalStatus === 'rejected').length,
       withBills: filteredInvoices.filter((invoice) => invoice.invoiceFileData || invoice.invoiceFileName).length
     };
   }, [filteredInvoices]);
@@ -5728,8 +5733,10 @@ function App() {
 
         {section === 'accounts' && (
           <section className="panel wide account-management-panel">
-            {isSuperAdmin && (
-              <div className="account-tabs account-tabs-top" style={{ alignSelf: 'start' }}>
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ margin: '0 0 16px 0', fontSize: '24px', color: '#1e293b' }}>Account Management</h3>
+              {isSuperAdmin && (
+                <div className="account-tabs account-tabs-top" style={{ alignSelf: 'start', margin: 0 }}>
                 <button
                   type="button"
                   className={accountManagementTab === 'roles' ? 'active' : ''}
@@ -5748,8 +5755,9 @@ function App() {
                 </button>
               </div>
             )}
+            </div>
 
-            {/* Ã¢â€â‚¬Ã¢â€â‚¬ Hero Banner Ã¢â€â‚¬Ã¢â€â‚¬ */}
+            {/* ─── Hero Banner ─── */}
             <div className="acct-hero-banner">
               <div className="acct-hero-glow acct-hero-glow-1" />
               <div className="acct-hero-glow acct-hero-glow-2" />
@@ -6921,7 +6929,7 @@ function App() {
                 <div className="panel-head"><h3>Actionable Signals</h3><span>What to do next</span></div>
                 <ul className="list plain">
                   <li><span>Top utilized category</span><strong>{topAssetType[0]} ({topAssetType[1]})</strong></li>
-                  <li><span>Most loaded user</span><strong>{busiestUser.name} ({busiestUser.assigned})</strong></li>
+
                   <li><span>Employees with devices</span><strong>{assignedUsersCount} / {employees.length}</strong></li>
                   <li><span>Available inventory</span><strong>{stats.available} ready</strong></li>
                 </ul>
@@ -6957,13 +6965,9 @@ function App() {
         {section === 'invoices' && (
           <section className="panel wide invoice-page">
             <section className="expense-hero">
-              <div className="expense-nav-pills" aria-label="Invoice tools">
-                <button type="button" className="active" onClick={() => document.querySelector('.expense-filter-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>View All Bills</button>
-                <button type="button" onClick={() => document.querySelector('.invoice-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Add Bill</button>
-              </div>
               <div>
-                <p className="expense-eyebrow">Tracker Bill-Invoice Payment Record All</p>
                 <h3>My Bills</h3>
+                <p className="expense-eyebrow">Tracker Bill-Invoice Payment Record All</p>
               </div>
             </section>
 
@@ -7111,23 +7115,8 @@ function App() {
               <article><span>Total</span><strong>{formatCurrency(filteredInvoiceStats.totalAmount)}</strong></article>
               <article><span>Count</span><strong>{filteredInvoiceStats.count}</strong></article>
               <article><span>Paid</span><strong>{filteredInvoiceStats.paid}</strong></article>
-              <article><span>With Bills</span><strong>{filteredInvoiceStats.withBills}</strong></article>
-            </section>
-
-            <section className="invoice-workflow-card">
-              <div className="panel-head">
-                <h3>Bill Approval Workflow</h3>
-                <span>{invoiceStats.pendingApproval} pending approval | {invoiceStats.rejected} rejected</span>
-              </div>
-              <div className="invoice-workflow-steps">
-                {INVOICE_APPROVAL_STAGES.map((stage, index) => (
-                  <article key={stage.key}>
-                    <small>{stage.helper}</small>
-                    <strong>{stage.label}</strong>
-                    {index < INVOICE_APPROVAL_STAGES.length - 1 && <span className="workflow-arrow">-&gt;</span>}
-                  </article>
-                ))}
-              </div>
+              <article><span>Pending</span><strong>{filteredInvoiceStats.pendingApproval}</strong></article>
+              <article><span>Rejected</span><strong>{filteredInvoiceStats.rejected}</strong></article>
             </section>
 
             <section className="invoice-layout">
