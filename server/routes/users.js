@@ -340,7 +340,10 @@ router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage', 'as
       employee_code_prefix,
       employee_code,
       personal_mobile_no,
-      designation
+      designation,
+      date_of_joining,
+      gender,
+      employment_status
     } = req.body;
     const canManageAccounts = hasPermission(req.user, 'accounts.create') || hasPermission(req.user, 'accounts.manage');
     const requestedRole = canManageAccounts ? (role || 'user') : 'user';
@@ -360,8 +363,11 @@ router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage', 'as
     const hashed = bcrypt.hashSync(password || 'password', 8);
     const permissionsJson = requestedRole === 'user' ? null : serializePermissions(permissions);
     const storedDomain = serializeDomainList(requestedDomains);
+    const normalizedDoj = String(date_of_joining || '').trim() || null;
+    const normalizedGender = String(gender || '').trim() || null;
+    const normalizedStatus = String(employment_status || '').trim() || 'Active';
     const result = await query(
-      'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password, employee_code, personal_mobile_no, designation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO users (name, email, role, domain_name, employee_code_prefix, profile_image_url, permissions_json, password, employee_code, personal_mobile_no, designation, date_of_joining, gender, employment_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         name,
         email,
@@ -373,11 +379,14 @@ router.post('/', requireAnyPermission(['accounts.create', 'accounts.manage', 'as
         hashed,
         normalizedEmployeeCode,
         normalizedPersonalMobile,
-        normalizedDesignation
+        normalizedDesignation,
+        normalizedDoj,
+        normalizedGender,
+        normalizedStatus
       ]
     );
     const createdRows = await query(
-      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json, personal_mobile_no, designation FROM users WHERE id = ? LIMIT 1',
+      'SELECT id, name, email, role, employee_code, domain_name, employee_code_prefix, profile_image_url, permissions_json, personal_mobile_no, designation, date_of_joining, gender, employment_status FROM users WHERE id = ? LIMIT 1',
       [result.insertId]
     );
     await writeAuditLog({

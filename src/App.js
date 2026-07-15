@@ -853,7 +853,10 @@ function App() {
     email: '',
     personal_mobile_no: '',
     domain_name: '',
-    designation: ''
+    designation: '',
+    doj: '',
+    gender: '',
+    status: 'Active'
   });
   const [assignValidated, setAssignValidated] = useState(false);
   const [selfieEmployeeId, setSelfieEmployeeId] = useState('');
@@ -2764,6 +2767,9 @@ function App() {
       personal_mobile_no: employeeCreateForm.personal_mobile_no.trim(),
       domain_name: String(employeeCreateForm.domain_name || '').trim().toLowerCase(),
       designation: employeeCreateForm.designation.trim(),
+      date_of_joining: employeeCreateForm.doj,
+      gender: employeeCreateForm.gender,
+      employment_status: employeeCreateForm.status,
       role: 'user',
       password: 'password'
     };
@@ -5641,6 +5647,37 @@ function App() {
                         required
                       />
                     </label>
+                    <label className="assignment-field">
+                      <span>Date of Joining</span>
+                      <input
+                        type="date"
+                        value={employeeCreateForm.doj}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, doj: e.target.value }))}
+                      />
+                    </label>
+                    <label className="assignment-field">
+                      <span>Gender</span>
+                      <select
+                        value={employeeCreateForm.gender}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, gender: e.target.value }))}
+                      >
+                        <option value="">Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+                    <label className="assignment-field">
+                      <span>Status</span>
+                      <select
+                        value={employeeCreateForm.status}
+                        onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, status: e.target.value }))}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="On Leave">On Leave</option>
+                      </select>
+                    </label>
                     <div className="assignment-submit-row">
                       <button type="submit" className="assignment-submit-btn">
                         Add Employee
@@ -6464,13 +6501,10 @@ function App() {
                     <h3 id="employee-view-title">{selectedEmployee.name}</h3>
                     <div className="employee-modal-actions">
                       <button type="button" className="small outline" onClick={printEmployeeDetails}>Print</button>
-                      {hasAdminPermission('employee.manage') && selectedEmployee.local_user_id && !isEditingEmployee && (
-                        <button type="button" className="small outline" onClick={() => setIsEditingEmployee(true)}>Edit</button>
-                      )}
                       <button type="button" className="small outline" onClick={() => setSelectedEmployeeId(null)}>Close</button>
                     </div>
                   </div>
-                  <p>{selectedEmployee.email || '-'} | {selectedEmployee.role || 'user'} | Employee ID #{selectedEmployee.id}</p>
+                  <p>{selectedEmployee.email || '-'} | Employee ID #{selectedEmployee.id}</p>
                 </div>
               </header>
 
@@ -6478,13 +6512,6 @@ function App() {
                 <span>Last updated on {selectedEmployeeLastUpdated}</span>
               </div>
 
-              <div className="employee-modal-stats">
-                <article><span>Details</span><strong>{selectedEmployee.role || '-'}</strong></article>
-                <article><span>Items</span><strong>{selectedEmployee.assignedCount}</strong></article>
-                <article><span>Asset Types</span><strong>{selectedEmployeeAssetBreakdown.length}</strong></article>
-                <article><span>Latest Update</span><strong>{selectedEmployee.latestAllocatedAt ? selectedEmployee.latestAllocatedAt.toLocaleDateString() : '-'}</strong></article>
-                <article><span>Total Replacements</span><strong>{selectedEmployeeReplacementCount}</strong></article>
-              </div>
 
                 <section className="employee-info-card">
                   <h4>Employee Details</h4>
