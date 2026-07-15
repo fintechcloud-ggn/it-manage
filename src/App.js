@@ -902,8 +902,10 @@ function App() {
     employee_code_prefix: '',
     permissions: ADMIN_PERMISSION_OPTIONS.map((item) => item.key)
   });
-  const [adminCreateDomainDropdownOpen, setAdminCreateDomainDropdownOpen] = useState(false);
   const adminCreateDomainPickerRef = useRef(null);
+  const [adminCreateDomainDropdownOpen, setAdminCreateDomainDropdownOpen] = useState(false);
+  const adminEditDomainPickerRef = useRef(null);
+  const [adminEditDomainDropdownOpen, setAdminEditDomainDropdownOpen] = useState(false);
   const [adminPermissionDrafts, setAdminPermissionDrafts] = useState({});
   const [adminDetailDrafts, setAdminDetailDrafts] = useState({});
   const [roleAccountPasswords, setRoleAccountPasswords] = useState(() => readRoleAccountPasswords());
@@ -1354,6 +1356,17 @@ function App() {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [adminCreateDomainDropdownOpen]);
+
+  useEffect(() => {
+    if (!adminEditDomainDropdownOpen) return;
+    function handleClickOutside(e) {
+      if (adminEditDomainPickerRef.current && !adminEditDomainPickerRef.current.contains(e.target)) {
+        setAdminEditDomainDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [adminEditDomainDropdownOpen]);
 
   useEffect(() => {
     if (!token || section !== 'activity' || auditLogsLoaded) return;
@@ -2461,7 +2474,7 @@ function App() {
       role: (adminCreateForm.role || 'admin').trim(),
       domain_name: selectedDomains.join(', '),
       domain_names: selectedDomains,
-      employee_code_prefix: adminCreateForm.employee_code_prefix.trim().toLowerCase(),
+      employee_code_prefix: adminCreateForm.employee_code_prefix.trim().toUpperCase(),
       permissions: normalizedPermissions
     };
     if (!payload.name || !payload.email || !selectedDomains.length) {
@@ -2564,7 +2577,7 @@ function App() {
       address: String(domain?.address || '').trim(),
       pincode: String(domain?.pincode || '').trim(),
       status: nextStatus,
-      employee_code_prefix: String(domain?.employee_code_prefix || '').trim().toLowerCase()
+      employee_code_prefix: String(domain?.employee_code_prefix || '').trim().toUpperCase()
     };
     const res = await apiFetch(`/api/domains/${encodeURIComponent(payload.name)}`, {
       method: 'PUT',
@@ -2602,7 +2615,7 @@ function App() {
       status: isEditing
         ? String(editingDomain?.status || domainCreateForm.status || 'active').trim().toLowerCase()
         : String(domainCreateForm.status || 'active').trim().toLowerCase(),
-      employee_code_prefix: String(domainCreateForm.employee_code_prefix || '').trim().toLowerCase()
+      employee_code_prefix: String(domainCreateForm.employee_code_prefix || '').trim().toUpperCase()
     };
     if (!payload.code || !payload.name || !payload.city) {
       setMessage('Domain code, domain name, and city are required.');
@@ -2639,7 +2652,7 @@ function App() {
       email: String(detailDraft.email || '').trim(),
       role: String(detailDraft.role || 'admin').trim(),
       domain_name: String(detailDraft.domain_name || '').trim().toLowerCase(),
-      employee_code_prefix: String(detailDraft.employee_code_prefix || '').trim().toLowerCase()
+      employee_code_prefix: String(detailDraft.employee_code_prefix || '').trim().toUpperCase()
     };
 
     if (!detailPayload.name || !detailPayload.email || !detailPayload.role || !detailPayload.domain_name) {
@@ -6077,9 +6090,9 @@ function App() {
                     <span>Employee Code Prefix</span>
                     <input
                       type="text"
-                      placeholder="e.g. fch"
+                      placeholder="e.g. DEL"
                       value={adminCreateForm.employee_code_prefix}
-                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))}
+                      onChange={(e) => setAdminCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toUpperCase() }))}
                     />
                   </label>
                 </div>
@@ -6168,7 +6181,7 @@ function App() {
                 </div>
                 <label className="account-field">
                   <span>Employee Code Prefix</span>
-                  <input placeholder="e.g. del" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toLowerCase() }))} />
+                  <input placeholder="e.g. DEL" value={domainCreateForm.employee_code_prefix} onChange={(e) => setDomainCreateForm((prev) => ({ ...prev, employee_code_prefix: e.target.value.toUpperCase() }))} />
                 </label>
                 <div className="account-form-row">
                   <label className="account-field">
@@ -6267,17 +6280,65 @@ function App() {
                 </label>
                 <label className="account-field">
                   <span>Domain</span>
-                  <input
-                    placeholder="Domain"
-                    value={adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || ''}
-                    onChange={(e) => setAdminDetailDrafts((prev) => ({
-                      ...prev,
-                      [selectedAdminPermissionUser.id]: {
-                        ...(prev[selectedAdminPermissionUser.id] || {}),
-                        domain_name: e.target.value.toLowerCase()
-                      }
-                    }))}
-                  />
+                  <div className="multi-domain-picker" ref={adminEditDomainPickerRef}>
+                    <button
+                      type="button"
+                      className="multi-domain-picker-trigger"
+                      onClick={() => setAdminEditDomainDropdownOpen((prev) => !prev)}
+                    >
+                      <span>
+                        {(adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || '').split(',').map(s => s.trim()).filter(Boolean).length
+                          ? `${(adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || '').split(',').map(s => s.trim()).filter(Boolean).length} selected`
+                          : 'Select domains'}
+                      </span>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    {adminEditDomainDropdownOpen && (
+                      <div className="multi-domain-picker-panel">
+                        {domainManagementRows.filter((domain) => {
+                          const domainName = String(domain.name || '').trim().toLowerCase();
+                          if (!domainName) return false;
+                          // Show if unclaimed OR claimed by THIS user
+                          const isClaimedByOther = claimedRoleDomains.has(domainName) && !((selectedAdminPermissionUser.domain_name || '').split(',').map(s => s.trim()).includes(domainName));
+                          return !isClaimedByOther;
+                        }).map((domain) => {
+                          const domainName = String(domain.name || '').trim().toLowerCase();
+                          if (!domainName) return null;
+                          const currentDomains = (adminDetailDrafts[selectedAdminPermissionUser.id]?.domain_name || '').split(',').map(s => s.trim()).filter(Boolean);
+                          const isChecked = currentDomains.includes(domainName);
+                          return (
+                            <label key={domainName} className="multi-domain-option">
+                              <span>{domainName}</span>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setAdminDetailDrafts((prev) => {
+                                    let newDomains = [...currentDomains];
+                                    if (checked) {
+                                      if (!newDomains.includes(domainName)) newDomains.push(domainName);
+                                    } else {
+                                      newDomains = newDomains.filter((d) => d !== domainName);
+                                    }
+                                    return {
+                                      ...prev,
+                                      [selectedAdminPermissionUser.id]: {
+                                        ...(prev[selectedAdminPermissionUser.id] || {}),
+                                        domain_name: newDomains.join(', ')
+                                      }
+                                    };
+                                  });
+                                }}
+                              />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </label>
               </div>
               <div className="account-form-row">
@@ -6290,7 +6351,7 @@ function App() {
                       ...prev,
                       [selectedAdminPermissionUser.id]: {
                         ...(prev[selectedAdminPermissionUser.id] || {}),
-                        employee_code_prefix: e.target.value.toLowerCase()
+                        employee_code_prefix: e.target.value.toUpperCase()
                       }
                     }))}
                   />
