@@ -58,6 +58,16 @@ p {
   margin: 0;
 }
 
+button {
+  cursor: pointer;
+  transition: transform 0.1s ease, background-color 0.2s ease, opacity 0.2s ease;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+
 .auth-screen {
   height: 100vh;
   overflow-y: auto;
