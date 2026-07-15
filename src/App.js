@@ -5158,7 +5158,7 @@ function App() {
                           <th>Serial</th>
                           {inventoryTab === 'assigned' && <th>Status</th>}
                           {inventoryTab === 'assigned' && <th>QR</th>}
-                          {String(user?.role || '').toLowerCase() !== 'hr' && <th>Action</th>}
+                          {String(user?.role || '').trim().toLowerCase() !== 'hr' && <th>Action</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -5181,7 +5181,7 @@ function App() {
                                 </div>
                               </td>
                             )}
-                            {String(user?.role || '').toLowerCase() !== 'hr' && (
+                            {String(user?.role || '').trim().toLowerCase() !== 'hr' && (
                               <td>
                                 <div className="asset-row-actions">
                                   {hasAdminPermission('inventory.manage') ? (
