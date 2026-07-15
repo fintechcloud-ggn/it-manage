@@ -1968,10 +1968,10 @@ button:active:not(:disabled) {
 }
 
 .searchable-select__list {
-  max-height: 260px;
+  max-height: 180px;
   overflow-y: auto;
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .searchable-select__option,
@@ -1982,7 +1982,7 @@ button:active:not(:disabled) {
   width: 100%;
   border: 0;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 6px 12px;
   background: #ffffff !important;
   color: #213547 !important;
   text-align: left;

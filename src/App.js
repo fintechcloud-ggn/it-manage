@@ -5356,18 +5356,20 @@ function App() {
                       ))}
                     </select>
                   </label>
-                  <label className="assignment-field">
-                    <span>Available Asset</span>
-                    <SearchableSelect
-                      value={quickAssignForm.assetId}
-                      onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
-                      options={quickAssignAssetSelectOptions}
-                      placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
-                      searchPlaceholder="Search asset by name, serial, brand..."
-                      emptyMessage="No asset found"
-                      className={assignValidated && !quickAssignForm.assetId ? 'input-error' : ''}
-                    />
-                  </label>
+                  {quickAssignForm.assetType !== 'all' && (
+                    <label className="assignment-field">
+                      <span>Available Asset</span>
+                      <SearchableSelect
+                        value={quickAssignForm.assetId}
+                        onChange={(nextValue) => setQuickAssignForm((prev) => ({ ...prev, assetId: nextValue }))}
+                        options={quickAssignAssetSelectOptions}
+                        placeholder={quickAssignAssetSelectOptions.length ? 'Select available asset' : 'No available assets'}
+                        searchPlaceholder="Search asset by name, serial, brand..."
+                        emptyMessage="No asset found"
+                        className={assignValidated && !quickAssignForm.assetId ? 'input-error' : ''}
+                      />
+                    </label>
+                  )}
                   <label className="assignment-field">
                     <span>Notes</span>
                     <input
