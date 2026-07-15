@@ -5013,16 +5013,16 @@ function App() {
                 </div>
               )}
 
-              <div className="inventory-tabs-wrapper">
-                <div className="account-tabs">
-                  <button
-                    type="button"
-                    className={inventoryTab === 'assigned' ? 'active' : ''}
-                    onClick={() => setInventoryTab('assigned')}
-                  >
-                    Assigned Assets
-                  </button>
-                  {String(user?.role || '').toLowerCase() !== 'hr' && (
+              {String(user?.role || '').toLowerCase() !== 'hr' && (
+                <div className="inventory-tabs-wrapper">
+                  <div className="account-tabs">
+                    <button
+                      type="button"
+                      className={inventoryTab === 'assigned' ? 'active' : ''}
+                      onClick={() => setInventoryTab('assigned')}
+                    >
+                      Assigned Assets
+                    </button>
                     <button
                       type="button"
                       className={inventoryTab === 'free' ? 'active' : ''}
@@ -5030,9 +5030,9 @@ function App() {
                     >
                       Free Assets
                     </button>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="inventory-filter-grid">
                 <input
@@ -5165,7 +5165,7 @@ function App() {
                             <td>{a.vendor || '-'}</td>
                             <td>{a.serial}</td>
                             {inventoryTab === 'assigned' && (
-                              <td><span className={`status ${a.status}`}>{a.status}</span></td>
+                              <td><span className={`status ${a.status}`}>{a.status ? a.status.charAt(0).toUpperCase() + a.status.slice(1).toLowerCase() : ''}</span></td>
                             )}
                             {inventoryTab === 'assigned' && (
                               <td>
