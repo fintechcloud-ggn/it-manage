@@ -3734,7 +3734,7 @@ function App() {
       const matchStatus = filterStatus === 'all' || a.status === filterStatus;
       const matchBrand = filterBrand === 'all' || (a.brand_name || '') === filterBrand;
       const matchType = filterType === 'all' || (a.type || '') === filterType;
-      const isAssigned = a.status === 'allocated';
+      const isAssigned = a.status === 'allocated' || String(a.domain_name || '').trim() !== '';
       const matchTab = inventoryTab === 'assigned' ? isAssigned : !isAssigned;
       return matchQuery && matchDomain && matchStatus && matchBrand && matchType && matchTab;
     });
@@ -5564,7 +5564,7 @@ function App() {
                         type="text"
                         value={employeeCreateForm.name}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, name: e.target.value }))}
-                        placeholder="Type employee name"
+                        placeholder="Employee Name"
                         required
                       />
                     </label>
@@ -5574,7 +5574,7 @@ function App() {
                         type="text"
                         value={employeeCreateForm.employee_code}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, employee_code: e.target.value.toUpperCase() }))}
-                        placeholder="Type employee code"
+                        placeholder="Employee Code"
                         required
                       />
                     </label>
@@ -5584,7 +5584,7 @@ function App() {
                         type="email"
                         value={employeeCreateForm.email}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, email: e.target.value }))}
-                        placeholder="Type email"
+                        placeholder="Email"
                         required
                       />
                     </label>
@@ -5594,7 +5594,7 @@ function App() {
                         type="text"
                         value={employeeCreateForm.personal_mobile_no}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, personal_mobile_no: e.target.value }))}
-                        placeholder="Type mobile"
+                        placeholder="Mobile"
                         required
                       />
                     </label>
@@ -5604,7 +5604,7 @@ function App() {
                         type="text"
                         value={employeeCreateForm.designation}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, designation: e.target.value }))}
-                        placeholder="Type designation"
+                        placeholder="Designation"
                         required
                       />
                     </label>
@@ -6473,7 +6473,7 @@ function App() {
                         </select>
                       </label>
                       {employeeEditForm.employmentStatus === 'leaving' && (
-                        <label className="replacement-wide">
+                        <label className="full-width-field">
                           <span>Leaving Reason</span>
                           <input
                             value={employeeEditForm.leavingReason}

@@ -2724,6 +2724,7 @@ p {
 .employee-edit-form {
   padding: 12px;
   display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
@@ -2749,6 +2750,7 @@ p {
 }
 
 .employee-edit-actions {
+  grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -7524,3 +7526,6 @@ body {
   }
 }
 
+.full-width-field {
+  grid-column: 1 / -1;
+}
