@@ -4505,11 +4505,20 @@ body {
 
 .dashboard-shell .asset-row-actions .small {
   width: auto;
-  min-width: 72px;
-  background: linear-gradient(135deg, #2b92c1 0%, #27ba8e 100%) !important;
-  box-shadow: 0 16px 28px rgba(35, 167, 136, 0.18) !important;
-  border: none !important;
-  color: #ffffff !important;
+  min-width: 64px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  background: linear-gradient(135deg, #2b92c1 0%, #27ba8e 100%);
+  border: none;
+  color: #ffffff;
+}
+
+.dashboard-shell .asset-row-actions .small.danger {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
 }
 
 .dashboard-shell .inventory-pager {
@@ -5319,8 +5328,16 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
   margin-left: auto;
+}
+
+.create-action-buttons button {
+  min-width: 140px;
+  height: 38px;
+  padding: 0 20px;
+  font-size: 14px;
+  border-radius: 8px;
 }
 
 .account-management-panel {

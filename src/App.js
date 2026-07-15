@@ -4854,11 +4854,6 @@ function App() {
                     <div>
                       <h4>{editingAsset ? 'Edit Asset' : 'Add New Asset'}</h4>
                     </div>
-                    <div className="create-meta">
-                      <span>{editingAsset ? 'Editing mode' : (displayedAssetType || 'Select asset type')}</span>
-                      <span>{brandsBySelectedType.length} brands</span>
-                      <span>{modelOptionsByType.length} models</span>
-                    </div>
                   </div>
                   <form onSubmit={createAsset} className="form asset-create-form">
                     <label className="field required-field">
@@ -5187,7 +5182,7 @@ function App() {
                                   {hasAdminPermission('inventory.manage') ? (
                                     <>
                                       <button type="button" className="small" onClick={() => startEditAsset(a)}>Edit</button>
-                                      <button type="button" className="small danger" onClick={() => requestDeleteAsset(a)}>Delete</button>
+                                      <button type="button" className="small" onClick={() => requestDeleteAsset(a)}>Delete</button>
                                     </>
                                   ) : '-'}
                                 </div>
