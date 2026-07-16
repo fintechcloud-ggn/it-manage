@@ -3109,17 +3109,18 @@ function App() {
   const weeklyAssignments = useMemo(() => {
     const days = [];
     const counts = {};
+    const tz = 'Asia/Kolkata';
     for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
-      const label = d.toLocaleDateString(undefined, { weekday: 'short' });
+      const d = new Date(Date.now() - i * 86400000);
+      const key = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
+      const label = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(d);
       days.push({ key, label });
       counts[key] = 0;
     }
     allocations.forEach((a) => {
-      const key = new Date(a.allocated_at || '').toISOString().slice(0, 10);
+      const parsed = new Date(a.allocated_at || '');
+      if (Number.isNaN(parsed.getTime())) return;
+      const key = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(parsed);
       if (counts[key] !== undefined) counts[key] += 1;
     });
     return days.map((d) => ({ ...d, count: counts[d.key] || 0 }));
@@ -3128,11 +3129,10 @@ function App() {
   const weeklyReturns = useMemo(() => {
     const days = [];
     const counts = {};
+    const tz = 'Asia/Kolkata';
     for (let i = 6; i >= 0; i -= 1) {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const d = new Date(Date.now() - i * 86400000);
+      const key = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
       days.push({ key });
       counts[key] = 0;
     }
@@ -3140,7 +3140,7 @@ function App() {
       if (!a.returned_at) return;
       const parsed = new Date(a.returned_at || '');
       if (Number.isNaN(parsed.getTime())) return;
-      const key = parsed.toISOString().slice(0, 10);
+      const key = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(parsed);
       if (counts[key] !== undefined) counts[key] += 1;
     });
     return days.map((d) => ({ ...d, count: counts[d.key] || 0 }));
@@ -5015,6 +5015,7 @@ function App() {
                         value={assetDomainName}
                         onChange={(e) => setAssetDomainName(e.target.value)}
                         disabled={!isSuperAdmin}
+                        className={!assetDomainName ? 'is-placeholder' : ''}
                       >
                         <option value="">No Domain (Free Asset)</option>
                         {Array.from(new Set([assetDomainName, currentUserDomain, ...inventoryDomains].filter(Boolean)))
@@ -5036,17 +5037,13 @@ function App() {
                     <div className="field asset-bulk-upload">
                       <span>Bulk Upload Assets</span>
                       <div className="bulk-upload-actions">
-                        <div className="bulk-upload-file-box">
+                        <div style={{ display: 'flex', alignItems: 'center', minHeight: '56px' }}>
                           <input
                             id="bulk-asset-upload"
-                            className="bulk-upload-input"
                             type="file"
                             accept=".csv,text/csv"
                             onChange={uploadBulkAssets}
                           />
-                          <label className="bulk-upload-picker" htmlFor="bulk-asset-upload">
-                            Choose file
-                          </label>
                         </div>
                         <div className="bulk-upload-sample-box">
                           <button
@@ -5407,6 +5404,7 @@ function App() {
                     <select
                       value={quickAssignForm.assetType}
                       onChange={(e) => setQuickAssignForm((prev) => ({ ...prev, assetType: e.target.value }))}
+                      className={quickAssignForm.assetType === 'all' ? 'is-placeholder' : ''}
                     >
                       <option value="all">All asset types</option>
                       {quickAssignTypeOptions.map((type) => (
@@ -7321,7 +7319,7 @@ function App() {
                 <span>Latest Event</span>
                 <strong>
                   {activitySummary.latestEvent
-                    ? `${activitySummary.latestEvent.action} Ã¢â‚¬Â¢ ${activitySummary.latestEvent.assetName}`
+                    ? `${activitySummary.latestEvent.action} • ${activitySummary.latestEvent.assetName}`
                     : 'No activity yet'}
                 </strong>
               </div>

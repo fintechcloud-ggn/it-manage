@@ -7561,3 +7561,10 @@ body {
 .full-width-field {
   grid-column: 1 / -1;
 }
+
+select.is-placeholder {
+  color: #758392;
+}
+select.is-placeholder option {
+  color: #3b4752;
+}
