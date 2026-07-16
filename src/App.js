@@ -2268,6 +2268,61 @@ function App() {
     doc.close();
   }
 
+  function printBulkAssetQrs(assetsList) {
+    if (!assetsList || assetsList.length === 0) return;
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0px';
+    iframe.style.height = '0px';
+    iframe.style.border = 'none';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+
+    const labelsHtml = assetsList.map(asset => {
+      const qrData = buildAssetQrData(asset);
+      const qrUrl = getQrImageUrl(qrData);
+      return `
+        <div class="label">
+          <h2>${asset.name}</h2>
+          <p><strong>Serial:</strong> ${asset.serial}</p>
+          <p><strong>Type:</strong> ${asset.type || '-'}</p>
+          <p><strong>Asset ID:</strong> ${asset.id}</p>
+          <img src="${qrUrl}" alt="Asset QR code" />
+        </div>
+      `;
+    }).join('');
+
+    doc.write(`
+      <html>
+        <head>
+          <title>Bulk Asset QR Labels</title>
+          <style>
+            @page { margin: 4mm; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 12px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; align-content: flex-start; }
+            .label { border: 2px solid #222; border-radius: 12px; padding: 16px; width: 280px; page-break-inside: avoid; height: fit-content; }
+            h2 { margin: 0 0 6px; font-size: 18px; }
+            p { margin: 4px 0; font-size: 13px; }
+            img { margin-top: 12px; width: 128px; height: 128px; }
+          </style>
+        </head>
+        <body>
+          ${labelsHtml}
+          <script>
+            window.onload = () => window.print();
+            window.onafterprint = () => {
+              setTimeout(() => {
+                window.frameElement.remove();
+              }, 100);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    doc.close();
+  }
+
   function printAssignedAssetQr(asset, employee, assignmentAuditLog = null) {
     const qrData = buildAssignedAssetQrData(asset, employee, assignmentAuditLog);
     const qrUrl = getQrImageUrl(qrData);
@@ -5100,6 +5155,7 @@ function App() {
                   </button>
                 ))}
                 <div className="inventory-type-actions">
+                  <button type="button" className="outline inventory-export-inline" onClick={() => printBulkAssetQrs(filteredSortedAssets)}>Bulk Print QRs</button>
                   <button type="button" className="outline inventory-export-inline" onClick={exportInventoryCsv}>Export CSV</button>
                   <button type="button" className="outline inventory-reset-inline" onClick={resetInventoryFilters}>Reset Filters</button>
                 </div>
@@ -5157,7 +5213,7 @@ function App() {
                           <th>Vendor</th>
                           <th>Serial</th>
                           {inventoryTab === 'assigned' && <th>Status</th>}
-                          {inventoryTab === 'assigned' && <th>QR</th>}
+                          <th>QR</th>
                           {String(user?.role || '').trim().toLowerCase() !== 'hr' && <th>Action</th>}
                         </tr>
                       </thead>
@@ -5173,14 +5229,12 @@ function App() {
                             {inventoryTab === 'assigned' && (
                               <td><span className={`status ${a.status}`}>{a.status ? a.status.charAt(0).toUpperCase() + a.status.slice(1).toLowerCase() : ''}</span></td>
                             )}
-                            {inventoryTab === 'assigned' && (
-                              <td>
-                                <div className="asset-qr-cell">
-                                  <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
-                                  <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
-                                </div>
-                              </td>
-                            )}
+                            <td>
+                              <div className="asset-qr-cell">
+                                <img src={getQrImageUrl(buildAssetQrData(a))} alt={`${a.name} QR`} />
+                                <button type="button" className="small" onClick={() => printAssetQr(a)}>Print QR</button>
+                              </div>
+                            </td>
                             {String(user?.role || '').trim().toLowerCase() !== 'hr' && (
                               <td>
                                 <div className="asset-row-actions">
