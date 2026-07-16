@@ -3356,13 +3356,14 @@ function App() {
     const rowMap = new Map();
     domainRecords.forEach((domain) => {
       normalizeDomainList(domain.name).forEach((name) => {
-        if (!name) return;
+        if (!name || name === 'default') return;
         if (!rowMap.has(name)) {
           rowMap.set(name, { ...domain, name });
         }
       });
     });
     accountManagementDomains.forEach((name) => {
+      if (name === 'default') return;
       if (!rowMap.has(name)) {
         rowMap.set(name, { name, status: 'active' });
       }
@@ -5616,6 +5617,7 @@ function App() {
                             employee_code: ''
                           }));
                         }}
+                        className={!employeeCreateForm.domain_name ? 'is-placeholder' : ''}
                         required
                       >
                         <option value="" disabled>Select domain</option>
@@ -5703,6 +5705,7 @@ function App() {
                         type="date"
                         value={employeeCreateForm.doj}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, doj: e.target.value }))}
+                        className={!employeeCreateForm.doj ? 'is-placeholder' : ''}
                       />
                     </label>
                     <label className="assignment-field">
@@ -5710,6 +5713,7 @@ function App() {
                       <select
                         value={employeeCreateForm.gender}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, gender: e.target.value }))}
+                        className={!employeeCreateForm.gender ? 'is-placeholder' : ''}
                       >
                         <option value="">Select gender</option>
                         <option value="Male">Male</option>
@@ -5722,6 +5726,7 @@ function App() {
                       <select
                         value={employeeCreateForm.status}
                         onChange={(e) => setEmployeeCreateForm((prev) => ({ ...prev, status: e.target.value }))}
+                        className={employeeCreateForm.status === 'Active' ? 'is-placeholder' : ''}
                       >
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
@@ -7113,6 +7118,7 @@ function App() {
                       type="date"
                       value={invoiceForm.dueDate}
                       onChange={(e) => setInvoiceForm((prev) => ({ ...prev, dueDate: e.target.value }))}
+                      className={!invoiceForm.dueDate ? 'is-placeholder' : ''}
                     />
                   </label>
                   <label className="field">

@@ -7568,3 +7568,7 @@ select.is-placeholder {
 select.is-placeholder option {
   color: #3b4752;
 }
+
+input[type="date"].is-placeholder {
+  color: #758392;
+}
