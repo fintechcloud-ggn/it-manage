@@ -3711,10 +3711,7 @@ function App() {
     return selectedEmployee.latestAllocatedAt.toLocaleString();
   }, [selectedEmployee]);
 
-  const selectedEmployeeReplacementCount = useMemo(
-    () => selectedEmployeeHistory.filter((item) => (item.notes || '').includes('Replacement for allocation')).length,
-    [selectedEmployeeHistory]
-  );
+
   const selectedEmployeeLatestNote = useMemo(() => {
     if (!selectedEmployee) return '-';
     const noted = selectedEmployee.assignedAssets.find((asset) => asset.notes);
@@ -5065,7 +5062,7 @@ function App() {
                     <div className="create-actions">
                       <div className="create-action-buttons">
                         {editingAsset && (
-                          <button type="button" className="outline" onClick={resetAssetForm}>Cancel Edit</button>
+                          <button type="button" className="outline" onClick={resetAssetForm}>Cancel</button>
                         )}
                         <button type="submit">{editingAsset ? 'Save Changes' : 'Add Asset'}</button>
                       </div>
