@@ -770,7 +770,8 @@ function App() {
         localStorage.setItem('invoice_storage_version', INVOICE_STORAGE_VERSION);
         localStorage.setItem('invoices', '[]');
       } else {
-        savedInvoices = JSON.parse(localStorage.getItem('invoices') || '[]');
+        localStorage.setItem('invoices', '[]');
+        savedInvoices = [];
       }
       return mergeImportedInvoices(
         (Array.isArray(savedInvoices) ? savedInvoices : [])
