@@ -3939,35 +3939,6 @@ function App() {
       withBills: filteredInvoices.filter((invoice) => invoice.invoiceFileData || invoice.invoiceFileName).length
     };
   }, [filteredInvoices]);
-  const invoiceStats = useMemo(() => {
-    const totalAmount = invoices.reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
-    const paidAmount = invoices
-      .filter((invoice) => invoice.status === 'paid')
-      .reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
-    const unpaidAmount = invoices
-      .filter((invoice) => invoice.status === 'unpaid')
-      .reduce((sum, invoice) => sum + Number(invoice.amount || 0), 0);
-    const overdueCount = invoices.filter((invoice) => {
-      if (invoice.status === 'paid' || !invoice.dueDate) return false;
-      return new Date(`${invoice.dueDate}T23:59:59`).getTime() < Date.now();
-    }).length;
-    const pendingApproval = invoices.filter((invoice) => {
-      const approvalStatus = invoice.approvalStatus || (invoice.status === 'paid' ? 'completed' : 'pending_domain');
-      return ['pending_domain', 'pending_head', 'pending_accounts', 'payment_pending'].includes(approvalStatus);
-    }).length;
-    const rejected = invoices.filter((invoice) => invoice.approvalStatus === 'rejected').length;
-    return {
-      total: invoices.length,
-      paid: invoices.filter((invoice) => invoice.status === 'paid').length,
-      unpaid: invoices.filter((invoice) => invoice.status === 'unpaid').length,
-      overdue: overdueCount,
-      pendingApproval,
-      rejected,
-      totalAmount,
-      paidAmount,
-      unpaidAmount
-    };
-  }, [invoices]);
 
   useEffect(() => {
     if (!invoices.length) {
