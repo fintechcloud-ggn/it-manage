@@ -7067,14 +7067,6 @@ function App() {
                       onCreate={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
                     />
                   </label>
-                  <label className="field invoice-notes">
-                    <span>Notes</span>
-                    <input
-                      value={invoiceForm.notes}
-                      onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      placeholder="PO, branch, renewal, warranty..."
-                    />
-                  </label>
                   <label className="field invoice-upload-field">
                     <span>Upload Invoice</span>
                     <input
@@ -7087,6 +7079,14 @@ function App() {
                           return { ...prev, ...filePayload };
                         });
                       })}
+                    />
+                  </label>
+                  <label className="field invoice-notes">
+                    <span>Notes</span>
+                    <input
+                      value={invoiceForm.notes}
+                      onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
+                      placeholder="PO, branch, renewal, warranty..."
                     />
                   </label>
                   <div className="create-actions">

@@ -1841,7 +1841,8 @@ button:active:not(:disabled) {
 
 .searchable-select {
   position: relative;
-  width: 100%;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .searchable-select__trigger,
@@ -1856,8 +1857,8 @@ button:active:not(:disabled) {
   padding: 10px 12px;
   background: #fbfdff !important;
   color: #213547;
-  display: flex;
-  align-items: center;
+  display: flex !important;
+  align-items: center !important;
   justify-content: space-between;
   gap: 10px;
   text-align: left;
@@ -3244,6 +3245,13 @@ button:active:not(:disabled) {
 .invoice-form .field {
   display: grid;
   gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.invoice-form .invoice-notes {
+  grid-column: 1 / -1;
 }
 
 .invoice-form .field span {
@@ -3261,7 +3269,13 @@ button:active:not(:disabled) {
   border-radius: 10px;
   background: #fff;
   min-height: 42px;
+  height: 42px;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
   padding: 10px 12px;
+  margin: 0 !important;
   font: inherit;
 }
 
