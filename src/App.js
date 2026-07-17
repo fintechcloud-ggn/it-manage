@@ -178,78 +178,9 @@ const INVOICE_SUBCATEGORIES_BY_CATEGORY = {
   'Other Bill': ['Other----']
 };
 
-const INVOICE_APPROVER_NAME_OPTIONS = ['Hansi Kunwar'];
+const INVOICE_APPROVER_NAME_OPTIONS = [];
 
-const BILL_DESCRIPTION_VENDOR_OPTIONS = [
-  'AbCom',
-  'ACT Bill, SANT NAGAR',
-  'ACT Bill, Tajes',
-  'AirTel CREDWISE Leas Line A 62 2nd floor Sector 2 noida',
-  'AirTel CREDWISE Mobile Bill',
-  'Airtel FINTECH CLOUD Leas Line Sector -63 Noida 3rd & 4th floor',
-  'AirTel FINTECH CLOUD Mobile Bill',
-  'AirTel FINTECH CLOUD Wifi Bill',
-  'AirTel Fintech F1Speed Loan Mobile Bill',
-  'AirTel Jan Bill Naman Finlease',
-  'AirTel Leas Line A 62 2nd floor Sector 2 noida',
-  'Airtel Leas Line Devika tower',
-  'Airtel Leas Line SEC 63 ,NOIDA',
-  'Airtel Leas Line UDYOG VIHAR',
-  'AirTel Mobile Bill Credwise',
-  'AirTel Mobile Bill F1 Speed Loan',
-  'AirTel Mobile Bill Naman',
-  'AirTel Mobile Bill Pawansut',
-  'AirTel Mobile Bill, south extension',
-  'AirTel Mobile Naman',
-  'AirTel Naman Leas Line Salary Setu, Devika Tower',
-  'AirTel wifi Bill',
-  'AirTel wifi Bill Accounts',
-  'AirTel wifi Bill Dhanrishi',
-  'AirTel wifi Bill FUNDOBABA',
-  'AirTel wifi Bill NavNirmman',
-  'AirTel wifi Bill NPA Birpal',
-  'AirTel wifi Bill panchsheel park',
-  'AirTel wifi Bill S4S',
-  'AirTel wifi Bill Sec -63',
-  'AirTel wifi Bill Udyog vihar',
-  'AirTel wifi Bill, Badarpur,',
-  'AirTel wifi Bill, Udyog Vihar,',
-  'AirTel wifi Mumbai, Bill',
-  'AirTel Wifi, (Disconnected) A-62, Sector 2, Noida',
-  'DAKSH COPIER SYSTEM',
-  'Daksh Copier, DWRKA',
-  'Daksh Copier, SEC 63 ,NOIDA',
-  'Daksh Copier, SEC 63 ,NOIDA + Deposit',
-  'Daksh Copier, UDYOG VIHAR',
-  'Jordan IT',
-  'Jordan IT -19 Laptop Rental',
-  'Jordan IT -2 Laptop Rental',
-  'Jordan IT -3 Laptop Rental',
-  'Jordan IT -41 Laptop Rental',
-  'Jordan IT Repair DISPLAY',
-  'Jordan IT Repair PANEL',
-  'KTCS Computer, 1 Laptop Rental',
-  'KTCS Computer, 4 Laptop Rental',
-  'KTCS Computer, 6 Laptop Rental',
-  'KTCS Computer, Rental',
-  'NEW VISION ENTERPRISES',
-  'Point Blank',
-  'Point Blank, Bio-Metric',
-  'Point Blank, CAMERA',
-  'Point Blank, Installation Sant Nagar,',
-  'Point Blank, Service',
-  'Siddiki Emgineers Devika Tower',
-  'Siddiki Engineers',
-  'Tata FINTECH CLOUD Leas Line Sector -63 Noida 3rd & 4th floor',
-  'Tata NXG Leas Line A 62 4th floor Sector 2 noida',
-  'Timbl Leas Line Bill',
-  'U.M.COMPUTER SOLUTION',
-  'UM Computer, Router for SalarySatu Devika Tower',
-  'UM Computer, UPS & Router for Sec-2, 4th floor Noida',
-  'VI Bill',
-  'VI Bill FINTECH',
-  'VI Bill NAMAN'
-];
+const BILL_DESCRIPTION_VENDOR_OPTIONS = [];
 
 const INVOICE_APPROVAL_STAGES = [
   { key: 'domain', label: 'Bill Raised', helper: 'Domain' },
@@ -7031,7 +6962,6 @@ function App() {
                 <div className="create-head">
                   <div>
                     <h4>Add Bill</h4>
-                    <p className="hint">Record vendor, amount, due date, and payment state.</p>
                   </div>
                 </div>
                 <form className="form invoice-form" onSubmit={createInvoice}>
@@ -7041,7 +6971,7 @@ function App() {
                       value={invoiceForm.vendor}
                       onChange={(value) => setInvoiceForm((prev) => ({ ...prev, vendor: value }))}
                       options={invoiceVendorDropdownOptions}
-                      placeholder="Select bill description"
+                      placeholder="Vendor"
                       searchPlaceholder="Search or type vendor..."
                       emptyMessage="No vendor found"
                       allowCreate
@@ -7109,7 +7039,7 @@ function App() {
                       step="1"
                       value={invoiceForm.amount}
                       onChange={(e) => setInvoiceForm((prev) => ({ ...prev, amount: e.target.value }))}
-                      placeholder="50000"
+                      placeholder="Amount"
                       required
                     />
                   </label>
@@ -7128,7 +7058,7 @@ function App() {
                       value={invoiceForm.approvalAssignee}
                       onChange={(value) => setInvoiceForm((prev) => ({ ...prev, approvalAssignee: value }))}
                       options={invoiceApproverDropdownOptions}
-                      placeholder="Approver name"
+                      placeholder="Approval"
                       searchPlaceholder="Search or type approver name..."
                       emptyMessage="No approver found"
                       allowCreate
@@ -7160,8 +7090,8 @@ function App() {
                     />
                   </label>
                   <div className="create-actions">
-                    <small>{invoiceStats.unpaid} unpaid bills in tracker</small>
-                    <button type="submit">Save Bill</button>
+                    <div></div>
+                    <button type="submit">Save</button>
                   </div>
                 </form>
               </section>
