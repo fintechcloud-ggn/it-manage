@@ -1842,7 +1842,12 @@ button:active:not(:disabled) {
 .searchable-select {
   position: relative;
   width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
   box-sizing: border-box !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .searchable-select__trigger,
@@ -1850,11 +1855,14 @@ button:active:not(:disabled) {
 .assignment-search-top .searchable-select__trigger,
 .dashboard-shell .assignment-inline-form .searchable-select__trigger,
 .dashboard-shell .assignment-search-top .searchable-select__trigger {
-  width: 100%;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
   min-height: 42px;
   border: 1px solid #cddceb;
   border-radius: 10px;
   padding: 10px 12px;
+  margin: 0 !important;
   background: #fbfdff !important;
   color: #213547;
   display: flex !important;
