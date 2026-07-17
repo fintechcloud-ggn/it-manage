@@ -3245,8 +3245,10 @@ button:active:not(:disabled) {
 }
 
 .invoice-form {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid !important;
+  grid-template-columns: 24% 24% 24% 24% !important;
+  justify-content: space-between !important;
+  width: 100% !important;
   gap: 10px;
 }
 
