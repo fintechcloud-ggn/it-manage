@@ -1214,7 +1214,7 @@ function App() {
         setSessionChecked(true);
       })
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setSessionChecked(true);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1242,6 +1242,9 @@ function App() {
         fetchAllocations();
         fetchQuickAssignUsers();
         fetchUploadedEmployeeAssets();
+        break;
+      case 'employees':
+        fetchUsers();
         break;
       case 'accounts':
         fetchDomains();
@@ -1382,7 +1385,7 @@ function App() {
       })
       .then(setAssets)
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setMessage('Unable to load assets. Ensure the backend is running.');
       });
   }
@@ -1396,7 +1399,7 @@ function App() {
       })
       .then(setUsers)
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setMessage('Unable to load users from server.');
       });
   }
@@ -1428,7 +1431,7 @@ function App() {
         setDomains(uniqueRecords.map((row) => row.name));
       })
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setDomainRecords([]);
         setDomains([]);
       });
@@ -1448,7 +1451,7 @@ function App() {
         setQuickAssignUsers(nextRows);
       })
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setQuickAssignUsers([]);
       });
   }
@@ -1462,7 +1465,7 @@ function App() {
       })
       .then((rows) => setUploadedEmployeeAssets(Array.isArray(rows) ? rows : []))
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setUploadedEmployeeAssets([]);
       });
   }
@@ -1476,7 +1479,7 @@ function App() {
       })
       .then(setAllocations)
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setMessage('Unable to load allocations from server.');
       });
   }
@@ -1493,7 +1496,7 @@ function App() {
         setAuditLogsLoaded(true);
       })
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setAuditLogs([]);
         setAuditLogsLoaded(true);
       });
@@ -1519,7 +1522,7 @@ function App() {
       })
       .then(setBrands)
       .catch((err) => {
-        if (err.message === 'unauthorized') return;
+        if (err.message === 'unauthorized' || err.message.endsWith('_403')) return;
         setMessage('Unable to load brands/models from server.');
       });
   }
@@ -3870,14 +3873,16 @@ function App() {
     () => Array.from(new Set([
       ...INVOICE_APPROVER_NAME_OPTIONS,
       ...invoices.map((invoice) => invoice.approvalAssignee).filter(Boolean),
-    ]))
+      ...users.filter((u) => (u.role || '').toLowerCase() === 'accountant').map((u) => u.name).filter(Boolean),
+      invoiceForm.approvalAssignee
+    ].filter(Boolean)))
       .sort((a, b) => a.localeCompare(b))
       .map((approver) => ({
         value: approver,
         label: approver,
         searchText: approver,
       })),
-    [invoices]
+    [invoices, users, invoiceForm.approvalAssignee]
   );
   const invoiceCategoryOptions = useMemo(() => {
     return Array.from(new Set([
@@ -7057,7 +7062,6 @@ function App() {
                     <input
                       value={invoiceForm.notes}
                       onChange={(e) => setInvoiceForm((prev) => ({ ...prev, notes: e.target.value }))}
-                      placeholder="PO, branch, renewal, warranty..."
                     />
                   </label>
                   <div className="create-actions">

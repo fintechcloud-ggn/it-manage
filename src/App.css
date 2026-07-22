@@ -3262,7 +3262,7 @@ button:active:not(:disabled) {
 }
 
 .invoice-form .invoice-notes {
-  grid-column: 1 / -1;
+  /* removed grid-column: 1 / -1 to match other fields width */
 }
 
 .invoice-form .field span {
@@ -3276,18 +3276,45 @@ button:active:not(:disabled) {
 .invoice-form .searchable-select__trigger,
 .invoice-toolbar input,
 .invoice-toolbar select {
-  border: 1px solid #cfdbe7;
-  border-radius: 10px;
-  background: #fff;
-  min-height: 42px;
-  height: 42px;
+  border: 1px solid #cfdbe7 !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
   box-sizing: border-box !important;
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
-  padding: 10px 12px;
+  padding: 0 12px !important;
   margin: 0 !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+  color: #213547 !important;
+  line-height: 40px !important; /* Vertically center text in 42px height (minus 2px borders) */
+}
+
+.invoice-form .field input[type="file"] {
+  padding: 6px 12px;
+  color: #4f6071;
+}
+
+.invoice-form .field input[type="file"]::file-selector-button {
+  height: 100%;
+  border: 1px solid #cfdbe7;
+  background: #f4f7f9;
+  color: #4f6071;
+  border-radius: 6px;
+  padding: 0 12px;
+  margin-right: 10px;
+  cursor: pointer;
   font: inherit;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.invoice-form .field input[type="file"]::file-selector-button:hover {
+  background: #e2e8f0;
 }
 
 .invoice-form .searchable-select__trigger,
