@@ -764,6 +764,8 @@ function App() {
   const [assignmentUserFilter, setAssignmentUserFilter] = useState('all');
   const [assignmentPage, setAssignmentPage] = useState(1);
   const [assignmentPageSize, setAssignmentPageSize] = useState('25');
+  const [activityPage, setActivityPage] = useState(1);
+  const [insightsActivityPage, setInsightsActivityPage] = useState(1);
   const [quickAssignForm, setQuickAssignForm] = useState({
     userId: '',
     domainName: '',
@@ -2918,7 +2920,7 @@ function App() {
         });
       }
     });
-    return events.sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 12);
+    return events.sort((a, b) => b.timestampMs - a.timestampMs);
   }, [allocations, assetById, userById]);
   const domainAssignmentTotals = useMemo(() => {
     const getAssetTypeBucket = (type) => {
@@ -3004,9 +3006,20 @@ function App() {
       details: `${event.assetName} ${event.action.toLowerCase()} for ${event.userName}`
     }));
     return [...auditRows, ...timelineRows]
-      .sort((a, b) => b.timeMs - a.timeMs)
-      .slice(0, 60);
+      .sort((a, b) => b.timeMs - a.timeMs);
   }, [recentAuditLogs, recentActivity]);
+
+  const activityLogRowsPerPage = 10;
+  const activityLogTotalPages = Math.ceil(activityLogRows.length / activityLogRowsPerPage) || 1;
+  const paginatedActivityLogRows = useMemo(() => {
+    return activityLogRows.slice((activityPage - 1) * activityLogRowsPerPage, activityPage * activityLogRowsPerPage);
+  }, [activityLogRows, activityPage]);
+
+  const insightsActivityRowsPerPage = 10;
+  const insightsActivityTotalPages = Math.ceil(recentActivity.length / insightsActivityRowsPerPage) || 1;
+  const paginatedInsightsActivityRows = useMemo(() => {
+    return recentActivity.slice((insightsActivityPage - 1) * insightsActivityRowsPerPage, insightsActivityPage * insightsActivityRowsPerPage);
+  }, [recentActivity, insightsActivityPage]);
 
   function formatAuditAction(action) {
     return (action || '').replaceAll('_', ' ').trim() || 'UNKNOWN';
@@ -6899,12 +6912,15 @@ function App() {
             </section>
 
             <section className="panel">
-              <div className="panel-head"><h3>Recent Allocation Events</h3><span>Latest 12</span></div>
+              <div className="panel-head"><h3>Recent Allocation Events</h3></div>
               <div className="table-wrap">
                 <table>
                   <thead><tr><th>Asset</th><th>Employee</th><th>Event Time</th><th>Action</th></tr></thead>
                   <tbody>
-                    {recentActivity.map((a) => (
+                    {paginatedInsightsActivityRows.length === 0 && (
+                      <tr><td colSpan={4}>No events yet.</td></tr>
+                    )}
+                    {paginatedInsightsActivityRows.map((a) => (
                       <tr key={a.id}>
                         <td>{a.assetName}</td>
                         <td>
@@ -6920,6 +6936,29 @@ function App() {
                   </tbody>
                 </table>
               </div>
+              {insightsActivityTotalPages > 1 && (
+                <div className="pagination" style={{ padding: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    disabled={insightsActivityPage <= 1}
+                    onClick={() => setInsightsActivityPage((p) => p - 1)}
+                  >
+                    Prev
+                  </button>
+                  <span className="pagination-info" style={{ fontSize: '13px', color: '#64748b' }}>
+                    Page {insightsActivityPage} of {insightsActivityTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    disabled={insightsActivityPage >= insightsActivityTotalPages}
+                    onClick={() => setInsightsActivityPage((p) => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </section>
           </section>
         )}
@@ -7269,10 +7308,10 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {activityLogRows.length === 0 && (
+                      {paginatedActivityLogRows.length === 0 && (
                         <tr><td colSpan={5}>No activity entries yet.</td></tr>
                       )}
-                      {activityLogRows.map((log) => (
+                      {paginatedActivityLogRows.map((log) => (
                         <tr key={log.key}>
                           <td>{log.timeLabel}</td>
                           <td>{log.actor}</td>
@@ -7288,6 +7327,29 @@ function App() {
                     </tbody>
                   </table>
                 </div>
+                {activityLogTotalPages > 1 && (
+                  <div className="pagination" style={{ padding: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      disabled={activityPage <= 1}
+                      onClick={() => setActivityPage((p) => p - 1)}
+                    >
+                      Prev
+                    </button>
+                    <span className="pagination-info" style={{ fontSize: '13px', color: '#64748b' }}>
+                      Page {activityPage} of {activityLogTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      disabled={activityPage >= activityLogTotalPages}
+                      onClick={() => setActivityPage((p) => p + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </section>
             </section>
           </section>
